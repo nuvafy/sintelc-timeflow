@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'factorial' => [
+        'base_url' => env('FACTORIAL_BASE_URL', 'https://api.factorialhr.com'),
+        'client_id' => env('FACTORIAL_CLIENT_ID'),
+        'client_secret' => env('FACTORIAL_CLIENT_SECRET'),
+        'redirect' => env('FACTORIAL_REDIRECT_URI'),
+    ],
+
 ];

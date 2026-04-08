@@ -9,45 +9,96 @@ class IclockController extends Controller
 {
     public function ping(Request $request)
     {
-        Log::info('ZKTeco PING', $request->all());
+        Log::info('ZKTeco PING', $request->query());
 
-        return response('OK', 200);
+        return response('OK', 200)
+            ->header('Content-Type', 'text/plain');
     }
 
     public function getRequest(Request $request)
     {
-        Log::info('ZKTeco GETREQUEST', $request->all());
+        Log::info('ZKTeco GETREQUEST', $request->query());
 
-        return response('OK', 200);
+        return response('OK', 200)
+            ->header('Content-Type', 'text/plain');
     }
 
     public function cdata(Request $request)
     {
         $sn = $request->query('SN');
+        $table = $request->query('table');
         $options = $request->query('options');
+        $body = $request->getContent();
 
         Log::info('ZKTeco CDATA RAW', [
-            'table' => $request->query('table'),
+            'sn' => $sn,
+            'table' => $table,
             'query' => $request->query(),
-            'body' => $request->getContent(),
+            'body' => $body,
         ]);
 
-        // 👉 ESTE ES EL PUNTO CLAVE
+        // Attendance PUSH init
         if ($options === 'all') {
+            Log::info('ZKTeco INIT REQUEST', [
+                'sn' => $sn,
+                'query' => $request->query(),
+            ]);
+
             return response($this->buildInitResponse($sn), 200)
                 ->header('Content-Type', 'text/plain');
         }
 
-        // 👉 Cuando empiecen a llegar ATTLOG
-        if ($request->query('table') === 'ATTLOG') {
-            // aquí después parseamos y guardamos
-            return response('OK: 1', 200);
+        // Attendance records
+        if ($table === 'ATTLOG') {
+            Log::info('ZKTeco ATTLOG EVENT', [
+                'sn' => $sn,
+                'body' => $body,
+            ]);
+
+            return response('OK: 1', 200)
+                ->header('Content-Type', 'text/plain');
         }
 
-        return response('OK', 200);
+        // Security PUSH real-time events
+        if ($table === 'rtlog') {
+            Log::info('ZKTeco RTLOG EVENT', [
+                'sn' => $sn,
+                'body' => $body,
+            ]);
+
+            return response('OK', 200)
+                ->header('Content-Type', 'text/plain');
+        }
+
+        // Device real-time status
+        if ($table === 'rtstate') {
+            Log::info('ZKTeco RTSTATE EVENT', [
+                'sn' => $sn,
+                'body' => $body,
+            ]);
+
+            return response('OK', 200)
+                ->header('Content-Type', 'text/plain');
+        }
+
+        // Device/user/config uploads
+        if ($table === 'options' || $table === 'tabledata') {
+            Log::info('ZKTeco TABLEDATA EVENT', [
+                'sn' => $sn,
+                'table' => $table,
+                'query' => $request->query(),
+                'body' => $body,
+            ]);
+
+            return response('OK', 200)
+                ->header('Content-Type', 'text/plain');
+        }
+
+        return response('OK', 200)
+            ->header('Content-Type', 'text/plain');
     }
 
-    private function buildInitResponse($sn)
+    private function buildInitResponse(?string $sn): string
     {
         return "GET OPTION FROM: {$sn}
 ATTLOGStamp=0

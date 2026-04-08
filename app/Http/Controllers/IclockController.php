@@ -218,18 +218,15 @@ class IclockController extends Controller
             'ATTPHOTOStamp=0',
             'ErrorDelay=30',
             'Delay=10',
-            'TransTimes=00:00;23:59',
             'TransInterval=1',
             'TransFlag=111111111111',
             'TimeZone=-6',
             'Realtime=1',
             'Encrypt=None',
             'ServerVer=3.0.1',
-            'PushProtVer=2.4.2',
-            'PushOptionsFlag=1',
-            'PushOptions=FingerFunOn,FaceFunOn',
+            'PushProtVer=2.4.1',
             'SupportPing=1',
-        ]);
+        ]) . "\n";
     }
 
     private function buildPushResponse(): string

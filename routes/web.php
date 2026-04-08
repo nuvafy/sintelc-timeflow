@@ -19,13 +19,3 @@ Route::get('/factorial/employees/test', function () {
 
     return response()->json($service->getEmployees());
 });
-
-Route::prefix('iclock')->group(function () {
-    Route::get('/ping', [IclockController::class, 'ping']);
-    Route::get('/getrequest', [IclockController::class, 'getRequest']);
-    Route::any('/cdata', [IclockController::class, 'cdata']);
-
-    Route::post('/registry', [IclockController::class, 'registry']);
-    Route::match(['get', 'post'], '/push', [IclockController::class, 'push']);
-    Route::post('/devicecmd', [IclockController::class, 'devicecmd']);
-});

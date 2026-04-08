@@ -42,7 +42,7 @@ class IclockController extends Controller
             'table' => $table,
             'query' => $request->query(),
             'cookies' => $request->cookies->all(),
-            'body' => $body,
+            'body_preview' => mb_substr($body, 0, 500),
         ]);
 
         // Attendance PUSH init
@@ -58,12 +58,65 @@ class IclockController extends Controller
 
         // Attendance records
         if ($table === 'ATTLOG') {
-            Log::info('ZKTeco ATTLOG EVENT', [
-                'sn' => $sn,
-                'body' => $body,
-            ]);
+            $records = $this->splitRecords($body);
 
-            return response('OK: 1', 200)
+            foreach ($records as $line) {
+                $parts = preg_split('/\t+/', trim($line));
+
+                Log::info('ZKTeco ATTLOG RECORD', [
+                    'sn' => $sn,
+                    'pin' => $parts[0] ?? null,
+                    'time' => $parts[1] ?? null,
+                    'status' => $parts[2] ?? null,
+                    'verify' => $parts[3] ?? null,
+                    'workcode' => $parts[4] ?? null,
+                    'raw' => $line,
+                ]);
+            }
+
+            return response('OK: ' . count($records), 200)
+                ->header('Content-Type', 'text/plain');
+        }
+
+        // Operation / user / biometric uploads
+        if ($table === 'OPERLOG') {
+            $records = $this->splitRecords($body);
+
+            foreach ($records as $line) {
+                if (str_starts_with($line, 'USER ')) {
+                    Log::info('ZKTeco USER RECORD', [
+                        'sn' => $sn,
+                        'raw' => $line,
+                    ]);
+                } elseif (str_starts_with($line, 'OPLOG ')) {
+                    Log::info('ZKTeco OPLOG RECORD', [
+                        'sn' => $sn,
+                        'raw' => $line,
+                    ]);
+                } elseif (str_starts_with($line, 'FP ')) {
+                    Log::info('ZKTeco FP RECORD', [
+                        'sn' => $sn,
+                        'raw' => $line,
+                    ]);
+                } elseif (str_starts_with($line, 'FACE ')) {
+                    Log::info('ZKTeco FACE RECORD', [
+                        'sn' => $sn,
+                        'raw' => $line,
+                    ]);
+                } elseif (str_starts_with($line, 'BIOPHOTO ')) {
+                    Log::info('ZKTeco BIOPHOTO RECORD', [
+                        'sn' => $sn,
+                        'raw_preview' => mb_substr($line, 0, 300),
+                    ]);
+                } else {
+                    Log::info('ZKTeco OPERLOG UNKNOWN RECORD', [
+                        'sn' => $sn,
+                        'raw' => $line,
+                    ]);
+                }
+            }
+
+            return response('OK: ' . count($records), 200)
                 ->header('Content-Type', 'text/plain');
         }
 
@@ -71,21 +124,11 @@ class IclockController extends Controller
         if ($table === 'ATTPHOTO') {
             Log::info('ZKTeco ATTPHOTO EVENT', [
                 'sn' => $sn,
-                'body_preview' => mb_substr($body, 0, 500),
+                'body_length' => strlen($body),
+                'has_null_byte' => str_contains($body, "\0"),
             ]);
 
             return response('OK', 200)
-                ->header('Content-Type', 'text/plain');
-        }
-
-        // Operation logs
-        if ($table === 'OPERLOG') {
-            Log::info('ZKTeco OPERLOG EVENT', [
-                'sn' => $sn,
-                'body' => $body,
-            ]);
-
-            return response('OK: 1', 200)
                 ->header('Content-Type', 'text/plain');
         }
 
@@ -93,18 +136,18 @@ class IclockController extends Controller
         if ($table === 'rtlog') {
             Log::info('ZKTeco RTLOG EVENT', [
                 'sn' => $sn,
-                'body' => $body,
+                'raw' => $body,
             ]);
 
             return response('OK', 200)
                 ->header('Content-Type', 'text/plain');
         }
 
-        // Device real-time status
+        // Security PUSH real-time status
         if ($table === 'rtstate') {
             Log::info('ZKTeco RTSTATE EVENT', [
                 'sn' => $sn,
-                'body' => $body,
+                'raw' => $body,
             ]);
 
             return response('OK', 200)
@@ -116,8 +159,7 @@ class IclockController extends Controller
             Log::info('ZKTeco TABLEDATA EVENT', [
                 'sn' => $sn,
                 'table' => $table,
-                'query' => $request->query(),
-                'body' => $body,
+                'raw' => $body,
             ]);
 
             return response('OK', 200)
@@ -134,7 +176,7 @@ class IclockController extends Controller
             'method' => $request->method(),
             'query' => $request->query(),
             'cookies' => $request->cookies->all(),
-            'body' => $request->getContent(),
+            'body_preview' => mb_substr($request->getContent(), 0, 1000),
         ]);
 
         return response("RegistryCode={$this->buildRegistryCode($request->query('SN'))}", 200)
@@ -169,42 +211,53 @@ class IclockController extends Controller
 
     private function buildInitResponse(?string $sn): string
     {
-        return "GET OPTION FROM: {$sn}
-ATTLOGStamp=0
-OPERLOGStamp=0
-ATTPHOTOStamp=0
-ErrorDelay=30
-Delay=10
-TransTimes=00:00;14:00
-TransInterval=1
-TransFlag=TransData AttLog\tOpLog\tAttPhoto\tEnrollUser\tChgUser\tEnrollFP\tChgFP\tUserPic
-TimeZone=-6
-Realtime=1
-Encrypt=None
-ServerVer=1.0.0
-PushProtVer=2.4.2
-PushOptionsFlag=1
-PushOptions=FingerFunOn,FaceFunOn
-SupportPing=1";
+        return implode("\n", [
+            "GET OPTION FROM: {$sn}",
+            'ATTLOGStamp=0',
+            'OPERLOGStamp=0',
+            'ATTPHOTOStamp=0',
+            'ErrorDelay=30',
+            'Delay=10',
+            'TransTimes=00:00;23:59',
+            'TransInterval=1',
+            'TransFlag=111111111111',
+            'TimeZone=-6',
+            'Realtime=1',
+            'Encrypt=None',
+            'ServerVer=3.0.1',
+            'PushProtVer=2.4.2',
+            'PushOptionsFlag=1',
+            'PushOptions=FingerFunOn,FaceFunOn',
+            'SupportPing=1',
+        ]);
     }
 
     private function buildPushResponse(): string
     {
-        return "ServerVersion=1.0.0
-ServerName=Sintelc ADMS
-PushVersion=2.4.2
-ErrorDelay=60
-RequestDelay=2
-TransTimes=00:00;14:00
-TransInterval=1
-TransTables=User Transaction
-Realtime=1
-SessionID=demo-session-id
-TimeoutSec=10";
+        return implode("\n", [
+            'ServerVersion=1.0.0',
+            'ServerName=Sintelc ADMS',
+            'PushVersion=2.4.2',
+            'ErrorDelay=60',
+            'RequestDelay=2',
+            'TransTimes=00:00;14:00',
+            'TransInterval=1',
+            'TransTables=User Transaction',
+            'Realtime=1',
+            'SessionID=demo-session-id',
+            'TimeoutSec=10',
+        ]);
     }
 
     private function buildRegistryCode(?string $sn): string
     {
         return substr(md5(($sn ?? 'unknown') . '|sintelc'), 0, 16);
+    }
+
+    private function splitRecords(string $body): array
+    {
+        return array_values(array_filter(
+            array_map('trim', preg_split('/\r\n|\r|\n/', $body))
+        ));
     }
 }

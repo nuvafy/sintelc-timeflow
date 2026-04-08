@@ -211,22 +211,10 @@ class IclockController extends Controller
 
     private function buildInitResponse(?string $sn): string
     {
-        return implode("\n", [
-            "GET OPTION FROM: {$sn}",
-            'ATTLOGStamp=0',
-            'OPERLOGStamp=0',
-            'ATTPHOTOStamp=0',
-            'ErrorDelay=30',
-            'Delay=10',
-            'TransInterval=1',
-            'TransFlag=111111111111',
-            'TimeZone=-6',
-            'Realtime=1',
-            'Encrypt=None',
-            'ServerVer=3.0.1',
-            'PushProtVer=2.4.1',
-            'SupportPing=1',
-        ]) . "\n";
+        return "GET OPTION FROM: {$sn}\n" .
+            "Stamp=0\n" .
+            "TransFlag=111111111111\n" .
+            "PushProtVer=2.4.1\n";
     }
 
     private function buildPushResponse(): string

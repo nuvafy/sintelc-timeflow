@@ -24,6 +24,7 @@ class IclockController extends Controller
     public function cdata(Request $request)
     {
         Log::info('ZKTeco CDATA RAW', [
+            'table' => $request->query('table'),
             'query' => $request->query(),
             'body' => $request->getContent(),
         ]);

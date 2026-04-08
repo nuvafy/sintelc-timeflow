@@ -11,7 +11,6 @@ return new class extends Migration {
             $table->id();
             $table->foreignId('client_id')->constrained()->cascadeOnDelete();
             $table->foreignId('biometric_source_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('employee_mapping_id')->nullable()->constrained()->nullOnDelete();
             $table->string('external_event_id')->nullable();
             $table->string('employee_code')->nullable();
             $table->string('check_type')->nullable();
@@ -21,7 +20,6 @@ return new class extends Migration {
             $table->string('sync_status')->default('pending');
             $table->text('sync_error')->nullable();
             $table->timestamps();
-
             $table->index(['client_id', 'sync_status']);
             $table->index(['biometric_source_id', 'occurred_at']);
         });

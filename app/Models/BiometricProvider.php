@@ -6,14 +6,19 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Site extends Model
+class BiometricProvider extends Model
 {
     protected $fillable = [
         'client_id',
+        'vendor',
         'name',
-        'code',
-        'external_location_id',
+        'base_url',
+        'credentials',
         'status',
+    ];
+
+    protected $casts = [
+        'credentials' => 'array',
     ];
 
     public function client(): BelongsTo

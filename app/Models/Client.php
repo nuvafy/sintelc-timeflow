@@ -23,18 +23,13 @@ class Client extends Model
         return $this->hasMany(BiometricSource::class);
     }
 
-    public function employeeMappings(): HasMany
+    public function biometricProviders(): HasMany
     {
-        return $this->hasMany(EmployeeMapping::class);
+        return $this->hasMany(BiometricProvider::class);
     }
 
     public function attendanceLogs(): HasMany
     {
         return $this->hasMany(AttendanceLog::class);
-    }
-
-    public function sites(): HasMany
-    {
-        return $this->hasMany(Site::class);
     }
 }

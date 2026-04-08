@@ -23,5 +23,5 @@ Route::get('/factorial/employees/test', function () {
 Route::prefix('iclock')->group(function () {
     Route::get('/ping', [IclockController::class, 'ping']);
     Route::get('/getrequest', [IclockController::class, 'getRequest']);
-    Route::post('/cdata', [IclockController::class, 'cdata']);
+    Route::any('/cdata', [IclockController::class, 'cdata']);
 });

@@ -20,8 +20,6 @@ Route::get('/factorial/employees/test', function () {
     return response()->json($service->getEmployees());
 });
 
-
-
 Route::prefix('iclock')
     ->middleware('iclock')
     ->group(function () {

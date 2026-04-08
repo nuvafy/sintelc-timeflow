@@ -10,6 +10,7 @@ class BiometricSource extends Model
 {
     protected $fillable = [
         'client_id',
+        'site_id',
         'name',
         'vendor',
         'base_url',
@@ -26,6 +27,11 @@ class BiometricSource extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 
     public function employeeMappings(): HasMany

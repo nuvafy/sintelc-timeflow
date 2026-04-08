@@ -32,4 +32,9 @@ class Client extends Model
     {
         return $this->hasMany(AttendanceLog::class);
     }
+
+    public function sites(): HasMany
+    {
+        return $this->hasMany(Site::class);
+    }
 }

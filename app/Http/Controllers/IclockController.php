@@ -53,7 +53,8 @@ class IclockController extends Controller
             ]);
 
             return response($this->buildInitResponse($sn), 200)
-                ->header('Content-Type', 'text/plain');
+                ->header('Content-Type', 'text/plain')
+                ->header('Content-Length', strlen($this->buildInitResponse($sn)));
         }
 
         // Attendance records

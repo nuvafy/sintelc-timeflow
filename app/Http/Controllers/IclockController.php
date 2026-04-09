@@ -30,12 +30,18 @@ class IclockController extends Controller
 
     public function cdata(Request $request)
     {
-        $sn = $request->query('SN');
+        $sn      = $request->query('SN');
+        $table   = $request->query('table');
         $options = $request->query('options');
 
+        Log::info('ZKTeco CDATA', [
+            'sn'    => $sn,
+            'table' => $table,
+            'body'  => mb_substr($request->getContent(), 0, 500),
+        ]);
+
         if ($options === 'all') {
-            $initBody = $this->buildInitResponse($sn);
-            return $this->plainResponse($initBody);
+            return $this->plainResponse($this->buildInitResponse($sn));
         }
 
         return $this->plainResponse('OK');

@@ -12,7 +12,6 @@ class IclockController extends Controller
     {
         Log::info('ZKTeco PING', [
             'query' => $request->query(),
-            'cookies' => $request->cookies->all(),
         ]);
 
         return $this->plainResponse('OK');
@@ -22,7 +21,6 @@ class IclockController extends Controller
     {
         Log::info('ZKTeco GETREQUEST', [
             'query' => $request->query(),
-            'cookies' => $request->cookies->all(),
         ]);
 
         return $this->plainResponse('OK');
@@ -44,15 +42,18 @@ class IclockController extends Controller
             return $this->plainResponse($this->buildInitResponse($sn));
         }
 
+        if ($table === 'ATTLOG') {
+            return $this->handleAttlog($request, $sn);
+        }
+
         return $this->plainResponse('OK');
     }
 
     public function registry(Request $request): Response
     {
         Log::info('ZKTeco REGISTRY', [
-            'method' => $request->method(),
-            'query' => $request->query(),
-            'cookies' => $request->cookies->all(),
+            'method'       => $request->method(),
+            'query'        => $request->query(),
             'body_preview' => mb_substr($request->getContent(), 0, 1000),
         ]);
 
@@ -65,9 +66,8 @@ class IclockController extends Controller
     {
         Log::info('ZKTeco PUSH CONFIG REQUEST', [
             'method' => $request->method(),
-            'query' => $request->query(),
-            'cookies' => $request->cookies->all(),
-            'body' => $request->getContent(),
+            'query'  => $request->query(),
+            'body'   => $request->getContent(),
         ]);
 
         return $this->plainResponse($this->buildPushResponse());
@@ -77,13 +77,88 @@ class IclockController extends Controller
     {
         Log::info('ZKTeco DEVICECMD RESULT', [
             'method' => $request->method(),
-            'query' => $request->query(),
-            'cookies' => $request->cookies->all(),
-            'body' => $request->getContent(),
+            'query'  => $request->query(),
+            'body'   => $request->getContent(),
         ]);
 
         return $this->plainResponse('OK');
     }
+
+    // ─── Private: Handlers ───────────────────────────────────────────
+
+    private function handleAttlog(Request $request, ?string $sn): void
+    {
+        $source = \App\Models\BiometricSource::where('serial_number', $sn)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$source) {
+            Log::warning('ZKTeco ATTLOG: dispositivo no registrado', ['sn' => $sn]);
+            $this->plainResponse('OK: 0');
+        }
+
+        $lines   = $this->splitRecords($request->getContent());
+        $records = [];
+        $now     = now();
+
+        foreach ($lines as $line) {
+            $parts = explode("\t", $line);
+            if (count($parts) < 2) continue;
+
+            $pin       = $parts[0] ?? null;
+            $timestamp = $parts[1] ?? null;
+            $status    = $parts[2] ?? null;
+            $verify    = $parts[3] ?? null;
+            $workcode  = $parts[4] ?? null;
+
+            if (!$pin || !$timestamp) continue;
+
+            try {
+                $occurredAt = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $timestamp);
+            } catch (\Exception $e) {
+                Log::warning('ZKTeco ATTLOG: timestamp inválido', ['raw' => $timestamp]);
+                continue;
+            }
+
+            $exists = \App\Models\AttendanceLog::where('biometric_source_id', $source->id)
+                ->where('employee_code', $pin)
+                ->where('occurred_at', $occurredAt)
+                ->exists();
+
+            if ($exists) continue;
+
+            $records[] = [
+                'client_id'           => $source->client_id,
+                'biometric_source_id' => $source->id,
+                'employee_code'       => $pin,
+                'check_type'          => $this->resolveCheckType($status),
+                'occurred_at'         => $occurredAt,
+                'raw_payload'         => json_encode([
+                    'pin'      => $pin,
+                    'time'     => $timestamp,
+                    'status'   => $status,
+                    'verify'   => $verify,
+                    'workcode' => $workcode,
+                ]),
+                'sync_status' => 'pending',
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ];
+        }
+
+        if (!empty($records)) {
+            \App\Models\AttendanceLog::insert($records);
+        }
+
+        Log::info('ZKTeco ATTLOG procesado', [
+            'sn'    => $sn,
+            'count' => count($records),
+        ]);
+
+        $this->plainResponse('OK: ' . count($records));
+    }
+
+    // ─── Private: Builders ───────────────────────────────────────────
 
     private function buildInitResponse(?string $sn): string
     {
@@ -115,6 +190,19 @@ class IclockController extends Controller
         return substr(md5(($sn ?? 'unknown') . '|sintelc'), 0, 16);
     }
 
+    private function resolveCheckType(?string $status): string
+    {
+        return match ($status) {
+            '0'     => 'check_in',
+            '1'     => 'check_out',
+            '4'     => 'break_out',
+            '5'     => 'break_in',
+            default => 'unknown',
+        };
+    }
+
+    // ─── Private: Utilities ──────────────────────────────────────────
+
     private function splitRecords(string $body): array
     {
         return array_values(array_filter(
@@ -122,13 +210,12 @@ class IclockController extends Controller
         ));
     }
 
-    private function plainResponse(string $body, int $status = 200)
+    private function plainResponse(string $body, int $status = 200): never
     {
-        // Evita que PHP agregue charset automáticamente
         ini_set('default_charset', '');
 
         http_response_code($status);
-        header('Content-Type: text/plain'); // sin charset
+        header('Content-Type: text/plain');
         header('Content-Length: ' . strlen($body));
         header('Connection: close');
 

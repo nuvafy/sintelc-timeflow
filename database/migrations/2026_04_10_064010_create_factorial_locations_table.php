@@ -7,21 +7,22 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('biometric_providers', function (Blueprint $table) {
+        Schema::create('factorial_locations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('client_id')->constrained()->cascadeOnDelete();
             $table->foreignId('factorial_connection_id')->constrained()->cascadeOnDelete();
-            $table->string('vendor');
+            $table->unsignedBigInteger('factorial_location_id');
+            $table->unsignedBigInteger('factorial_company_id');
             $table->string('name');
-            $table->string('status')->default('active');
             $table->timestamps();
 
-            $table->index(['client_id', 'vendor']);
+            $table->unique(['factorial_connection_id', 'factorial_location_id']);
+            $table->index(['client_id', 'factorial_connection_id']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('biometric_providers');
+        Schema::dropIfExists('factorial_locations');
     }
 };

@@ -10,6 +10,7 @@ return new class extends Migration {
         Schema::create('factorial_connections', function (Blueprint $table) {
             $table->id();
             $table->foreignId('client_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('factorial_company_id');
             $table->string('name')->nullable();
             $table->string('oauth_client_id');
             $table->text('oauth_client_secret');
@@ -21,6 +22,8 @@ return new class extends Migration {
             $table->string('resource_owner_type')->default('company');
             $table->json('raw_response')->nullable();
             $table->timestamps();
+
+            $table->index(['client_id', 'factorial_company_id']);
         });
     }
 

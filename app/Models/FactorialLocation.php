@@ -6,14 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class BiometricProvider extends Model
+class FactorialLocation extends Model
 {
     protected $fillable = [
         'client_id',
         'factorial_connection_id',
-        'vendor',
+        'factorial_location_id',
+        'factorial_company_id',
         'name',
-        'status',
     ];
 
     public function client(): BelongsTo
@@ -29,10 +29,5 @@ class BiometricProvider extends Model
     public function biometricSources(): HasMany
     {
         return $this->hasMany(BiometricSource::class);
-    }
-
-    public function userSyncs(): HasMany
-    {
-        return $this->hasMany(BiometricUserSync::class);
     }
 }

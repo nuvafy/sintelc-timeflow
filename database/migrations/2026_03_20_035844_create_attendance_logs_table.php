@@ -12,7 +12,7 @@ return new class extends Migration {
             $table->foreignId('client_id')->constrained()->cascadeOnDelete();
             $table->foreignId('biometric_source_id')->constrained()->cascadeOnDelete();
             $table->string('external_event_id')->nullable();
-            $table->string('employee_code')->nullable();
+            $table->string('employee_code');
             $table->string('check_type')->nullable();
             $table->timestamp('occurred_at');
             $table->json('raw_payload')->nullable();
@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->string('sync_status')->default('pending');
             $table->text('sync_error')->nullable();
             $table->timestamps();
+
             $table->index(['client_id', 'sync_status']);
             $table->index(['biometric_source_id', 'occurred_at']);
         });

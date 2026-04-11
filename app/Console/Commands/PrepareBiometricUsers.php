@@ -42,9 +42,9 @@ class PrepareBiometricUsers extends Command
                         'factorial_employee_id' => $employee->id,
                     ],
                     [
-                        'client_id' => $clientId,
-                        'external_employee_code' => $employee->company_identifier,
-                        'sync_status' => 'pending',
+                        'client_id'              => $clientId,
+                        'external_employee_code' => (string) $employee->factorial_id,
+                        'sync_status'            => 'pending',
                     ]
                 );
 

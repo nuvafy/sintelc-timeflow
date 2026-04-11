@@ -11,6 +11,7 @@ class BiometricSource extends Model
     protected $fillable = [
         'client_id',
         'biometric_provider_id',
+        'factorial_location_id',
         'name',
         'vendor',
         'device_code',
@@ -31,7 +32,12 @@ class BiometricSource extends Model
 
     public function provider(): BelongsTo
     {
-        return $this->belongsTo(BiometricProvider::class);
+        return $this->belongsTo(BiometricProvider::class, 'biometric_provider_id');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(FactorialLocation::class, 'factorial_location_id');
     }
 
     public function attendanceLogs(): HasMany

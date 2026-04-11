@@ -11,12 +11,10 @@ class FactorialEmployee extends Model
         'client_id',
         'factorial_connection_id',
         'factorial_id',
-        'access_id',
         'first_name',
         'last_name',
         'full_name',
         'email',
-        'login_email',
         'company_id',
         'company_identifier',
         'location_id',
@@ -30,13 +28,13 @@ class FactorialEmployee extends Model
     ];
 
     protected $casts = [
-        'active' => 'boolean',
-        'attendable' => 'boolean',
-        'is_terminating' => 'boolean',
-        'terminated_on' => 'datetime',
+        'active'               => 'boolean',
+        'attendable'           => 'boolean',
+        'is_terminating'       => 'boolean',
+        'terminated_on'        => 'datetime',
         'factorial_created_at' => 'datetime',
         'factorial_updated_at' => 'datetime',
-        'raw_payload' => 'array',
+        'raw_payload'          => 'array',
     ];
 
     public function client(): BelongsTo
@@ -44,8 +42,8 @@ class FactorialEmployee extends Model
         return $this->belongsTo(Client::class);
     }
 
-    public function factorialConnection(): BelongsTo
+    public function connection(): BelongsTo
     {
-        return $this->belongsTo(FactorialConnection::class);
+        return $this->belongsTo(FactorialConnection::class, 'factorial_connection_id');
     }
 }

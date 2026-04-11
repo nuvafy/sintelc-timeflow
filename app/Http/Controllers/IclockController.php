@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncAttendanceToFactorial;
+use App\Models\AttendanceLog;
+use App\Models\BiometricSource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -88,7 +91,7 @@ class IclockController extends Controller
 
     private function handleAttlog(Request $request, ?string $sn): void
     {
-        $source = \App\Models\BiometricSource::where('serial_number', $sn)
+        $source = BiometricSource::where('serial_number', $sn)
             ->where('status', 'active')
             ->first();
 
@@ -120,7 +123,7 @@ class IclockController extends Controller
                 continue;
             }
 
-            $exists = \App\Models\AttendanceLog::where('biometric_source_id', $source->id)
+            $exists = AttendanceLog::where('biometric_source_id', $source->id)
                 ->where('employee_code', $pin)
                 ->where('occurred_at', $occurredAt)
                 ->exists();
@@ -147,7 +150,17 @@ class IclockController extends Controller
         }
 
         if (!empty($records)) {
-            \App\Models\AttendanceLog::insert($records);
+            AttendanceLog::insert($records);
+
+            // Disparar job por cada registro insertado
+            $inserted = AttendanceLog::where('biometric_source_id', $source->id)
+                ->where('sync_status', 'pending')
+                ->whereIn('occurred_at', array_column($records, 'occurred_at'))
+                ->get();
+
+            foreach ($inserted as $attendanceLog) {
+                SyncAttendanceToFactorial::dispatch($attendanceLog->id);
+            }
         }
 
         Log::info('ZKTeco ATTLOG procesado', [

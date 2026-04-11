@@ -37,12 +37,12 @@ class FactorialService
             ->timeout(30);
 
         $response = match (strtolower($method)) {
-            'get' => $request->get($url, $options['query'] ?? []),
-            'post' => $request->post($url, $options['json'] ?? []),
-            'put' => $request->put($url, $options['json'] ?? []),
-            'patch' => $request->patch($url, $options['json'] ?? []),
+            'get'    => $request->get($url, $options['query'] ?? []),
+            'post'   => $request->post($url, $options['json'] ?? []),
+            'put'    => $request->put($url, $options['json'] ?? []),
+            'patch'  => $request->patch($url, $options['json'] ?? []),
             'delete' => $request->delete($url, $options['json'] ?? []),
-            default => throw new RuntimeException("Método HTTP no soportado: {$method}"),
+            default  => throw new RuntimeException("Método HTTP no soportado: {$method}"),
         };
 
         return $response->throw();
@@ -51,9 +51,9 @@ class FactorialService
     public function getEmployees(array $query = []): array
     {
         $defaultQuery = [
-            'only_active' => 'true',
+            'only_active'   => 'true',
             'only_managers' => 'false',
-            'limit' => 100,
+            'limit'         => 100,
         ];
 
         return $this->request(
@@ -67,7 +67,7 @@ class FactorialService
     {
         return $this->request(
             'get',
-            '/api/2026-01-01/resources/attendance/locations',
+            '/api/2026-01-01/resources/locations/locations',
             ['query' => $query]
         )->json();
     }
@@ -85,7 +85,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/clock_in',
+            '/api/2026-01-01/resources/attendance/shifts/clock_in',
             ['json' => $payload]
         )->json();
     }
@@ -94,7 +94,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/clock_out',
+            '/api/2026-01-01/resources/attendance/shifts/clock_out',
             ['json' => $payload]
         )->json();
     }
@@ -103,7 +103,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/break_start',
+            '/api/2026-01-01/resources/attendance/shifts/break_start',
             ['json' => $payload]
         )->json();
     }
@@ -112,7 +112,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/break_end',
+            '/api/2026-01-01/resources/attendance/shifts/break_end',
             ['json' => $payload]
         )->json();
     }

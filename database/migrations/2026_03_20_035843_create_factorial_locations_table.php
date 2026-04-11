@@ -16,7 +16,7 @@ return new class extends Migration {
             $table->string('name');
             $table->timestamps();
 
-            $table->unique(['factorial_connection_id', 'factorial_location_id']);
+            $table->unique(['factorial_connection_id', 'factorial_location_id'], 'fact_locations_conn_loc_unique');
             $table->index(['client_id', 'factorial_connection_id']);
         });
     }

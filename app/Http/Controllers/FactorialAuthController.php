@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Client;
 use App\Models\FactorialConnection;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -13,16 +12,20 @@ class FactorialAuthController extends Controller
 {
     public function redirect(Request $request)
     {
-        // 🔑 por ahora lo dejamos fijo (luego lo hacemos dinámico)
-        $client = Client::where('slug', 'sintelc-sandbox-zkt')->firstOrFail();
+        $connectionId = $request->query('connection_id');
 
-        $connection = FactorialConnection::where('client_id', $client->id)->firstOrFail();
+        if (! $connectionId) {
+            return response()->json(['ok' => false, 'message' => 'connection_id es requerido'], 400);
+        }
+
+        $connection = FactorialConnection::findOrFail($connectionId);
 
         $query = http_build_query([
-            'client_id' => $connection->oauth_client_id,
-            'redirect_uri' => config('services.factorial.redirect'),
-            'response_type' => 'code',
-            'resource_owner_type' => $connection->resource_owner_type ?? 'company'
+            'client_id'           => $connection->oauth_client_id,
+            'redirect_uri'        => config('services.factorial.redirect'),
+            'response_type'       => 'code',
+            'resource_owner_type' => $connection->resource_owner_type ?? 'company',
+            'state'               => $connection->id,
         ]);
 
         return redirect(config('services.factorial.base_url') . '/oauth/authorize?' . $query);
@@ -47,8 +50,13 @@ class FactorialAuthController extends Controller
             ], 400);
         }
 
-        $client = Client::where('slug', 'sintelc-sandbox-zkt')->firstOrFail();
-        $connection = FactorialConnection::where('client_id', $client->id)->firstOrFail();
+        $connectionId = $request->input('state');
+
+        if (! $connectionId) {
+            return response()->json(['ok' => false, 'message' => 'state (connection_id) ausente en el callback'], 400);
+        }
+
+        $connection = FactorialConnection::findOrFail($connectionId);
 
         $response = Http::asForm()->post(
             config('services.factorial.base_url') . '/oauth/token',
@@ -88,14 +96,14 @@ class FactorialAuthController extends Controller
             'raw_response' => $data,
         ]);
 
-        $client->update([
+        $connection->client->update([
             'status' => 'active',
         ]);
 
         return response()->json([
             'ok' => true,
             'message' => 'Token guardado correctamente',
-            'client' => $client->slug,
+            'client' => $connection->client->slug,
         ]);
     }
 }

@@ -117,7 +117,7 @@ class IclockController extends Controller
             if (!$pin || !$timestamp) continue;
 
             try {
-                $occurredAt = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $timestamp);
+                $occurredAt = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $timestamp, config('app.timezone'));
             } catch (\Exception $e) {
                 Log::warning('ZKTeco ATTLOG: timestamp inválido', ['raw' => $timestamp]);
                 continue;

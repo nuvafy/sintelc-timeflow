@@ -20,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        date_default_timezone_set(config('app.timezone'));
         if (config('app.env') !== 'local') {
             URL::forceScheme('https');
         }

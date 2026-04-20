@@ -58,7 +58,7 @@ class FactorialService
 
         return $this->request(
             'get',
-            '/api/2026-01-01/resources/employees/employees',
+            '/api/2026-04-01/resources/employees/employees',
             ['query' => array_merge($defaultQuery, $query)]
         )->json();
     }
@@ -67,7 +67,7 @@ class FactorialService
     {
         return $this->request(
             'get',
-            '/api/2026-01-01/resources/locations/locations',
+            '/api/2026-04-01/resources/locations/locations',
             ['query' => $query]
         )->json();
     }
@@ -76,7 +76,7 @@ class FactorialService
     {
         return $this->request(
             'get',
-            '/api/2026-01-01/resources/attendance/break_configurations',
+            '/api/2026-04-01/resources/attendance/break_configurations',
             ['query' => $query]
         )->json();
     }
@@ -85,7 +85,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/shifts/clock_in',
+            '/api/2026-04-01/resources/attendance/shifts/clock_in',
             ['json' => $payload]
         )->json();
     }
@@ -94,7 +94,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/shifts/clock_out',
+            '/api/2026-04-01/resources/attendance/shifts/clock_out',
             ['json' => $payload]
         )->json();
     }
@@ -103,7 +103,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/shifts/break_start',
+            '/api/2026-04-01/resources/attendance/shifts/break_start',
             ['json' => $payload]
         )->json();
     }
@@ -112,7 +112,7 @@ class FactorialService
     {
         return $this->request(
             'post',
-            '/api/2026-01-01/resources/attendance/shifts/break_end',
+            '/api/2026-04-01/resources/attendance/shifts/break_end',
             ['json' => $payload]
         )->json();
     }

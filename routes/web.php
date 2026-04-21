@@ -14,6 +14,10 @@ Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
 
+Route::view('devices', 'devices')
+    ->middleware(['auth'])
+    ->name('devices');
+
 // Factorial OAuth
 Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect']);
 Route::get('/oauth/factorial/callback', [FactorialAuthController::class, 'callback']);

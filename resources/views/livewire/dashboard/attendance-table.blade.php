@@ -32,20 +32,20 @@ new class extends Component {
     <div class="px-6 py-4 border-b border-gray-200">
         <h3 class="text-lg font-medium text-gray-900">Registros de asistencia</h3>
 
-        <div class="mt-3 flex flex-col sm:flex-row gap-3">
+        <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input
                 wire:model.live.debounce.300ms="search"
                 type="text"
                 placeholder="Buscar por código empleado..."
-                class="block w-full sm:w-64 rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
-            <select wire:model.live="statusFilter" class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <select wire:model.live="statusFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todos los estados</option>
                 <option value="pending">Pendiente</option>
                 <option value="synced">Sincronizado</option>
                 <option value="failed">Fallido</option>
             </select>
-            <select wire:model.live="checkTypeFilter" class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <select wire:model.live="checkTypeFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todos los tipos</option>
                 <option value="check_in">Entrada</option>
                 <option value="check_out">Salida</option>

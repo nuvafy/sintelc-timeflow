@@ -18,9 +18,13 @@ Route::view('devices', 'devices')
     ->middleware(['auth'])
     ->name('devices');
 
+Route::view('connections', 'connections')
+    ->middleware(['auth'])
+    ->name('connections');
+
 // Factorial OAuth
-Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect']);
-Route::get('/oauth/factorial/callback', [FactorialAuthController::class, 'callback']);
+Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect'])->name('oauth.factorial.redirect');
+Route::get('/oauth/factorial/callback', [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');
 
 // Biometric devices (ZKTeco) - no auth required
 Route::prefix('iclock')

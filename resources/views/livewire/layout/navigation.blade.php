@@ -36,6 +36,9 @@ new class extends Component
                     <x-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
                         Dispositivos
                     </x-nav-link>
+                    <x-nav-link :href="route('connections')" :active="request()->routeIs('connections')" wire:navigate>
+                        Conexiones
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -89,6 +92,9 @@ new class extends Component
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
                 Dispositivos
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('connections')" :active="request()->routeIs('connections')" wire:navigate>
+                Conexiones
             </x-responsive-nav-link>
         </div>
 

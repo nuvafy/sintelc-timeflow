@@ -79,6 +79,18 @@ class SyncAttendanceToFactorial implements ShouldQueue
         try {
             $service = new FactorialService($connection);
 
+            if (in_array($log->check_type, ['break_out', 'break_in'])) {
+                $configs = $service->getBreakConfigurations();
+                $breakConfigId = $configs[0]['id'] ?? null;
+
+                if (!$breakConfigId) {
+                    $this->fail($log, 'No se encontró break_configuration en Factorial');
+                    return;
+                }
+
+                $payload['time_settings_break_configuration_id'] = $breakConfigId;
+            }
+
             $response = match ($log->check_type) {
                 'check_in'  => $service->clockIn($payload),
                 'check_out' => $service->clockOut($payload),

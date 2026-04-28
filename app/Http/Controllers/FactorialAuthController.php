@@ -97,21 +97,22 @@ class FactorialAuthController extends Controller
             'raw_response'  => $data,
         ]);
 
-        // Obtener company_id de Factorial
+        // Extraer company_id del JWT del access_token
         try {
-            $service  = new \App\Services\FactorialService($connection->fresh());
-            $me       = $service->getMe();
-            $companyId = $me['data']['current_company_id']
-                ?? $me['current_company_id']
-                ?? $me['data']['company_id']
-                ?? $me['company_id']
-                ?? null;
+            $jwt       = $data['access_token'] ?? null;
+            $companyId = null;
+
+            if ($jwt) {
+                $parts   = explode('.', $jwt);
+                $payload = json_decode(base64_decode(strtr($parts[1] ?? '', '-_', '+/')), true);
+                $companyId = $payload['company_id'] ?? null;
+            }
 
             if ($companyId) {
                 $connection->update(['factorial_company_id' => $companyId]);
             }
         } catch (\Throwable $e) {
-            Log::warning('No se pudo obtener company_id de Factorial', [
+            Log::warning('No se pudo extraer company_id del JWT', [
                 'connection_id' => $connection->id,
                 'error'         => $e->getMessage(),
             ]);

@@ -3,12 +3,12 @@
 use App\Models\FactorialConnection;
 use App\Models\Client;
 use Livewire\Volt\Component;
-use Illuminate\Support\Facades\Mail;
 
 new class extends Component {
     public bool $showModal = false;
     public bool $editing = false;
     public ?int $editingId = null;
+    public ?string $oauthUrl = null;
 
     public string $name = '';
     public string $contact_email = '';
@@ -70,13 +70,12 @@ new class extends Component {
 
         if ($this->editing) {
             FactorialConnection::findOrFail($this->editingId)->update($data);
+            $this->showModal = false;
+            $this->resetForm();
         } else {
             $connection = FactorialConnection::create($data);
-            $this->sendOAuthEmail($connection);
+            $this->oauthUrl = route('oauth.factorial.redirect', ['connection_id' => $connection->id]);
         }
-
-        $this->showModal = false;
-        $this->resetForm();
     }
 
     public function delete(int $id): void
@@ -101,26 +100,6 @@ new class extends Component {
         return ['label' => 'Conectado', 'color' => 'bg-green-100 text-green-700'];
     }
 
-    private function sendOAuthEmail(FactorialConnection $connection): void
-    {
-        $url = route('oauth.factorial.redirect', ['connection_id' => $connection->id]);
-
-        try {
-            Mail::raw(
-                "Hola,\n\nPara conectar tu cuenta de Factorial con Sintelc TimeFlow, haz clic en el siguiente enlace:\n\n{$url}\n\nEste enlace te llevará a Factorial para autorizar la integración.\n\nSaludos,\nSintelc TimeFlow",
-                function ($message) use ($connection, $url) {
-                    $message->to($connection->contact_email)
-                        ->subject('Autoriza tu conexión con Sintelc TimeFlow');
-                }
-            );
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Error enviando email OAuth', [
-                'connection_id' => $connection->id,
-                'error'         => $e->getMessage(),
-            ]);
-        }
-    }
-
     private function resetForm(): void
     {
         $this->editingId           = null;
@@ -130,6 +109,7 @@ new class extends Component {
         $this->oauth_client_id     = '';
         $this->oauth_client_secret = '';
         $this->resource_owner_type = 'company';
+        $this->oauthUrl            = null;
         $this->resetValidation();
     }
 }; ?>
@@ -203,11 +183,6 @@ new class extends Component {
                     {{ $conn->access_token ? 'Reconectar' : 'Conectar' }}
                 </a>
                 <div class="flex gap-3 items-center">
-                    @if($conn->contact_email && !$conn->access_token)
-                    <button wire:click="resendEmail({{ $conn->id }})" class="text-xs text-amber-600 hover:text-amber-800">
-                        Reenviar email
-                    </button>
-                    @endif
                     <button wire:click="openEdit({{ $conn->id }})" class="text-sm text-indigo-600 hover:text-indigo-900">Editar</button>
                     <button wire:click="delete({{ $conn->id }})" wire:confirm="¿Eliminar esta conexión?" class="text-sm text-red-600 hover:text-red-900">Eliminar</button>
                 </div>
@@ -234,6 +209,26 @@ new class extends Component {
             </div>
 
             <div class="px-6 py-4 space-y-4">
+
+                {{-- URL generada tras crear --}}
+                @if($oauthUrl)
+                <div class="bg-emerald-50 border border-emerald-200 rounded-md p-4">
+                    <p class="text-sm font-medium text-emerald-800 mb-2">✓ Conexión creada. Comparte este enlace con el cliente:</p>
+                    <div class="flex gap-2">
+                        <input type="text" readonly value="{{ $oauthUrl }}"
+                            class="flex-1 text-xs font-mono bg-white border border-emerald-300 rounded px-3 py-2 text-gray-700 focus:outline-none"
+                            onclick="this.select()"
+                        />
+                        <button
+                            onclick="navigator.clipboard.writeText('{{ $oauthUrl }}').then(() => this.textContent = '✓').catch(() => {}); return false;"
+                            class="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition whitespace-nowrap">
+                            Copiar
+                        </button>
+                    </div>
+                    <p class="text-xs text-emerald-700 mt-2">El cliente hace clic, inicia sesión en Factorial y queda conectado automáticamente.</p>
+                </div>
+                @endif
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Nombre de la conexión</label>
                     <input wire:model="name" type="text" placeholder="Ej: Prosys" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
@@ -287,9 +282,11 @@ new class extends Component {
                 <button wire:click="$set('showModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cancelar
                 </button>
+                @if(!$oauthUrl)
                 <button wire:click="save" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
-                    {{ $editing ? 'Guardar cambios' : 'Crear y enviar enlace' }}
+                    {{ $editing ? 'Guardar cambios' : 'Crear conexión' }}
                 </button>
+                @endif
             </div>
         </div>
     </div>

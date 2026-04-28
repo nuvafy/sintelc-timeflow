@@ -477,29 +477,33 @@ new class extends Component {
     {{-- ── Modal: Confirmar envío de usuarios ───────────────────────── --}}
     @if($showPushModal)
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
-            <div class="px-6 py-5">
-                <div class="flex items-center gap-3 mb-3">
-                    <div class="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="text-base font-semibold text-gray-900">Enviar usuarios al dispositivo</h3>
-                        <p class="text-sm text-gray-500 mt-0.5">
-                            Se encolarán <span class="font-semibold text-gray-800">{{ $pushCount }}</span> empleados activos con PIN registrado.
-                            El equipo los recibirá en su próxima sincronización.
-                        </p>
-                    </div>
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-6 py-5 border-b border-gray-200 flex items-center gap-3">
+                <div class="w-9 h-9 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
                 </div>
-                @if($pushCount === 0)
-                <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                    No hay empleados activos con <code>access_id</code> para este cliente. Sincroniza primero los empleados desde Factorial.
-                </div>
+                <h3 class="text-base font-semibold text-gray-900">Enviar usuarios al dispositivo</h3>
+            </div>
+
+            <div class="px-6 py-4">
+                @if($pushCount > 0)
+                    <p class="text-sm text-gray-600">
+                        Se encolarán <span class="font-semibold text-gray-900">{{ $pushCount }}</span> empleados activos con PIN registrado.
+                        El equipo los recibirá en su próxima sincronización.
+                    </p>
+                @else
+                    <p class="text-sm text-gray-600 mb-3">
+                        No hay empleados activos con <code class="bg-gray-100 px-1 rounded text-xs">access_id</code> para este cliente.
+                    </p>
+                    <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
+                        Sincroniza primero los empleados desde Factorial con <code class="text-xs">php artisan factorial:sync-employees</code>.
+                    </p>
                 @endif
             </div>
-            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button wire:click="$set('showPushModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cancelar
                 </button>

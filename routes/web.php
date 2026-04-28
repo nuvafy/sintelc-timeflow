@@ -22,6 +22,10 @@ Route::view('connections', 'connections')
     ->middleware(['auth'])
     ->name('connections');
 
+Route::view('employees', 'employees')
+    ->middleware(['auth'])
+    ->name('employees');
+
 // Factorial OAuth
 Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect'])->name('oauth.factorial.redirect');
 Route::get('/oauth/factorial/callback', [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');

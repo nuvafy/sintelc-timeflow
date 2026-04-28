@@ -36,6 +36,8 @@ class PrepareBiometricUsers extends Command
         foreach ($providers as $provider) {
             foreach ($employees as $employee) {
 
+                if (!$employee->access_id) continue;
+
                 $sync = BiometricUserSync::firstOrCreate(
                     [
                         'biometric_provider_id' => $provider->id,
@@ -43,7 +45,7 @@ class PrepareBiometricUsers extends Command
                     ],
                     [
                         'client_id'              => $clientId,
-                        'external_employee_code' => (string) $employee->factorial_id,
+                        'external_employee_code' => (string) $employee->access_id,
                         'sync_status'            => 'pending',
                     ]
                 );

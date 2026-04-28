@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\DeviceCommand;
 
 class BiometricSource extends Model
 {
@@ -19,10 +20,12 @@ class BiometricSource extends Model
         'site_name',
         'settings',
         'status',
+        'last_ping_at',
     ];
 
     protected $casts = [
-        'settings' => 'array',
+        'settings'     => 'array',
+        'last_ping_at' => 'datetime',
     ];
 
     public function client(): BelongsTo
@@ -43,5 +46,15 @@ class BiometricSource extends Model
     public function attendanceLogs(): HasMany
     {
         return $this->hasMany(AttendanceLog::class);
+    }
+
+    public function commands(): HasMany
+    {
+        return $this->hasMany(DeviceCommand::class);
+    }
+
+    public function isAssigned(): bool
+    {
+        return $this->client_id !== null;
     }
 }

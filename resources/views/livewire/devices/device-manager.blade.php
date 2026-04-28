@@ -1,7 +1,10 @@
 <?php
 
+use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\Client;
+use App\Models\DeviceCommand;
+use App\Models\FactorialEmployee;
 use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -18,7 +21,21 @@ new class extends Component {
     public string $site_name = '';
     public string $status = 'active';
     public ?int $client_id = null;
+    public ?int $biometric_provider_id = null;
     public ?int $factorial_location_id = null;
+
+    // Modal para asignar equipo descubierto
+    public bool $showAssignModal = false;
+    public ?int $assigningSourceId = null;
+    public string $assign_name = '';
+    public ?int $assign_client_id = null;
+    public ?int $assign_provider_id = null;
+    public ?int $assign_location_id = null;
+
+    // Modal confirmación de envío de usuarios
+    public bool $showPushModal = false;
+    public ?int $pushSourceId = null;
+    public int $pushCount = 0;
 
     public function rules(): array
     {
@@ -28,6 +45,7 @@ new class extends Component {
             'site_name'             => 'nullable|string|max:255',
             'status'                => 'required|in:active,inactive',
             'client_id'             => 'required|exists:clients,id',
+            'biometric_provider_id' => 'nullable|exists:biometric_providers,id',
             'factorial_location_id' => 'nullable|exists:factorial_locations,id',
         ];
     }
@@ -35,9 +53,16 @@ new class extends Component {
     public function with(): array
     {
         return [
-            'devices'   => BiometricSource::with(['client', 'location'])->withCount('attendanceLogs')->paginate(10),
-            'clients'   => Client::orderBy('name')->get(),
-            'locations' => FactorialLocation::orderBy('name')->get(),
+            'devices'            => BiometricSource::with(['client', 'location'])
+                ->whereNotNull('client_id')
+                ->withCount('attendanceLogs')
+                ->paginate(10),
+            'unassigned'         => BiometricSource::whereNull('client_id')
+                ->orderByDesc('last_ping_at')
+                ->get(),
+            'clients'            => Client::orderBy('name')->get(),
+            'locations'          => FactorialLocation::orderBy('name')->get(),
+            'providers'          => BiometricProvider::orderBy('name')->get(),
         ];
     }
 
@@ -51,14 +76,15 @@ new class extends Component {
     public function openEdit(int $id): void
     {
         $device = BiometricSource::findOrFail($id);
-        $this->editingId            = $device->id;
-        $this->name                 = $device->name;
-        $this->serial_number        = $device->serial_number;
-        $this->site_name            = $device->site_name ?? '';
-        $this->status               = $device->status;
-        $this->client_id            = $device->client_id;
-        $this->factorial_location_id = $device->factorial_location_id;
-        $this->editing  = true;
+        $this->editingId              = $device->id;
+        $this->name                   = $device->name;
+        $this->serial_number          = $device->serial_number;
+        $this->site_name              = $device->site_name ?? '';
+        $this->status                 = $device->status;
+        $this->client_id              = $device->client_id;
+        $this->biometric_provider_id  = $device->biometric_provider_id;
+        $this->factorial_location_id  = $device->factorial_location_id;
+        $this->editing   = true;
         $this->showModal = true;
     }
 
@@ -69,7 +95,7 @@ new class extends Component {
         if ($this->editing) {
             BiometricSource::findOrFail($this->editingId)->update($data);
         } else {
-            BiometricSource::create(array_merge($data, ['vendor' => 'ZKTeco', 'biometric_provider_id' => 1]));
+            BiometricSource::create(array_merge($data, ['vendor' => 'ZKTeco']));
         }
 
         $this->showModal = false;
@@ -87,6 +113,92 @@ new class extends Component {
         $device->update(['status' => $device->status === 'active' ? 'inactive' : 'active']);
     }
 
+    // ── Asignar equipo descubierto ─────────────────────────────────
+
+    public function openAssign(int $id): void
+    {
+        $source = BiometricSource::findOrFail($id);
+        $this->assigningSourceId = $source->id;
+        $this->assign_name       = $source->serial_number ?? '';
+        $this->assign_client_id  = null;
+        $this->assign_provider_id = null;
+        $this->assign_location_id = null;
+        $this->showAssignModal   = true;
+    }
+
+    public function saveAssign(): void
+    {
+        $this->validate([
+            'assign_name'       => 'required|string|max:255',
+            'assign_client_id'  => 'required|exists:clients,id',
+            'assign_provider_id' => 'nullable|exists:biometric_providers,id',
+            'assign_location_id' => 'nullable|exists:factorial_locations,id',
+        ]);
+
+        BiometricSource::findOrFail($this->assigningSourceId)->update([
+            'name'                  => $this->assign_name,
+            'client_id'             => $this->assign_client_id,
+            'biometric_provider_id' => $this->assign_provider_id,
+            'factorial_location_id' => $this->assign_location_id,
+            'status'                => 'active',
+        ]);
+
+        $this->showAssignModal   = false;
+        $this->assigningSourceId = null;
+    }
+
+    // ── Enviar usuarios al dispositivo ────────────────────────────
+
+    public function openPush(int $id): void
+    {
+        $source = BiometricSource::findOrFail($id);
+        $this->pushSourceId = $source->id;
+        $this->pushCount    = FactorialEmployee::where('client_id', $source->client_id)
+            ->whereNotNull('access_id')
+            ->where('active', true)
+            ->count();
+        $this->showPushModal = true;
+    }
+
+    public function confirmPush(): void
+    {
+        $source = BiometricSource::findOrFail($this->pushSourceId);
+
+        $employees = FactorialEmployee::where('client_id', $source->client_id)
+            ->whereNotNull('access_id')
+            ->where('active', true)
+            ->get();
+
+        $maxSeq = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
+
+        $now     = now();
+        $inserts = [];
+
+        foreach ($employees as $i => $employee) {
+            $seq      = $maxSeq + $i + 1;
+            $pin      = $employee->access_id;
+            $name     = mb_substr($employee->full_name, 0, 24); // ZKTeco max 24 chars
+            $payload  = "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tCard=\tRole=0";
+
+            $inserts[] = [
+                'biometric_source_id' => $source->id,
+                'command_seq'         => $seq,
+                'command_type'        => 'set_user',
+                'payload'             => $payload,
+                'status'              => 'pending',
+                'created_at'          => $now,
+                'updated_at'          => $now,
+            ];
+        }
+
+        if (!empty($inserts)) {
+            DeviceCommand::insert($inserts);
+        }
+
+        $this->showPushModal = false;
+        $this->pushSourceId  = null;
+    }
+
     private function resetForm(): void
     {
         $this->editingId             = null;
@@ -95,13 +207,51 @@ new class extends Component {
         $this->site_name             = '';
         $this->status                = 'active';
         $this->client_id             = null;
+        $this->biometric_provider_id = null;
         $this->factorial_location_id = null;
         $this->resetValidation();
     }
 }; ?>
 
 <div>
-    {{-- Header --}}
+    {{-- ── Equipos descubiertos (sin asignar) ───────────────────────── --}}
+    @if($unassigned->isNotEmpty())
+    <div class="mb-8 bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-amber-200 flex items-center gap-2">
+            <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <h3 class="text-sm font-semibold text-amber-800">Equipos descubiertos sin asignar ({{ $unassigned->count() }})</h3>
+        </div>
+        <table class="min-w-full divide-y divide-amber-100">
+            <thead class="bg-amber-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-amber-700 uppercase tracking-wider">Serial</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-amber-700 uppercase tracking-wider">Último ping</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-amber-700 uppercase tracking-wider">Acción</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-amber-100">
+                @foreach($unassigned as $device)
+                <tr class="hover:bg-amber-50">
+                    <td class="px-6 py-3 text-sm font-mono text-gray-800">{{ $device->serial_number ?? '—' }}</td>
+                    <td class="px-6 py-3 text-sm text-gray-500">
+                        {{ $device->last_ping_at?->diffForHumans() ?? 'Nunca' }}
+                    </td>
+                    <td class="px-6 py-3 text-right">
+                        <button wire:click="openAssign({{ $device->id }})"
+                            class="inline-flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-md hover:bg-amber-700 transition">
+                            Asignar empresa
+                        </button>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+    @endif
+
+    {{-- ── Header equipos registrados ───────────────────────────────── --}}
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-semibold text-gray-800">Dispositivos biométricos</h2>
         <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
@@ -112,7 +262,7 @@ new class extends Component {
         </button>
     </div>
 
-    {{-- Tabla --}}
+    {{-- ── Tabla dispositivos registrados ───────────────────────────── --}}
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
@@ -122,6 +272,7 @@ new class extends Component {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
@@ -137,19 +288,31 @@ new class extends Component {
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->client?->name ?? '—' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->location?->name ?? $device->site_name ?? '—' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{ $device->last_ping_at?->diffForHumans() ?? '—' }}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <button wire:click="toggleStatus({{ $device->id }})" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer {{ $device->status === 'active' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        <button wire:click="toggleStatus({{ $device->id }})"
+                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer {{ $device->status === 'active' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
                             {{ $device->status === 'active' ? 'Activo' : 'Inactivo' }}
                         </button>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button wire:click="openPush({{ $device->id }})"
+                            title="Enviar usuarios de Factorial al dispositivo"
+                            class="text-emerald-600 hover:text-emerald-900">
+                            <svg class="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                            </svg>
+                            Enviar usuarios
+                        </button>
                         <button wire:click="openEdit({{ $device->id }})" class="text-indigo-600 hover:text-indigo-900">Editar</button>
                         <button wire:click="delete({{ $device->id }})" wire:confirm="¿Eliminar este dispositivo?" class="text-red-600 hover:text-red-900">Eliminar</button>
                     </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500">No hay dispositivos registrados.</td>
+                    <td colspan="8" class="px-6 py-10 text-center text-sm text-gray-500">No hay dispositivos registrados.</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -159,7 +322,7 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- Modal --}}
+    {{-- ── Modal: Crear / Editar dispositivo ────────────────────────── --}}
     @if($showModal)
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
@@ -213,6 +376,16 @@ new class extends Component {
                 </div>
 
                 <div>
+                    <label class="block text-sm font-medium text-gray-700">Proveedor biométrico</label>
+                    <select wire:model="biometric_provider_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Sin asignar</option>
+                        @foreach($providers as $provider)
+                            <option value="{{ $provider->id }}">{{ $provider->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
                     <label class="block text-sm font-medium text-gray-700">Ubicación Factorial</label>
                     <select wire:model="factorial_location_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Sin asignar</option>
@@ -230,6 +403,109 @@ new class extends Component {
                 <button wire:click="save" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
                     {{ $editing ? 'Guardar cambios' : 'Crear dispositivo' }}
                 </button>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Modal: Asignar equipo descubierto ────────────────────────── --}}
+    @if($showAssignModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Asignar dispositivo a empresa</h3>
+                <button wire:click="$set('showAssignModal', false)" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-4 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nombre del dispositivo</label>
+                    <input wire:model="assign_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('assign_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Empresa</label>
+                    <select wire:model="assign_client_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Seleccionar...</option>
+                        @foreach($clients as $client)
+                            <option value="{{ $client->id }}">{{ $client->name }}</option>
+                        @endforeach
+                    </select>
+                    @error('assign_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Proveedor biométrico</label>
+                    <select wire:model="assign_provider_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Sin asignar</option>
+                        @foreach($providers as $provider)
+                            <option value="{{ $provider->id }}">{{ $provider->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Ubicación Factorial</label>
+                    <select wire:model="assign_location_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Sin asignar</option>
+                        @foreach($locations as $location)
+                            <option value="{{ $location->id }}">{{ $location->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button wire:click="$set('showAssignModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button wire:click="saveAssign" class="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700">
+                    Asignar
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Modal: Confirmar envío de usuarios ───────────────────────── --}}
+    @if($showPushModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+            <div class="px-6 py-5">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-900">Enviar usuarios al dispositivo</h3>
+                        <p class="text-sm text-gray-500 mt-0.5">
+                            Se encolarán <span class="font-semibold text-gray-800">{{ $pushCount }}</span> empleados activos con PIN registrado.
+                            El equipo los recibirá en su próxima sincronización.
+                        </p>
+                    </div>
+                </div>
+                @if($pushCount === 0)
+                <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    No hay empleados activos con <code>access_id</code> para este cliente. Sincroniza primero los empleados desde Factorial.
+                </div>
+                @endif
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button wire:click="$set('showPushModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    Cancelar
+                </button>
+                @if($pushCount > 0)
+                <button wire:click="confirmPush" class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700">
+                    Confirmar envío
+                </button>
+                @endif
             </div>
         </div>
     </div>

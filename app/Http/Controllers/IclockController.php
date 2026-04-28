@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Jobs\SyncAttendanceToFactorial;
 use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
+use App\Models\DeviceCommand;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -13,20 +15,50 @@ class IclockController extends Controller
 {
     public function ping(Request $request): Response
     {
-        Log::info('ZKTeco PING', [
-            'query' => $request->query(),
-        ]);
+        $sn = $request->query('SN');
+
+        Log::info('ZKTeco PING', ['query' => $request->query()]);
+
+        if ($sn) {
+            BiometricSource::updateOrCreate(
+                ['serial_number' => $sn],
+                ['last_ping_at' => now(), 'vendor' => 'ZKTeco']
+            );
+        }
 
         return $this->plainResponse('OK');
     }
 
     public function getRequest(Request $request): Response
     {
-        Log::info('ZKTeco GETREQUEST', [
-            'query' => $request->query(),
-        ]);
+        $sn = $request->query('SN');
 
-        return $this->plainResponse('OK');
+        Log::info('ZKTeco GETREQUEST', ['query' => $request->query()]);
+
+        if (!$sn) {
+            return $this->plainResponse('OK');
+        }
+
+        $source = BiometricSource::where('serial_number', $sn)->first();
+
+        if (!$source) {
+            return $this->plainResponse('OK');
+        }
+
+        $command = DeviceCommand::where('biometric_source_id', $source->id)
+            ->where('status', 'pending')
+            ->orderBy('command_seq')
+            ->first();
+
+        if (!$command) {
+            return $this->plainResponse('OK');
+        }
+
+        $command->update(['status' => 'sent', 'sent_at' => now()]);
+
+        $line = "C:{$command->command_seq}:{$command->payload}";
+
+        return $this->plainResponse($line);
     }
 
     public function cdata(Request $request)
@@ -78,11 +110,40 @@ class IclockController extends Controller
 
     public function devicecmd(Request $request): Response
     {
+        $sn   = $request->query('SN');
+        $body = $request->getContent();
+
         Log::info('ZKTeco DEVICECMD RESULT', [
             'method' => $request->method(),
             'query'  => $request->query(),
-            'body'   => $request->getContent(),
+            'body'   => $body,
         ]);
+
+        // Formato de respuesta: ID=123\nReturn=0\nCMD=DATA UPDATE USERINFO...
+        if ($sn) {
+            $source = BiometricSource::where('serial_number', $sn)->first();
+
+            if ($source) {
+                // Extraer el ID del comando de la respuesta del equipo
+                preg_match('/ID=(\d+)/i', $body, $matches);
+                $commandSeq = isset($matches[1]) ? (int) $matches[1] : null;
+
+                if ($commandSeq !== null) {
+                    preg_match('/Return=(-?\d+)/i', $body, $retMatches);
+                    $returnCode = isset($retMatches[1]) ? (int) $retMatches[1] : null;
+                    $status     = ($returnCode === 0) ? 'acknowledged' : 'failed';
+
+                    DeviceCommand::where('biometric_source_id', $source->id)
+                        ->where('command_seq', $commandSeq)
+                        ->where('status', 'sent')
+                        ->update([
+                            'status'           => $status,
+                            'acknowledged_at'  => now(),
+                            'device_response'  => mb_substr($body, 0, 1000),
+                        ]);
+                }
+            }
+        }
 
         return $this->plainResponse('OK');
     }
@@ -96,7 +157,7 @@ class IclockController extends Controller
             ->first();
 
         if (!$source) {
-            Log::warning('ZKTeco ATTLOG: dispositivo no registrado', ['sn' => $sn]);
+            Log::warning('ZKTeco ATTLOG: dispositivo no registrado o inactivo', ['sn' => $sn]);
             $this->plainResponse('OK: 0');
         }
 
@@ -152,7 +213,6 @@ class IclockController extends Controller
         if (!empty($records)) {
             AttendanceLog::insert($records);
 
-            // Disparar job por cada registro insertado
             $inserted = AttendanceLog::where('biometric_source_id', $source->id)
                 ->where('sync_status', 'pending')
                 ->whereIn('occurred_at', array_column($records, 'occurred_at'))
@@ -163,10 +223,7 @@ class IclockController extends Controller
             }
         }
 
-        Log::info('ZKTeco ATTLOG procesado', [
-            'sn'    => $sn,
-            'count' => count($records),
-        ]);
+        Log::info('ZKTeco ATTLOG procesado', ['sn' => $sn, 'count' => count($records)]);
 
         $this->plainResponse('OK: ' . count($records));
     }

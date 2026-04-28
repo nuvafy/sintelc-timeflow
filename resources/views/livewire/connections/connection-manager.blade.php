@@ -56,16 +56,26 @@ new class extends Component {
 
     public function save(): void
     {
-        $data = $this->validate();
+        try {
+            $data = $this->validate();
 
-        if ($this->editing) {
-            FactorialConnection::findOrFail($this->editingId)->update($data);
-        } else {
-            FactorialConnection::create($data);
+            if ($this->editing) {
+                FactorialConnection::findOrFail($this->editingId)->update($data);
+            } else {
+                FactorialConnection::create($data);
+            }
+
+            $this->showModal = false;
+            $this->resetForm();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('ConnectionManager save error', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            throw $e;
         }
-
-        $this->showModal = false;
-        $this->resetForm();
     }
 
     public function delete(int $id): void

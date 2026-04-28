@@ -109,7 +109,9 @@ new class extends Component {
         </table>
     </div>
 
+    @if($logs->hasPages())
     <div class="px-6 py-4 border-t border-gray-200">
         {{ $logs->links() }}
     </div>
+    @endif
 </div>

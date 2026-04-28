@@ -7,10 +7,11 @@ use Livewire\Volt\Component;
 new class extends Component {
     public function with(): array
     {
-        $devices = BiometricSource::withCount([
-            'attendanceLogs as today_count' => fn($q) => $q->whereDate('occurred_at', today()),
-            'attendanceLogs as total_count',
-        ])->get();
+        $devices = BiometricSource::with(['client', 'location'])
+            ->withCount([
+                'attendanceLogs as today_count' => fn($q) => $q->whereDate('occurred_at', today()),
+                'attendanceLogs as total_count',
+            ])->get();
 
         return ['devices' => $devices];
     }
@@ -30,8 +31,9 @@ new class extends Component {
                     <span class="h-3 w-3 rounded-full inline-block {{ $isActive ? 'bg-green-400' : 'bg-gray-300' }}"></span>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-900">{{ $device->name }}</p>
-                    <p class="text-xs text-gray-500">SN: {{ $device->serial_number }} &middot; {{ $device->site_name }}</p>
+                    <p class="text-sm font-medium text-gray-900">{{ $device->name ?? $device->serial_number }}</p>
+                    <p class="text-xs text-gray-500">{{ $device->client?->name ?? 'Sin empresa' }} &middot; {{ $device->location?->name ?? 'Sin ubicación' }}</p>
+                    <p class="text-xs text-gray-400 font-mono">SN: {{ $device->serial_number }}</p>
                 </div>
             </div>
             <div class="text-right">

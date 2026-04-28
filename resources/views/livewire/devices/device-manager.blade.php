@@ -130,6 +130,7 @@ new class extends Component {
     public function saveAssign(): void
     {
         $this->validate([
+            'assign_name'      => 'required|string|max:255',
             'assign_client_id' => 'required|exists:clients,id',
         ]);
 
@@ -149,7 +150,7 @@ new class extends Component {
         );
 
         $source->update([
-            'name'                  => $source->serial_number,
+            'name'                  => $this->assign_name,
             'client_id'             => $client->id,
             'biometric_provider_id' => $provider->id,
             'status'                => 'active',
@@ -450,16 +451,23 @@ new class extends Component {
                 </button>
             </div>
 
-            <div class="px-6 py-5">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
-                <select wire:model="assign_client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <option value="">Seleccionar empresa...</option>
-                    @foreach($clients as $client)
-                        <option value="{{ $client->id }}">{{ $client->name }}</option>
-                    @endforeach
-                </select>
-                @error('assign_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                <p class="mt-2 text-xs text-gray-400">El proveedor biométrico se crea automáticamente si no existe.</p>
+            <div class="px-6 py-5 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del dispositivo</label>
+                    <input wire:model="assign_name" type="text" placeholder="Ej: Entrada principal, Comedor..." class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('assign_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
+                    <select wire:model="assign_client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Seleccionar empresa...</option>
+                        @foreach($clients as $client)
+                            <option value="{{ $client->id }}">{{ $client->name }}</option>
+                        @endforeach
+                    </select>
+                    @error('assign_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <p class="text-xs text-gray-400">El proveedor biométrico se crea automáticamente si no existe.</p>
             </div>
 
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">

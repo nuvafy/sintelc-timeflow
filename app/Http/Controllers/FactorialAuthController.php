@@ -33,6 +33,8 @@ class FactorialAuthController extends Controller
 
     public function callback(Request $request)
     {
+        Log::info('Factorial OAuth callback', ['all' => $request->all(), 'query' => $request->query()]);
+
         if ($request->filled('error')) {
             return response()->json([
                 'ok' => false,

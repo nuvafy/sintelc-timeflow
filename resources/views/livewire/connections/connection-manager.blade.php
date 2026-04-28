@@ -1,7 +1,12 @@
 <?php
 
 use App\Models\FactorialConnection;
+use App\Models\FactorialEmployee;
+use App\Models\FactorialLocation;
 use App\Models\Client;
+use App\Services\FactorialService;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -81,6 +86,74 @@ new class extends Component {
     public function delete(int $id): void
     {
         FactorialConnection::findOrFail($id)->delete();
+    }
+
+    public function sync(int $id): void
+    {
+        $connection = FactorialConnection::findOrFail($id);
+
+        if (empty($connection->access_token)) {
+            return;
+        }
+
+        try {
+            $service = new FactorialService($connection);
+
+            // Sync employees
+            $response  = $service->getEmployees();
+            $employees = $response['data'] ?? [];
+
+            foreach ($employees as $employee) {
+                if (empty($employee['id'])) continue;
+
+                FactorialEmployee::updateOrCreate(
+                    ['factorial_connection_id' => $connection->id, 'factorial_id' => (int) $employee['id']],
+                    [
+                        'client_id'              => $connection->client_id,
+                        'access_id'              => isset($employee['access_id']) ? (int) $employee['access_id'] : null,
+                        'first_name'             => $employee['first_name'] ?? null,
+                        'last_name'              => $employee['last_name'] ?? null,
+                        'full_name'              => $employee['full_name'] ?? null,
+                        'email'                  => $employee['email'] ?? null,
+                        'login_email'            => $employee['login_email'] ?? null,
+                        'company_id'             => isset($employee['company_id']) ? (int) $employee['company_id'] : null,
+                        'company_identifier'     => $employee['company_identifier'] ?? null,
+                        'location_id'            => isset($employee['location_id']) ? (int) $employee['location_id'] : null,
+                        'active'                 => (bool) ($employee['active'] ?? false),
+                        'attendable'             => (bool) ($employee['attendable'] ?? false),
+                        'is_terminating'         => (bool) ($employee['is_terminating'] ?? false),
+                        'terminated_on'          => isset($employee['terminated_on']) ? Carbon::parse($employee['terminated_on']) : null,
+                        'factorial_created_at'   => isset($employee['created_at']) ? Carbon::parse($employee['created_at']) : null,
+                        'factorial_updated_at'   => isset($employee['updated_at']) ? Carbon::parse($employee['updated_at']) : null,
+                        'raw_payload'            => $employee,
+                    ]
+                );
+            }
+
+            // Sync locations
+            $locResponse = $service->getLocations();
+            $locations   = $locResponse['data'] ?? $locResponse;
+
+            if (is_array($locations)) {
+                foreach ($locations as $location) {
+                    if (empty($location['id'])) continue;
+
+                    FactorialLocation::updateOrCreate(
+                        ['factorial_connection_id' => $connection->id, 'factorial_location_id' => (int) $location['id']],
+                        [
+                            'client_id'            => $connection->client_id,
+                            'factorial_company_id' => isset($location['company_id']) ? (int) $location['company_id'] : null,
+                            'name'                 => $location['name'] ?? "Ubicación {$location['id']}",
+                        ]
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('Error al sincronizar conexión Factorial', [
+                'connection_id' => $id,
+                'message'       => $e->getMessage(),
+            ]);
+        }
     }
 
     public function resendEmail(int $id): void
@@ -183,6 +256,19 @@ new class extends Component {
                     {{ $conn->access_token ? 'Reconectar' : 'Conectar' }}
                 </a>
                 <div class="flex gap-3 items-center">
+                    @if($conn->access_token)
+                    <button wire:click="sync({{ $conn->id }})" wire:loading.attr="disabled" wire:target="sync({{ $conn->id }})"
+                        class="inline-flex items-center text-xs font-medium text-emerald-700 hover:text-emerald-900 disabled:opacity-50">
+                        <svg wire:loading wire:target="sync({{ $conn->id }})" class="animate-spin w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        <svg wire:loading.remove wire:target="sync({{ $conn->id }})" class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Sincronizar
+                    </button>
+                    @endif
                     <button wire:click="openEdit({{ $conn->id }})" class="text-sm text-indigo-600 hover:text-indigo-900">Editar</button>
                     <button wire:click="delete({{ $conn->id }})" wire:confirm="¿Eliminar esta conexión?" class="text-sm text-red-600 hover:text-red-900">Eliminar</button>
                 </div>
@@ -209,26 +295,6 @@ new class extends Component {
             </div>
 
             <div class="px-6 py-4 space-y-4">
-
-                {{-- URL generada tras crear --}}
-                @if($oauthUrl)
-                <div class="bg-emerald-50 border border-emerald-200 rounded-md p-4">
-                    <p class="text-sm font-medium text-emerald-800 mb-2">✓ Conexión creada. Comparte este enlace con el cliente:</p>
-                    <div class="flex gap-2">
-                        <input type="text" readonly value="{{ $oauthUrl }}"
-                            class="flex-1 text-xs font-mono bg-white border border-emerald-300 rounded px-3 py-2 text-gray-700 focus:outline-none"
-                            onclick="this.select()"
-                        />
-                        <button
-                            onclick="navigator.clipboard.writeText('{{ $oauthUrl }}').then(() => this.textContent = '✓').catch(() => {}); return false;"
-                            class="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition whitespace-nowrap">
-                            Copiar
-                        </button>
-                    </div>
-                    <p class="text-xs text-emerald-700 mt-2">El cliente hace clic, inicia sesión en Factorial y queda conectado automáticamente.</p>
-                </div>
-                @endif
-
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Nombre de la conexión</label>
                     <input wire:model="name" type="text" placeholder="Ej: Prosys" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
@@ -278,9 +344,30 @@ new class extends Component {
                 @endif
             </div>
 
+            {{-- URL generada tras crear --}}
+            @if($oauthUrl)
+            <div class="px-6 pb-4">
+                <div class="bg-emerald-50 border border-emerald-200 rounded-md p-4">
+                    <p class="text-sm font-medium text-emerald-800 mb-2">Conexión creada. Comparte este enlace con el cliente:</p>
+                    <div class="flex gap-2">
+                        <input type="text" readonly value="{{ $oauthUrl }}"
+                            class="flex-1 text-xs font-mono bg-white border border-emerald-300 rounded px-3 py-2 text-gray-700 focus:outline-none"
+                            onclick="this.select()"
+                        />
+                        <button
+                            onclick="navigator.clipboard.writeText('{{ $oauthUrl }}').then(() => this.textContent = '✓').catch(() => {}); return false;"
+                            class="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition whitespace-nowrap">
+                            Copiar
+                        </button>
+                    </div>
+                    <p class="text-xs text-emerald-700 mt-2">El cliente hace clic, inicia sesión en Factorial y queda conectado automáticamente.</p>
+                </div>
+            </div>
+            @endif
+
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-                <button wire:click="$set('showModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                    Cancelar
+                <button wire:click="$set('showModal', false); $set('oauthUrl', null)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    {{ $oauthUrl ? 'Cerrar' : 'Cancelar' }}
                 </button>
                 @if(!$oauthUrl)
                 <button wire:click="save" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">

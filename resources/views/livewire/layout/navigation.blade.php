@@ -42,6 +42,9 @@ new class extends Component
                     <x-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
                         Empleados
                     </x-nav-link>
+                    <x-nav-link :href="route('clients')" :active="request()->routeIs('clients')" wire:navigate>
+                        Empresas
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -101,6 +104,9 @@ new class extends Component
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
                 Empleados
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('clients')" :active="request()->routeIs('clients')" wire:navigate>
+                Empresas
             </x-responsive-nav-link>
         </div>
 

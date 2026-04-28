@@ -22,6 +22,10 @@ Route::view('connections', 'connections')
     ->middleware(['auth'])
     ->name('connections');
 
+Route::view('clients', 'clients')
+    ->middleware(['auth'])
+    ->name('clients');
+
 Route::view('employees', 'employees')
     ->middleware(['auth'])
     ->name('employees');

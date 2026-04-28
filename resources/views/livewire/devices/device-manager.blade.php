@@ -4,6 +4,7 @@ use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\Client;
 use App\Models\DeviceCommand;
+use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
@@ -135,10 +136,26 @@ new class extends Component {
             'assign_location_id' => 'nullable|exists:factorial_locations,id',
         ]);
 
+        // Auto-crear proveedor biométrico para el cliente si no existe
+        $providerId = $this->assign_provider_id;
+        if (!$providerId && $this->assign_client_id) {
+            $connection = FactorialConnection::where('client_id', $this->assign_client_id)->first();
+            $provider   = BiometricProvider::firstOrCreate(
+                ['client_id' => $this->assign_client_id],
+                [
+                    'factorial_connection_id' => $connection?->id,
+                    'vendor'                  => 'zkteco',
+                    'name'                    => 'ZKTeco ' . (Client::find($this->assign_client_id)?->name ?? ''),
+                    'status'                  => 'active',
+                ]
+            );
+            $providerId = $provider->id;
+        }
+
         BiometricSource::findOrFail($this->assigningSourceId)->update([
             'name'                  => $this->assign_name,
             'client_id'             => $this->assign_client_id,
-            'biometric_provider_id' => $this->assign_provider_id,
+            'biometric_provider_id' => $providerId,
             'factorial_location_id' => $this->assign_location_id,
             'status'                => 'active',
         ]);

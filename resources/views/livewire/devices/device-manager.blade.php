@@ -251,7 +251,12 @@ new class extends Component {
             <tbody class="bg-white divide-y divide-amber-100">
                 @foreach($unassigned as $device)
                 <tr class="hover:bg-amber-50">
-                    <td class="px-6 py-3 text-sm font-mono text-gray-800">{{ $device->serial_number ?? '—' }}</td>
+                    <td class="px-6 py-3 text-sm font-mono text-gray-800">
+                        <span>{{ $device->serial_number ?? '—' }}</span>
+                        @if($device->name)
+                        <span class="ml-2 text-xs text-gray-400">({{ $device->name }})</span>
+                        @endif
+                    </td>
                     <td class="px-6 py-3 text-sm text-gray-500">
                         {{ $device->last_ping_at?->diffForHumans() ?? 'Nunca' }}
                     </td>

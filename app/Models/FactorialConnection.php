@@ -12,6 +12,7 @@ class FactorialConnection extends Model
         'client_id',
         'factorial_company_id',
         'name',
+        'contact_email',
         'oauth_client_id',
         'oauth_client_secret',
         'access_token',

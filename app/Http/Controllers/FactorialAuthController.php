@@ -86,26 +86,45 @@ class FactorialAuthController extends Controller
 
         $data = $response->json();
 
-        // 🔥 AQUÍ GUARDAMOS TODO
         $connection->update([
-            'access_token' => $data['access_token'] ?? null,
+            'access_token'  => $data['access_token'] ?? null,
             'refresh_token' => $data['refresh_token'] ?? null,
-            'token_type' => $data['token_type'] ?? null,
-            'expires_in' => $data['expires_in'] ?? null,
-            'expires_at' => isset($data['expires_in'])
+            'token_type'    => $data['token_type'] ?? null,
+            'expires_in'    => $data['expires_in'] ?? null,
+            'expires_at'    => isset($data['expires_in'])
                 ? Carbon::now()->addSeconds((int) $data['expires_in'])
                 : null,
-            'raw_response' => $data,
+            'raw_response'  => $data,
         ]);
 
-        $connection->client->update([
-            'status' => 'active',
-        ]);
+        // Obtener company_id de Factorial
+        try {
+            $service  = new \App\Services\FactorialService($connection->fresh());
+            $me       = $service->getMe();
+            $companyId = $me['data']['current_company_id']
+                ?? $me['current_company_id']
+                ?? $me['data']['company_id']
+                ?? $me['company_id']
+                ?? null;
+
+            if ($companyId) {
+                $connection->update(['factorial_company_id' => $companyId]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo obtener company_id de Factorial', [
+                'connection_id' => $connection->id,
+                'error'         => $e->getMessage(),
+            ]);
+        }
+
+        if ($connection->client_id) {
+            $connection->client->update(['status' => 'active']);
+        }
 
         return response()->json([
-            'ok' => true,
-            'message' => 'Token guardado correctamente',
-            'client' => $connection->client->slug,
+            'ok'      => true,
+            'message' => 'Conexión autorizada correctamente. Ya puedes cerrar esta ventana.',
+            'connection_id' => $connection->id,
         ]);
     }
 }

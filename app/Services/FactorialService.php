@@ -48,6 +48,11 @@ class FactorialService
         return $response->throw();
     }
 
+    public function getMe(): array
+    {
+        return $this->request('get', '/api/2026-04-01/resources/core/me')->json();
+    }
+
     public function getEmployees(array $query = []): array
     {
         $defaultQuery = [

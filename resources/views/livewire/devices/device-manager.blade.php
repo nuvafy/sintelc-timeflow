@@ -317,9 +317,11 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
+        @if($devices->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $devices->links() }}
         </div>
+        @endif
     </div>
 
     {{-- ── Modal: Crear / Editar dispositivo ────────────────────────── --}}

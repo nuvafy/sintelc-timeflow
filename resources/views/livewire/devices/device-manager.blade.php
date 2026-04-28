@@ -41,11 +41,11 @@ new class extends Component {
     public function rules(): array
     {
         return [
-            'name'                  => 'required|string|max:255',
+            'name'                  => 'nullable|string|max:255',
             'serial_number'         => 'required|string|max:255',
             'site_name'             => 'nullable|string|max:255',
             'status'                => 'required|in:active,inactive',
-            'client_id'             => 'required|exists:clients,id',
+            'client_id'             => 'nullable|exists:clients,id',
             'biometric_provider_id' => 'nullable|exists:biometric_providers,id',
             'factorial_location_id' => 'nullable|exists:factorial_locations,id',
         ];
@@ -130,33 +130,28 @@ new class extends Component {
     public function saveAssign(): void
     {
         $this->validate([
-            'assign_name'       => 'required|string|max:255',
-            'assign_client_id'  => 'required|exists:clients,id',
-            'assign_provider_id' => 'nullable|exists:biometric_providers,id',
-            'assign_location_id' => 'nullable|exists:factorial_locations,id',
+            'assign_client_id' => 'required|exists:clients,id',
         ]);
 
-        // Auto-crear proveedor biométrico para el cliente si no existe
-        $providerId = $this->assign_provider_id;
-        if (!$providerId && $this->assign_client_id) {
-            $connection = FactorialConnection::where('client_id', $this->assign_client_id)->first();
-            $provider   = BiometricProvider::firstOrCreate(
-                ['client_id' => $this->assign_client_id],
-                [
-                    'factorial_connection_id' => $connection?->id,
-                    'vendor'                  => 'zkteco',
-                    'name'                    => 'ZKTeco ' . (Client::find($this->assign_client_id)?->name ?? ''),
-                    'status'                  => 'active',
-                ]
-            );
-            $providerId = $provider->id;
-        }
+        $client = Client::findOrFail($this->assign_client_id);
+        $source = BiometricSource::findOrFail($this->assigningSourceId);
 
-        BiometricSource::findOrFail($this->assigningSourceId)->update([
-            'name'                  => $this->assign_name,
-            'client_id'             => $this->assign_client_id,
-            'biometric_provider_id' => $providerId,
-            'factorial_location_id' => $this->assign_location_id,
+        // Auto-crear proveedor biométrico si no existe para este cliente
+        $connection = FactorialConnection::where('client_id', $client->id)->first();
+        $provider   = BiometricProvider::firstOrCreate(
+            ['client_id' => $client->id],
+            [
+                'factorial_connection_id' => $connection?->id,
+                'vendor'                  => 'zkteco',
+                'name'                    => 'ZKTeco ' . $client->name,
+                'status'                  => 'active',
+            ]
+        );
+
+        $source->update([
+            'name'                  => $source->serial_number,
+            'client_id'             => $client->id,
+            'biometric_provider_id' => $provider->id,
             'status'                => 'active',
         ]);
 
@@ -380,9 +375,11 @@ new class extends Component {
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Cliente</label>
+                        <label class="block text-sm font-medium text-gray-700">
+                            Cliente <span class="text-gray-400 font-normal">(opcional)</span>
+                        </label>
                         <select wire:model="client_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            <option value="">Seleccionar...</option>
+                            <option value="">Sin asignar</option>
                             @foreach($clients as $client)
                                 <option value="{{ $client->id }}">{{ $client->name }}</option>
                             @endforeach
@@ -398,6 +395,11 @@ new class extends Component {
                         </select>
                     </div>
                 </div>
+                @if(!$editing && !$client_id)
+                <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    Sin cliente asignado, el equipo aparecerá en el panel de dispositivos detectados para asignarlo después.
+                </p>
+                @endif
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Proveedor biométrico</label>
@@ -434,10 +436,16 @@ new class extends Component {
 
     {{-- ── Modal: Asignar equipo descubierto ────────────────────────── --}}
     @if($showAssignModal)
+    @php $assigningSource = $assigningSourceId ? \App\Models\BiometricSource::find($assigningSourceId) : null; @endphp
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 class="text-lg font-medium text-gray-900">Asignar dispositivo a empresa</h3>
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Asignar equipo a empresa</h3>
+                    @if($assigningSource)
+                    <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $assigningSource->serial_number }}</p>
+                    @endif
+                </div>
                 <button wire:click="$set('showAssignModal', false)" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -445,46 +453,19 @@ new class extends Component {
                 </button>
             </div>
 
-            <div class="px-6 py-4 space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Nombre del dispositivo</label>
-                    <input wire:model="assign_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('assign_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Empresa</label>
-                    <select wire:model="assign_client_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Seleccionar...</option>
-                        @foreach($clients as $client)
-                            <option value="{{ $client->id }}">{{ $client->name }}</option>
-                        @endforeach
-                    </select>
-                    @error('assign_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Proveedor biométrico</label>
-                    <select wire:model="assign_provider_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Sin asignar</option>
-                        @foreach($providers as $provider)
-                            <option value="{{ $provider->id }}">{{ $provider->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Ubicación Factorial</label>
-                    <select wire:model="assign_location_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Sin asignar</option>
-                        @foreach($locations as $location)
-                            <option value="{{ $location->id }}">{{ $location->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
+            <div class="px-6 py-5">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
+                <select wire:model="assign_client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Seleccionar empresa...</option>
+                    @foreach($clients as $client)
+                        <option value="{{ $client->id }}">{{ $client->name }}</option>
+                    @endforeach
+                </select>
+                @error('assign_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                <p class="mt-2 text-xs text-gray-400">El proveedor biométrico se crea automáticamente si no existe.</p>
             </div>
 
-            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button wire:click="$set('showAssignModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cancelar
                 </button>

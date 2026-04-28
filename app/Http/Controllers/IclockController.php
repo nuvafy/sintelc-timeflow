@@ -39,9 +39,12 @@ class IclockController extends Controller
             return $this->plainResponse('OK');
         }
 
-        $source = BiometricSource::where('serial_number', $sn)->first();
+        $source = BiometricSource::updateOrCreate(
+            ['serial_number' => $sn],
+            ['last_ping_at' => now(), 'vendor' => 'ZKTeco']
+        );
 
-        if (!$source) {
+        if (!$source->client_id) {
             return $this->plainResponse('OK');
         }
 

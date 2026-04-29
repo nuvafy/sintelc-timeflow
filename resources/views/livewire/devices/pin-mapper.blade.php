@@ -84,33 +84,6 @@ new class extends Component {
         return $bestScore >= 50 ? $best : null;
     }
 
-    protected function excelFallback(): array
-    {
-        return [
-            ['pin' => '2',  'name' => 'Humberto Daniel Fernandez'],
-            ['pin' => '3',  'name' => 'Estefanía Rivera'],
-            ['pin' => '5',  'name' => 'Fernando Hernandez Roldan'],
-            ['pin' => '7',  'name' => 'Karla V. Alvarez Vázquez'],
-            ['pin' => '8',  'name' => 'Luis Alberto Gonzalez Perez'],
-            ['pin' => '9',  'name' => 'Gustavo Uriel Rivera Sánchez'],
-            ['pin' => '10', 'name' => 'Ivan Torres Guarneros'],
-            ['pin' => '11', 'name' => 'Jair Maldonado Perez'],
-            ['pin' => '12', 'name' => 'Kenny Arth Luevanos Uribe'],
-            ['pin' => '13', 'name' => 'Lucero Asiri Silva Chavez'],
-            ['pin' => '14', 'name' => 'Sofia Ortiz Garcia'],
-            ['pin' => '15', 'name' => 'Jesús Alejandro Ibarra Martínez'],
-            ['pin' => '34', 'name' => 'Luis Gustavo De Jesus Reyes'],
-            ['pin' => '35', 'name' => 'Ana Paulina Suarez Mata'],
-            ['pin' => '36', 'name' => 'Maria de los Ángeles Becerra'],
-            ['pin' => '38', 'name' => 'Cristian Javier Villa Diaz'],
-            ['pin' => '39', 'name' => 'Peter Behnsen'],
-            ['pin' => '40', 'name' => 'Pedro Daniel Cerdeira Goncalves'],
-            ['pin' => '41', 'name' => 'Felipe Caldeira Da Costa'],
-            ['pin' => '42', 'name' => 'Andrea M Juarez Contreras'],
-            ['pin' => '45', 'name' => 'Mario Chávez Calderon'],
-        ];
-    }
-
     public function with(): array
     {
         $source = BiometricSource::findOrFail($this->sourceId);

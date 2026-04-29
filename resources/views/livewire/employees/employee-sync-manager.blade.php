@@ -27,8 +27,15 @@ new class extends Component {
 
     public function with(): array
     {
+        if (!$this->client_id) {
+            return [
+                'employees' => collect(),
+                'clients'   => Client::orderBy('name')->get(),
+            ];
+        }
+
         $query = FactorialEmployee::with(['biometricUserSyncs'])
-            ->when($this->client_id, fn($q) => $q->where('client_id', $this->client_id))
+            ->where('client_id', $this->client_id)
             ->when($this->search, fn($q) => $q->where(function ($q2) {
                 $q2->where('full_name', 'like', "%{$this->search}%")
                    ->orWhere('email', 'like', "%{$this->search}%")
@@ -102,7 +109,7 @@ new class extends Component {
         </div>
         <div class="sm:w-56">
             <select wire:model.live="client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="">Todas las empresas</option>
+                <option value="">— Selecciona una empresa —</option>
                 @foreach($clients as $client)
                     <option value="{{ $client->id }}">{{ $client->name }}</option>
                 @endforeach
@@ -120,7 +127,6 @@ new class extends Component {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Factorial</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sync biométrico</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -166,25 +172,26 @@ new class extends Component {
                             {{ $syncLabel[1] }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        @if($employee->access_id)
-                            <button wire:click="syncEmployee({{ $employee->id }})"
-                                class="text-indigo-600 hover:text-indigo-900 font-medium">
-                                Enviar al biométrico
-                            </button>
-                        @else
-                            <span class="text-gray-400 text-xs">Requiere PIN</span>
-                        @endif
-                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-500">No se encontraron empleados.</td>
+                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                        @if(!$this->client_id)
+                            <div class="flex flex-col items-center gap-2 text-gray-400">
+                                <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                <p class="text-sm font-medium text-gray-500">Selecciona una empresa para ver sus empleados</p>
+                            </div>
+                        @else
+                            No se encontraron empleados.
+                        @endif
+                    </td>
                 </tr>
                 @endforelse
             </tbody>
         </table>
-        @if($employees->hasPages())
+        @if($client_id && $employees instanceof \Illuminate\Pagination\LengthAwarePaginator && $employees->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $employees->links() }}
         </div>

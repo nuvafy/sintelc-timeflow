@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FactorialConnection;
+use App\Services\FactorialService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -113,6 +114,38 @@ class FactorialAuthController extends Controller
             }
         } catch (\Throwable $e) {
             Log::warning('No se pudo extraer company_id del JWT', [
+                'connection_id' => $connection->id,
+                'error'         => $e->getMessage(),
+            ]);
+        }
+
+        // Obtener nombre y email de la empresa desde Factorial
+        try {
+            $service = new FactorialService($connection);
+            $company = $service->getCompany();
+
+            $updates = [];
+
+            if (!empty($company['legal_name'])) {
+                $updates['name'] = $company['legal_name'];
+            } elseif (!empty($company['name'])) {
+                $updates['name'] = $company['name'];
+            }
+
+            if (!empty($company['email']) && empty($connection->contact_email)) {
+                $updates['contact_email'] = $company['email'];
+            }
+
+            if (!empty($updates)) {
+                $connection->update($updates);
+            }
+
+            Log::info('Factorial company info fetched', [
+                'connection_id' => $connection->id,
+                'company'       => $company,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo obtener info de empresa Factorial', [
                 'connection_id' => $connection->id,
                 'error'         => $e->getMessage(),
             ]);

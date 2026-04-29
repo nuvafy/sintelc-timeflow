@@ -283,7 +283,6 @@ new class extends Component {
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
@@ -297,9 +296,9 @@ new class extends Component {
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
-                        <div class="text-xs text-gray-500">{{ $device->vendor }}</div>
+                        <div class="text-xs text-gray-400">{{ $device->vendor }}</div>
+                        <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{{ $device->serial_number }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->client?->name ?? '—' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->location?->name ?? $device->site_name ?? '—' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
@@ -312,24 +311,43 @@ new class extends Component {
                             {{ $device->status === 'active' ? 'Activo' : 'Inactivo' }}
                         </button>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                        <a href="{{ route('pin-mapping', ['source' => $device->id]) }}"
-                            class="text-purple-600 hover:text-purple-900 text-sm">Mapear PINs</a>
-                        <button wire:click="openPush({{ $device->id }})"
-                            title="Enviar usuarios de Factorial al dispositivo"
-                            class="text-emerald-600 hover:text-emerald-900">
-                            <svg class="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                            </svg>
-                            Enviar usuarios
-                        </button>
-                        <button wire:click="openEdit({{ $device->id }})" class="text-indigo-600 hover:text-indigo-900">Editar</button>
-                        <button wire:click="delete({{ $device->id }})" wire:confirm="¿Eliminar este dispositivo?" class="text-red-600 hover:text-red-900">Eliminar</button>
+                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                        <div class="flex items-center justify-end gap-3">
+                            {{-- Mapear PINs --}}
+                            <a href="{{ route('pin-mapping', ['source' => $device->id]) }}"
+                                title="Mapear PINs"
+                                class="text-purple-500 hover:text-purple-700">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+                                </svg>
+                            </a>
+                            {{-- Enviar usuarios --}}
+                            <button wire:click="openPush({{ $device->id }})" title="Enviar usuarios de Factorial al dispositivo"
+                                class="text-emerald-500 hover:text-emerald-700">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                                </svg>
+                            </button>
+                            {{-- Editar --}}
+                            <button wire:click="openEdit({{ $device->id }})" title="Editar"
+                                class="text-indigo-500 hover:text-indigo-700">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            {{-- Eliminar --}}
+                            <button wire:click="delete({{ $device->id }})" wire:confirm="¿Eliminar este dispositivo?" title="Eliminar"
+                                class="text-red-400 hover:text-red-600">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" class="px-6 py-10 text-center text-sm text-gray-500">No hay dispositivos registrados.</td>
+                    <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500">No hay dispositivos registrados.</td>
                 </tr>
                 @endforelse
             </tbody>

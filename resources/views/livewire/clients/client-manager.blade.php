@@ -2,7 +2,9 @@
 
 use App\Models\Client;
 use App\Models\BiometricProvider;
+use App\Models\BiometricSource;
 use App\Models\FactorialConnection;
+use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
 use Illuminate\Support\Str;
 
@@ -23,12 +25,17 @@ new class extends Component {
     public string $provider_vendor  = 'zkteco';
     public ?int $provider_conn_id   = null;
 
+    // ── Locaciones ─────────────────────────────────────────────────
+    public ?int $expandedLocationsClient = null;   // card con sección expandida
+    public array $deviceLocationMap      = [];     // [source_id => location_id]
+
     public function with(): array
     {
         $clients = Client::with([
             'factorialConnections',
             'biometricProviders.connection',
-            'biometricSources',
+            'biometricSources.location',
+            'factorialLocations',
         ])
         ->withCount(['biometricSources', 'factorialConnections'])
         ->orderBy('name')
@@ -135,6 +142,34 @@ new class extends Component {
         BiometricProvider::findOrFail($id)->delete();
     }
 
+    // ── Locaciones ─────────────────────────────────────────────────
+
+    public function toggleLocations(int $clientId): void
+    {
+        if ($this->expandedLocationsClient === $clientId) {
+            $this->expandedLocationsClient = null;
+            $this->deviceLocationMap       = [];
+        } else {
+            $this->expandedLocationsClient = $clientId;
+            // Pre-cargar asignaciones actuales de dispositivos
+            $sources = BiometricSource::where('client_id', $clientId)->get();
+            $this->deviceLocationMap = $sources->pluck('factorial_location_id', 'id')
+                ->map(fn($v) => (string) ($v ?? ''))
+                ->toArray();
+        }
+    }
+
+    public function saveDeviceLocations(): void
+    {
+        foreach ($this->deviceLocationMap as $sourceId => $locationId) {
+            BiometricSource::where('id', $sourceId)->update([
+                'factorial_location_id' => $locationId ?: null,
+            ]);
+        }
+        $this->expandedLocationsClient = null;
+        $this->deviceLocationMap       = [];
+    }
+
     private function resetClientForm(): void
     {
         $this->editingId = null;
@@ -160,7 +195,7 @@ new class extends Component {
     {{-- Cards --}}
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         @forelse($clients as $client)
-        <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">
             {{-- Card header --}}
             <div class="px-5 py-4 flex items-center justify-between border-b border-gray-100">
                 <div class="min-w-0 flex-1">
@@ -173,7 +208,7 @@ new class extends Component {
             </div>
 
             {{-- Body --}}
-            <div class="px-5 py-4 space-y-4">
+            <div class="px-5 py-4 space-y-4 flex-1">
 
                 {{-- Conexión Factorial --}}
                 <div>
@@ -222,6 +257,96 @@ new class extends Component {
                     @endforelse
                 </div>
 
+                {{-- Locaciones --}}
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Locaciones</p>
+                        <button wire:click="toggleLocations({{ $client->id }})"
+                            class="inline-flex items-center text-xs font-medium {{ $expandedLocationsClient === $client->id ? 'text-gray-500 hover:text-gray-700' : 'text-indigo-600 hover:text-indigo-800' }}">
+                            @if($expandedLocationsClient === $client->id)
+                                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                                Cerrar
+                            @else
+                                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                Gestionar
+                            @endif
+                        </button>
+                    </div>
+
+                    @if($expandedLocationsClient === $client->id)
+                    <div class="mt-2 space-y-3 border border-gray-100 rounded-md p-3 bg-gray-50">
+
+                        @if($client->factorialLocations->isEmpty())
+                            <p class="text-xs text-gray-400 italic text-center py-2">
+                                Sin locaciones sincronizadas. Sincroniza la conexión Factorial primero.
+                            </p>
+                        @else
+                            {{-- Lista de locaciones disponibles --}}
+                            <div class="space-y-1">
+                                <p class="text-xs text-gray-500 font-medium mb-1">Locaciones disponibles</p>
+                                @foreach($client->factorialLocations as $loc)
+                                <div class="flex items-center gap-2 text-xs text-gray-600">
+                                    <svg class="w-3 h-3 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                                    </svg>
+                                    {{ $loc->name }}
+                                </div>
+                                @endforeach
+                            </div>
+
+                            @if($client->biometricSources->isNotEmpty())
+                            {{-- Asignar locación por dispositivo --}}
+                            <div class="border-t border-gray-200 pt-3 space-y-2">
+                                <p class="text-xs text-gray-500 font-medium">Asignar locación a dispositivos</p>
+                                @foreach($client->biometricSources as $source)
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-700 flex-1 truncate" title="{{ $source->serial_number }}">
+                                        {{ $source->name ?? $source->serial_number }}
+                                    </span>
+                                    <select wire:model="deviceLocationMap.{{ $source->id }}"
+                                        class="text-xs rounded border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-1">
+                                        <option value="">Sin locación</option>
+                                        @foreach($client->factorialLocations as $loc)
+                                            <option value="{{ $loc->id }}">{{ $loc->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                @endforeach
+                            </div>
+
+                            <div class="flex justify-end pt-1">
+                                <button wire:click="saveDeviceLocations"
+                                    class="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
+                                    Guardar asignaciones
+                                </button>
+                            </div>
+                            @endif
+                        @endif
+                    </div>
+                    @else
+                        @php $locCount = $client->factorialLocations->count(); @endphp
+                        @if($locCount > 0)
+                            <div class="flex flex-wrap gap-1">
+                                @foreach($client->factorialLocations as $loc)
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700">
+                                    <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                                    </svg>
+                                    {{ $loc->name }}
+                                </span>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-sm text-gray-400 italic">Sin locaciones sincronizadas</p>
+                        @endif
+                    @endif
+                </div>
+
                 {{-- Stats --}}
                 <div class="flex gap-6 pt-1 border-t border-gray-100">
                     <div class="text-center">
@@ -231,6 +356,10 @@ new class extends Component {
                     <div class="text-center">
                         <p class="text-lg font-semibold text-gray-800">{{ $client->factorial_connections_count }}</p>
                         <p class="text-xs text-gray-400">Conexiones</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-lg font-semibold text-gray-800">{{ $client->factorialLocations->count() }}</p>
+                        <p class="text-xs text-gray-400">Locaciones</p>
                     </div>
                 </div>
             </div>

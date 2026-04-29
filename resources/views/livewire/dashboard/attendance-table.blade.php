@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AttendanceLog;
+use App\Models\Client;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -10,38 +11,86 @@ new class extends Component {
     public string $search = '';
     public string $statusFilter = '';
     public string $checkTypeFilter = '';
+    public string $clientFilter = '';
 
     public function updatedSearch(): void { $this->resetPage(); }
     public function updatedStatusFilter(): void { $this->resetPage(); }
     public function updatedCheckTypeFilter(): void { $this->resetPage(); }
+    public function updatedClientFilter(): void { $this->resetPage(); }
+
+    public function hasFilters(): bool
+    {
+        return $this->search !== ''
+            || $this->statusFilter !== ''
+            || $this->checkTypeFilter !== ''
+            || $this->clientFilter !== '';
+    }
 
     public function with(): array
     {
-        $logs = AttendanceLog::with(['biometricSource', 'factorialEmployee'])
+        $query = AttendanceLog::with(['biometricSource', 'factorialEmployee'])
             ->when($this->search, fn($q) => $q->where(function ($q2) {
                 $q2->where('employee_code', 'like', "%{$this->search}%")
                    ->orWhereHas('factorialEmployee', fn($e) => $e->where('full_name', 'like', "%{$this->search}%"));
             }))
             ->when($this->statusFilter, fn($q) => $q->where('sync_status', $this->statusFilter))
             ->when($this->checkTypeFilter, fn($q) => $q->where('check_type', $this->checkTypeFilter))
-            ->orderByDesc('occurred_at')
-            ->paginate(15);
+            ->when($this->clientFilter, fn($q) => $q->where('client_id', $this->clientFilter))
+            ->orderByDesc('occurred_at');
 
-        return ['logs' => $logs];
+        // Sin filtros: últimos 10 entradas
+        if (!$this->hasFilters()) {
+            $logs = $query->where('check_type', 'check_in')->limit(10)->get();
+            return [
+                'logs'    => $logs,
+                'clients' => Client::orderBy('name')->get(),
+                'paged'   => false,
+            ];
+        }
+
+        return [
+            'logs'    => $query->paginate(15),
+            'clients' => Client::orderBy('name')->get(),
+            'paged'   => true,
+        ];
     }
 }; ?>
 
 <div class="bg-white shadow rounded-lg">
     <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-medium text-gray-900">Registros de asistencia</h3>
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-medium text-gray-900">Registros de asistencia</h3>
+                @if(!$this->hasFilters())
+                    <p class="text-xs text-gray-400 mt-0.5">Últimas 10 entradas — selecciona una empresa para ver todos</p>
+                @endif
+            </div>
+            @if($this->hasFilters())
+            <button wire:click="$set('search', ''); $set('statusFilter', ''); $set('checkTypeFilter', ''); $set('clientFilter', '')"
+                class="text-xs text-indigo-600 hover:text-indigo-800">
+                Limpiar filtros
+            </button>
+            @endif
+        </div>
 
-        <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {{-- Empresa --}}
+            <select wire:model.live="clientFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Todas las empresas</option>
+                @foreach($clients as $client)
+                    <option value="{{ $client->id }}">{{ $client->name }}</option>
+                @endforeach
+            </select>
+
+            {{-- Búsqueda --}}
             <input
                 wire:model.live.debounce.300ms="search"
                 type="text"
-                placeholder="Buscar por nombre o código..."
+                placeholder="Nombre o código..."
                 class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
+
+            {{-- Estado --}}
             <select wire:model.live="statusFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todos los estados</option>
                 <option value="pending">Pendiente</option>
@@ -49,12 +98,14 @@ new class extends Component {
                 <option value="synced">Sincronizado</option>
                 <option value="failed">Fallido</option>
             </select>
+
+            {{-- Tipo --}}
             <select wire:model.live="checkTypeFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todos los tipos</option>
                 <option value="check_in">Entrada</option>
                 <option value="check_out">Salida</option>
-                <option value="break_start">Inicio pausa</option>
-                <option value="break_end">Fin pausa</option>
+                <option value="break_out">Inicio pausa</option>
+                <option value="break_in">Fin pausa</option>
             </select>
         </div>
     </div>
@@ -84,8 +135,8 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         @php
-                            $typeLabels = ['check_in' => 'Entrada', 'check_out' => 'Salida', 'break_start' => 'Inicio pausa', 'break_end' => 'Fin pausa'];
-                            $typeColors = ['check_in' => 'bg-green-100 text-green-800', 'check_out' => 'bg-blue-100 text-blue-800', 'break_start' => 'bg-yellow-100 text-yellow-800', 'break_end' => 'bg-purple-100 text-purple-800'];
+                            $typeLabels = ['check_in' => 'Entrada', 'check_out' => 'Salida', 'break_out' => 'Inicio pausa', 'break_in' => 'Fin pausa'];
+                            $typeColors = ['check_in' => 'bg-green-100 text-green-800', 'check_out' => 'bg-blue-100 text-blue-800', 'break_out' => 'bg-yellow-100 text-yellow-800', 'break_in' => 'bg-purple-100 text-purple-800'];
                         @endphp
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $typeColors[$log->check_type] ?? 'bg-gray-100 text-gray-800' }}">
                             {{ $typeLabels[$log->check_type] ?? $log->check_type }}
@@ -119,7 +170,7 @@ new class extends Component {
         </table>
     </div>
 
-    @if($logs->hasPages())
+    @if($paged && $logs->hasPages())
     <div class="px-6 py-4 border-t border-gray-200">
         {{ $logs->links() }}
     </div>

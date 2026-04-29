@@ -28,6 +28,11 @@ class Client extends Model
         return $this->hasMany(BiometricProvider::class);
     }
 
+    public function factorialLocations(): HasMany
+    {
+        return $this->hasMany(FactorialLocation::class);
+    }
+
     public function attendanceLogs(): HasMany
     {
         return $this->hasMany(AttendanceLog::class);

@@ -217,8 +217,8 @@ new class extends Component {
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         @forelse($connections as $conn)
         @php $status = $this->getTokenStatus($conn); @endphp
-        <div class="bg-white shadow rounded-lg overflow-hidden">
-            <div class="p-5">
+        <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">
+            <div class="p-5 flex-1">
                 <div class="flex items-start justify-between">
                     <div class="min-w-0 flex-1 pr-3">
                         <h3 class="text-base font-semibold text-gray-900 truncate">{{ $conn->name }}</h3>

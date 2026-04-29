@@ -63,6 +63,11 @@ class FactorialService
         )->json();
     }
 
+    public function getCompany(): array
+    {
+        return $this->request('get', '/api/2026-04-01/resources/companies/companies')->json()[0] ?? [];
+    }
+
     public function getLocations(array $query = []): array
     {
         return $this->request(

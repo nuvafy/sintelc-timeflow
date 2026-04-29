@@ -38,9 +38,9 @@ new class extends Component {
             ->when($this->clientFilter, fn($q) => $q->where('client_id', $this->clientFilter))
             ->orderByDesc('occurred_at');
 
-        // Sin filtros: últimos 10 entradas
+        // Sin filtros: últimos 5 registros más recientes
         if (!$this->hasFilters()) {
-            $logs = $query->where('check_type', 'check_in')->limit(10)->get();
+            $logs = $query->limit(5)->get();
             return [
                 'logs'    => $logs,
                 'clients' => Client::orderBy('name')->get(),
@@ -62,7 +62,7 @@ new class extends Component {
             <div>
                 <h3 class="text-lg font-medium text-gray-900">Registros de asistencia</h3>
                 @if(!$this->hasFilters())
-                    <p class="text-xs text-gray-400 mt-0.5">Últimas 10 entradas — selecciona una empresa para ver todos</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Últimas 5 entradas — selecciona una empresa para ver todos</p>
                 @endif
             </div>
             @if($this->hasFilters())

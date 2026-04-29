@@ -19,7 +19,6 @@ new class extends Component {
 
     public string $name = '';
     public string $serial_number = '';
-    public string $site_name = '';
     public string $status = 'active';
     public ?int $client_id = null;
     public ?int $biometric_provider_id = null;
@@ -43,7 +42,6 @@ new class extends Component {
         return [
             'name'                  => 'nullable|string|max:255',
             'serial_number'         => 'required|string|max:255',
-            'site_name'             => 'nullable|string|max:255',
             'status'                => 'required|in:active,inactive',
             'client_id'             => 'nullable|exists:clients,id',
             'biometric_provider_id' => 'nullable|exists:biometric_providers,id',
@@ -80,7 +78,6 @@ new class extends Component {
         $this->editingId              = $device->id;
         $this->name                   = $device->name;
         $this->serial_number          = $device->serial_number;
-        $this->site_name              = $device->site_name ?? '';
         $this->status                 = $device->status;
         $this->client_id              = $device->client_id;
         $this->biometric_provider_id  = $device->biometric_provider_id;
@@ -217,7 +214,6 @@ new class extends Component {
         $this->editingId             = null;
         $this->name                  = '';
         $this->serial_number         = '';
-        $this->site_name             = '';
         $this->status                = 'active';
         $this->client_id             = null;
         $this->biometric_provider_id = null;
@@ -300,7 +296,7 @@ new class extends Component {
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->client?->name ?? '—' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->location?->name ?? $device->site_name ?? '—' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->location?->name ?? '—' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ $device->last_ping_at?->diffForHumans() ?? '—' }}
@@ -383,12 +379,6 @@ new class extends Component {
                     <label class="block text-sm font-medium text-gray-700">Número de serie</label>
                     <input wire:model="serial_number" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                     @error('serial_number') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Sitio / Sucursal</label>
-                    <input wire:model="site_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('site_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">

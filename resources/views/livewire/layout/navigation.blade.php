@@ -1,17 +1,21 @@
 <?php
 
 use App\Livewire\Actions\Logout;
+use App\Models\BiometricSource;
 use Livewire\Volt\Component;
 
 new class extends Component
 {
-    /**
-     * Log the current user out of the application.
-     */
+    public int $unassignedDevices = 0;
+
+    public function mount(): void
+    {
+        $this->unassignedDevices = BiometricSource::whereNull('client_id')->count();
+    }
+
     public function logout(Logout $logout): void
     {
         $logout();
-
         $this->redirect('/', navigate: true);
     }
 }; ?>
@@ -29,16 +33,16 @@ new class extends Component
                 </div>
 
                 <!-- Navigation Links -->
-                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex items-center">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
                     {{-- Empresas dropdown --}}
-                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                    <div class="relative h-full flex items-center" x-data="{ open: false }" @click.outside="open = false">
                         <button @click="open = !open"
-                            class="inline-flex items-center gap-1 px-1 pt-1 border-b-2 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none
-                                {{ request()->routeIs('clients', 'connections', 'devices', 'pin-mapping', 'employees')
+                            class="inline-flex items-center gap-1 px-1 pt-1 border-b-2 h-full text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none
+                                {{ request()->routeIs('clients', 'connections', 'employees')
                                     ? 'border-indigo-400 text-gray-900'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                             Empresas
@@ -47,8 +51,8 @@ new class extends Component
                             </svg>
                         </button>
 
-                        <div x-show="open" x-transition
-                            class="absolute left-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-100 py-1 z-50">
+                        <div x-show="open" x-transition x-cloak
+                            class="absolute top-full left-0 mt-0 w-48 bg-white rounded-md shadow-lg border border-gray-100 py-1 z-50">
                             <a href="{{ route('clients') }}" wire:navigate
                                 class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 {{ request()->routeIs('clients') ? 'bg-indigo-50 text-indigo-700 font-medium' : '' }}">
                                 <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -63,13 +67,6 @@ new class extends Component
                                 </svg>
                                 Conexiones
                             </a>
-                            <a href="{{ route('devices') }}" wire:navigate
-                                class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 {{ request()->routeIs('devices') || request()->routeIs('pin-mapping') ? 'bg-indigo-50 text-indigo-700 font-medium' : '' }}">
-                                <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
-                                </svg>
-                                Dispositivos
-                            </a>
                             <a href="{{ route('employees') }}" wire:navigate
                                 class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 {{ request()->routeIs('employees') ? 'bg-indigo-50 text-indigo-700 font-medium' : '' }}">
                                 <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,6 +76,20 @@ new class extends Component
                             </a>
                         </div>
                     </div>
+
+                    {{-- Dispositivos (top-level) --}}
+                    <a href="{{ route('devices') }}" wire:navigate
+                        class="inline-flex items-center gap-1.5 px-1 pt-1 border-b-2 h-full text-sm font-medium leading-5 transition duration-150 ease-in-out
+                            {{ request()->routeIs('devices') || request()->routeIs('pin-mapping')
+                                ? 'border-indigo-400 text-gray-900'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                        Dispositivos
+                        @if($unassignedDevices > 0)
+                        <span class="inline-flex items-center justify-center w-4 h-4 text-xs font-bold text-white bg-amber-500 rounded-full">
+                            {{ $unassignedDevices }}
+                        </span>
+                        @endif
+                    </a>
                 </div>
             </div>
 
@@ -88,7 +99,6 @@ new class extends Component
                     <x-slot name="trigger">
                         <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 bg-white hover:text-gray-700 focus:outline-none transition ease-in-out duration-150">
                             <div x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" x-on:profile-updated.window="name = $event.detail.name"></div>
-
                             <div class="ms-1">
                                 <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -101,8 +111,6 @@ new class extends Component
                         <x-dropdown-link :href="route('profile')" wire:navigate>
                             {{ __('Profile') }}
                         </x-dropdown-link>
-
-                        <!-- Authentication -->
                         <button wire:click="logout" class="w-full text-start">
                             <x-dropdown-link>
                                 {{ __('Log Out') }}
@@ -136,11 +144,14 @@ new class extends Component
             <x-responsive-nav-link :href="route('connections')" :active="request()->routeIs('connections')" wire:navigate>
                 &nbsp;&nbsp;↳ Conexiones
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices') || request()->routeIs('pin-mapping')" wire:navigate>
-                &nbsp;&nbsp;↳ Dispositivos
-            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
                 &nbsp;&nbsp;↳ Empleados
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices') || request()->routeIs('pin-mapping')" wire:navigate>
+                Dispositivos
+                @if($unassignedDevices > 0)
+                    ({{ $unassignedDevices }} sin asignar)
+                @endif
             </x-responsive-nav-link>
         </div>
 
@@ -150,13 +161,10 @@ new class extends Component
                 <div class="font-medium text-base text-gray-800" x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" x-on:profile-updated.window="name = $event.detail.name"></div>
                 <div class="font-medium text-sm text-gray-500">{{ auth()->user()->email }}</div>
             </div>
-
             <div class="mt-3 space-y-1">
                 <x-responsive-nav-link :href="route('profile')" wire:navigate>
                     {{ __('Profile') }}
                 </x-responsive-nav-link>
-
-                <!-- Authentication -->
                 <button wire:click="logout" class="w-full text-start">
                     <x-responsive-nav-link>
                         {{ __('Log Out') }}

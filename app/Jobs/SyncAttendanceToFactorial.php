@@ -79,7 +79,16 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 $breakConfigId = $configs[0]['id'] ?? null;
 
                 if (!$breakConfigId) {
-                    $this->fail($log, 'No se encontró break_configuration en Factorial');
+                    // Sin break config en Factorial: marcar como synced y esperar
+                    // a que el cliente configure las pausas en Factorial
+                    $log->update([
+                        'sync_status'  => 'synced',
+                        'processed_at' => now(),
+                        'sync_error'   => 'Sin break_configuration en Factorial — pendiente de configuración',
+                    ]);
+                    Log::info('SyncAttendanceToFactorial: break ignorado, sin configuración en Factorial', [
+                        'attendance_log_id' => $log->id,
+                    ]);
                     return;
                 }
 

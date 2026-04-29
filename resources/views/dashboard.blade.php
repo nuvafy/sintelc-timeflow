@@ -11,15 +11,11 @@
             {{-- Stats --}}
             <livewire:dashboard.attendance-stats />
 
-            {{-- Tabla y dispositivos --}}
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2">
-                    <livewire:dashboard.attendance-table />
-                </div>
-                <div>
-                    <livewire:dashboard.device-status />
-                </div>
-            </div>
+            {{-- Tabla --}}
+            <livewire:dashboard.attendance-table />
+
+            {{-- Dispositivos --}}
+            <livewire:dashboard.device-status />
 
         </div>
     </div>

@@ -112,9 +112,27 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 'check_type'        => $log->check_type,
                 'factorial_id'      => $employee->factorial_id,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            // 409 = ya existe en Factorial, se trata como sincronizado
+            if ($e->response->status() === 409) {
+                $log->update([
+                    'sync_status'  => 'synced',
+                    'processed_at' => now(),
+                    'sync_error'   => null,
+                ]);
+
+                Log::info('SyncAttendanceToFactorial: 409 ya existía en Factorial, marcado como synced', [
+                    'attendance_log_id' => $log->id,
+                ]);
+
+                return;
+            }
+
             $this->fail($log, $e->getMessage());
             throw $e; // permite reintentos
+        } catch (\Throwable $e) {
+            $this->fail($log, $e->getMessage());
+            throw $e;
         }
     }
 

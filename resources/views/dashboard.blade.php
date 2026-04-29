@@ -11,10 +11,14 @@
             {{-- Stats --}}
             <livewire:dashboard.attendance-stats />
 
-            {{-- Tabla + Dispositivos (mismo grid que stats: 4 cols, tabla=3, devices=1) --}}
-            <div class="grid items-start gap-5" style="grid-template-columns: 3fr 1fr">
-                <livewire:dashboard.attendance-table />
-                <livewire:dashboard.device-status />
+            {{-- Tabla + Dispositivos: mismo grid exacto que stats (4 cols iguales) --}}
+            <div class="grid items-start gap-5" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
+                <div style="grid-column: span 3 / span 3">
+                    <livewire:dashboard.attendance-table />
+                </div>
+                <div>
+                    <livewire:dashboard.device-status />
+                </div>
             </div>
 
         </div>

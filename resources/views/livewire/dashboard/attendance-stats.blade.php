@@ -21,7 +21,7 @@ new class extends Component {
         $this->todayTotal  = AttendanceLog::whereDate('occurred_at', today())->count();
         $this->pendingSync = AttendanceLog::where('sync_status', 'pending')->count();
         $this->failedSync  = AttendanceLog::where('sync_status', 'failed')->count();
-        $this->syncedToday = AttendanceLog::whereDate('occurred_at', today())->where('sync_status', 'synced')->count();
+        $this->syncedToday = AttendanceLog::whereDate('processed_at', today())->where('sync_status', 'synced')->count();
     }
 
     public function retryFailed(): void

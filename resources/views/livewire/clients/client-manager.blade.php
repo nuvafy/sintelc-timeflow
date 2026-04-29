@@ -14,9 +14,13 @@ new class extends Component {
     public bool $showModal = false;
     public bool $editing   = false;
     public ?int $editingId = null;
-    public string $name   = '';
-    public string $slug   = '';
-    public string $status = 'active';
+    public string $name              = '';
+    public string $slug              = '';
+    public string $status            = 'active';
+    public string $oauth_client_id     = '';
+    public string $oauth_client_secret = '';
+    public string $hq_address          = '';
+    public string $contact_email       = '';
 
     // ── Proveedor biométrico ───────────────────────────────────────
     public bool $showProviderModal  = false;
@@ -26,8 +30,8 @@ new class extends Component {
     public ?int $provider_conn_id   = null;
 
     // ── Locaciones ─────────────────────────────────────────────────
-    public ?int $expandedLocationsClient = null;   // card con sección expandida
-    public array $deviceLocationMap      = [];     // [source_id => location_id]
+    public ?int $expandedLocationsClient = null;
+    public array $deviceLocationMap      = [];
 
     public function with(): array
     {
@@ -58,11 +62,15 @@ new class extends Component {
 
     public function openEdit(int $id): void
     {
-        $client          = Client::findOrFail($id);
-        $this->editingId = $client->id;
-        $this->name      = $client->name;
-        $this->slug      = $client->slug;
-        $this->status    = $client->status;
+        $client                    = Client::findOrFail($id);
+        $this->editingId           = $client->id;
+        $this->name                = $client->name;
+        $this->slug                = $client->slug;
+        $this->status              = $client->status;
+        $this->oauth_client_id     = $client->oauth_client_id ?? '';
+        $this->oauth_client_secret = $client->oauth_client_secret ?? '';
+        $this->hq_address          = $client->hq_address ?? '';
+        $this->contact_email       = $client->contact_email ?? '';
         $this->editing   = true;
         $this->showModal = true;
     }
@@ -70,23 +78,29 @@ new class extends Component {
     public function save(): void
     {
         $this->validate([
-            'name'   => 'required|string|max:255',
-            'slug'   => 'required|string|max:255|alpha_dash',
-            'status' => 'required|in:active,inactive',
+            'name'                => 'required|string|max:255',
+            'slug'                => 'required|string|max:255|alpha_dash',
+            'status'              => 'required|in:active,inactive',
+            'oauth_client_id'     => 'required|string|max:255',
+            'oauth_client_secret' => 'required|string|max:500',
+            'hq_address'          => 'nullable|string|max:500',
+            'contact_email'       => 'nullable|email|max:255',
         ]);
 
+        $data = [
+            'name'                => $this->name,
+            'slug'                => $this->slug,
+            'status'              => $this->status,
+            'oauth_client_id'     => $this->oauth_client_id,
+            'oauth_client_secret' => $this->oauth_client_secret,
+            'hq_address'          => $this->hq_address ?: null,
+            'contact_email'       => $this->contact_email ?: null,
+        ];
+
         if ($this->editing) {
-            Client::findOrFail($this->editingId)->update([
-                'name'   => $this->name,
-                'slug'   => $this->slug,
-                'status' => $this->status,
-            ]);
+            Client::findOrFail($this->editingId)->update($data);
         } else {
-            Client::create([
-                'name'   => $this->name,
-                'slug'   => $this->slug,
-                'status' => $this->status,
-            ]);
+            Client::create($data);
         }
 
         $this->showModal = false;
@@ -151,7 +165,6 @@ new class extends Component {
             $this->deviceLocationMap       = [];
         } else {
             $this->expandedLocationsClient = $clientId;
-            // Pre-cargar asignaciones actuales de dispositivos
             $sources = BiometricSource::where('client_id', $clientId)->get();
             $this->deviceLocationMap = $sources->pluck('factorial_location_id', 'id')
                 ->map(fn($v) => (string) ($v ?? ''))
@@ -172,10 +185,14 @@ new class extends Component {
 
     private function resetClientForm(): void
     {
-        $this->editingId = null;
-        $this->name      = '';
-        $this->slug      = '';
-        $this->status    = 'active';
+        $this->editingId           = null;
+        $this->name                = '';
+        $this->slug                = '';
+        $this->status              = 'active';
+        $this->oauth_client_id     = '';
+        $this->oauth_client_secret = '';
+        $this->hq_address          = '';
+        $this->contact_email       = '';
         $this->resetValidation();
     }
 }; ?>
@@ -202,17 +219,51 @@ new class extends Component {
                     <h3 class="text-base font-semibold text-gray-900 truncate">{{ $client->name }}</h3>
                     <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $client->slug }}</p>
                 </div>
-                <span class="ml-3 px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0 {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
-                    {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
-                </span>
+                <div class="flex items-center gap-3 ml-3 flex-shrink-0">
+                    <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                        {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
+                    </span>
+                </div>
             </div>
 
             {{-- Body --}}
             <div class="px-5 py-4 space-y-4 flex-1">
 
+                {{-- Info empresa --}}
+                @if($client->hq_address || $client->contact_email)
+                <div class="space-y-1 text-xs text-gray-500">
+                    @if($client->hq_address)
+                    <div class="flex items-start gap-1.5">
+                        <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        <span>{{ $client->hq_address }}</span>
+                    </div>
+                    @endif
+                    @if($client->contact_email)
+                    <div class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                        <span>{{ $client->contact_email }}</span>
+                    </div>
+                    @endif
+                </div>
+                @endif
+
                 {{-- Conexión Factorial --}}
                 <div>
-                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Conexión Factorial</p>
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Conexión Factorial</p>
+                        <a href="{{ route('connections', ['client_id' => $client->id]) }}" wire:navigate
+                            class="inline-flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Nueva conexión
+                        </a>
+                    </div>
                     @forelse($client->factorialConnections as $conn)
                     <div class="flex items-center justify-between">
                         <span class="text-sm text-gray-700">{{ $conn->name }}</span>
@@ -280,13 +331,11 @@ new class extends Component {
 
                     @if($expandedLocationsClient === $client->id)
                     <div class="mt-2 space-y-3 border border-gray-100 rounded-md p-3 bg-gray-50">
-
                         @if($client->factorialLocations->isEmpty())
                             <p class="text-xs text-gray-400 italic text-center py-2">
                                 Sin locaciones sincronizadas. Sincroniza la conexión Factorial primero.
                             </p>
                         @else
-                            {{-- Lista de locaciones disponibles --}}
                             <div class="space-y-1">
                                 <p class="text-xs text-gray-500 font-medium mb-1">Locaciones disponibles</p>
                                 @foreach($client->factorialLocations as $loc)
@@ -300,14 +349,11 @@ new class extends Component {
                             </div>
 
                             @if($client->biometricSources->isNotEmpty())
-                            {{-- Asignar locación por dispositivo --}}
                             <div class="border-t border-gray-200 pt-3 space-y-2">
                                 <p class="text-xs text-gray-500 font-medium">Asignar locación a dispositivos</p>
                                 @foreach($client->biometricSources as $source)
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs text-gray-700 flex-1 truncate" title="{{ $source->serial_number }}">
-                                        {{ $source->name ?? $source->serial_number }}
-                                    </span>
+                                    <span class="text-xs text-gray-700 flex-1 truncate">{{ $source->name ?? $source->serial_number }}</span>
                                     <select wire:model="deviceLocationMap.{{ $source->id }}"
                                         class="text-xs rounded border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-1">
                                         <option value="">Sin locación</option>
@@ -318,7 +364,6 @@ new class extends Component {
                                 </div>
                                 @endforeach
                             </div>
-
                             <div class="flex justify-end pt-1">
                                 <button wire:click="saveDeviceLocations"
                                     class="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
@@ -329,8 +374,7 @@ new class extends Component {
                         @endif
                     </div>
                     @else
-                        @php $locCount = $client->factorialLocations->count(); @endphp
-                        @if($locCount > 0)
+                        @if($client->factorialLocations->count() > 0)
                             <div class="flex flex-wrap gap-1">
                                 @foreach($client->factorialLocations as $loc)
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700">
@@ -380,7 +424,7 @@ new class extends Component {
     {{-- Modal: Crear / Editar empresa --}}
     @if($showModal)
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-screen overflow-y-auto">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900">{{ $editing ? 'Editar empresa' : 'Nueva empresa' }}</h3>
                 <button wire:click="$set('showModal', false)" class="text-gray-400 hover:text-gray-600">
@@ -391,18 +435,62 @@ new class extends Component {
             </div>
 
             <div class="px-6 py-4 space-y-4">
+                {{-- Nombre --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Nombre</label>
-                    <input wire:model.live="name" type="text" placeholder="Ej: Prosys" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    <input wire:model.live="name" type="text" placeholder="Ej: Grupo MLA"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                     @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
 
+                {{-- Slug --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Slug</label>
-                    <input wire:model="slug" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                    <input wire:model="slug" type="text"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                     @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
 
+                {{-- Dirección HQ --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">
+                        Dirección HQ <span class="text-gray-400 font-normal">(opcional)</span>
+                    </label>
+                    <input wire:model="hq_address" type="text" placeholder="Ej: Av. Insurgentes Sur 1234, CDMX"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('hq_address') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+
+                {{-- Email de contacto --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">
+                        Email de contacto <span class="text-gray-400 font-normal">(opcional)</span>
+                    </label>
+                    <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+
+                {{-- OAuth credentials --}}
+                <div class="border-t border-gray-100 pt-4 space-y-4">
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Credenciales Factorial OAuth</p>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Client ID</label>
+                        <input wire:model="oauth_client_id" type="text" autocomplete="off"
+                            placeholder="thAYmPF7qXq..."
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Client Secret</label>
+                        <input wire:model="oauth_client_secret" type="password" autocomplete="new-password"
+                            placeholder="••••••••••••••••"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+
+                {{-- Estado --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Estado</label>
                     <select wire:model="status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -436,14 +524,12 @@ new class extends Component {
                     </svg>
                 </button>
             </div>
-
             <div class="px-6 py-4 space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Nombre del proveedor</label>
                     <input wire:model="provider_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                     @error('provider_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
-
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Marca del equipo</label>
                     <select wire:model="provider_vendor" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -453,7 +539,6 @@ new class extends Component {
                         <option value="other">Otro</option>
                     </select>
                 </div>
-
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Conexión Factorial <span class="text-gray-400 font-normal">(opcional)</span></label>
                     <select wire:model="provider_conn_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -464,7 +549,6 @@ new class extends Component {
                     </select>
                 </div>
             </div>
-
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button wire:click="$set('showProviderModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cancelar

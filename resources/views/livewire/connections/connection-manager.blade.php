@@ -11,34 +11,31 @@ use Livewire\Volt\Component;
 
 new class extends Component {
     public bool $showModal = false;
-    public bool $editing = false;
+    public bool $editing   = false;
     public ?int $editingId = null;
     public ?string $oauthUrl = null;
 
     public array $syncResults = [];
 
-    public string $name = '';
-    public string $contact_email = '';
-    public ?int $client_id = null;
-    public string $oauth_client_id = '';
-    public string $oauth_client_secret = '';
-    public string $resource_owner_type = 'company';
+    public string $name      = '';
+    public ?int   $client_id = null;
+
+    public function mount(): void
+    {
+        $clientId = request('client_id');
+        if ($clientId) {
+            $this->client_id = (int) $clientId;
+            $this->suggestName();
+            $this->editing   = false;
+            $this->showModal = true;
+        }
+    }
 
     public function rules(): array
     {
-        return $this->editing ? [
-            'name'                => 'required|string|max:255',
-            'contact_email'       => 'nullable|email',
-            'client_id'           => 'nullable|exists:clients,id',
-            'oauth_client_id'     => 'required|string',
-            'oauth_client_secret' => 'required|string',
-            'resource_owner_type' => 'required|in:company,employee',
-        ] : [
-            'name'                => 'required|string|max:255',
-            'contact_email'       => 'required|email',
-            'oauth_client_id'     => 'required|string',
-            'oauth_client_secret' => 'required|string',
-            'resource_owner_type' => 'required|in:company,employee',
+        return [
+            'name'      => 'required|string|max:255',
+            'client_id' => 'required|exists:clients,id',
         ];
     }
 
@@ -59,16 +56,28 @@ new class extends Component {
 
     public function openEdit(int $id): void
     {
-        $conn = FactorialConnection::findOrFail($id);
-        $this->editingId           = $conn->id;
-        $this->name                = $conn->name;
-        $this->contact_email       = $conn->contact_email ?? '';
-        $this->client_id           = $conn->client_id;
-        $this->oauth_client_id     = $conn->oauth_client_id;
-        $this->oauth_client_secret = $conn->oauth_client_secret;
-        $this->resource_owner_type = $conn->resource_owner_type ?? 'company';
+        $conn            = FactorialConnection::findOrFail($id);
+        $this->editingId = $conn->id;
+        $this->name      = $conn->name;
+        $this->client_id = $conn->client_id;
         $this->editing   = true;
         $this->showModal = true;
+    }
+
+    public function updatedClientId($value): void
+    {
+        if (!$this->editing && $value) {
+            $this->suggestName();
+        }
+    }
+
+    protected function suggestName(): void
+    {
+        $client = Client::find($this->client_id);
+        if ($client) {
+            $short = strtolower(str_replace(' ', '_', $client->name));
+            $this->name = 'cnx_' . substr($short, 0, 8);
+        }
     }
 
     public function save(): void
@@ -80,8 +89,10 @@ new class extends Component {
             $this->showModal = false;
             $this->resetForm();
         } else {
-            $connection = FactorialConnection::create($data);
-            $this->oauthUrl = route('oauth.factorial.redirect', ['connection_id' => $connection->id]);
+            $connection      = FactorialConnection::create(array_merge($data, [
+                'resource_owner_type' => 'company',
+            ]));
+            $this->oauthUrl  = route('oauth.factorial.redirect', ['connection_id' => $connection->id]);
         }
     }
 
@@ -92,7 +103,7 @@ new class extends Component {
 
     public function sync(int $id): void
     {
-        $connection = FactorialConnection::findOrFail($id);
+        $connection = FactorialConnection::with('client')->findOrFail($id);
 
         if (empty($connection->access_token)) {
             return;
@@ -102,9 +113,9 @@ new class extends Component {
             $service = new FactorialService($connection);
 
             // Sync employees
-            $response      = $service->getEmployees();
-            $employees     = $response['data'] ?? [];
-            $empCount      = 0;
+            $response  = $service->getEmployees();
+            $employees = $response['data'] ?? [];
+            $empCount  = 0;
 
             foreach ($employees as $employee) {
                 if (empty($employee['id'])) continue;
@@ -170,12 +181,6 @@ new class extends Component {
         }
     }
 
-    public function resendEmail(int $id): void
-    {
-        $connection = FactorialConnection::findOrFail($id);
-        $this->sendOAuthEmail($connection);
-    }
-
     public function getTokenStatus(FactorialConnection $conn): array
     {
         if (!$conn->access_token) {
@@ -189,14 +194,10 @@ new class extends Component {
 
     private function resetForm(): void
     {
-        $this->editingId           = null;
-        $this->name                = '';
-        $this->contact_email       = '';
-        $this->client_id           = null;
-        $this->oauth_client_id     = '';
-        $this->oauth_client_secret = '';
-        $this->resource_owner_type = 'company';
-        $this->oauthUrl            = null;
+        $this->editingId = null;
+        $this->name      = '';
+        $this->client_id = null;
+        $this->oauthUrl  = null;
         $this->resetValidation();
     }
 }; ?>
@@ -219,6 +220,7 @@ new class extends Component {
         @php $status = $this->getTokenStatus($conn); @endphp
         <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">
             <div class="p-5 flex-1">
+                {{-- Header de card --}}
                 <div class="flex items-start justify-between">
                     <div class="min-w-0 flex-1 pr-3">
                         <h3 class="text-base font-semibold text-gray-900 truncate">{{ $conn->name }}</h3>
@@ -238,36 +240,13 @@ new class extends Component {
                     </div>
                 </div>
 
-                <div class="mt-4 space-y-1 text-xs text-gray-500">
-                    <div class="flex justify-between">
-                        <span>Client ID</span>
-                        <span class="font-mono text-gray-700">{{ Str::limit($conn->oauth_client_id, 20) }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Tipo</span>
-                        <span class="text-gray-700">{{ $conn->resource_owner_type ?? 'company' }}</span>
-                    </div>
-                    @if($conn->contact_email)
-                    <div class="flex justify-between">
-                        <span>Email</span>
-                        <span class="text-gray-700">{{ $conn->contact_email }}</span>
-                    </div>
-                    @endif
-                    @if($conn->factorial_company_id)
-                    <div class="flex justify-between">
-                        <span>Company ID</span>
-                        <span class="text-gray-700">{{ $conn->factorial_company_id }}</span>
-                    </div>
-                    @endif
-                    @if($conn->expires_at)
-                    <div class="flex justify-between">
-                        <span>Expira</span>
-                        <span class="{{ $conn->expires_at->isPast() ? 'text-red-600 font-medium' : 'text-gray-700' }}">
-                            {{ $conn->expires_at->format('d/m/Y H:i') }}
-                        </span>
-                    </div>
-                    @endif
+                {{-- Factorial ID --}}
+                @if($conn->factorial_company_id)
+                <div class="mt-4 flex justify-between text-xs text-gray-500">
+                    <span>Factorial ID</span>
+                    <span class="font-mono text-gray-700">{{ $conn->factorial_company_id }}</span>
                 </div>
+                @endif
             </div>
 
             {{-- Sync result banner --}}
@@ -275,10 +254,8 @@ new class extends Component {
             @php $r = $syncResults[$conn->id]; @endphp
             @if($r['ok'])
             <div class="px-5 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between">
-                <p class="text-xs text-emerald-700">
-                    ✓ {{ $r['employees'] }} empleados · {{ $r['locations'] }} ubicaciones sincronizados
-                </p>
-                <a href="{{ route('employees') }}" class="text-xs font-medium text-emerald-700 underline hover:text-emerald-900">
+                <p class="text-xs text-emerald-700">✓ {{ $r['employees'] }} empleados · {{ $r['locations'] }} ubicaciones</p>
+                <a href="{{ route('employees') }}" wire:navigate class="text-xs font-medium text-emerald-700 underline hover:text-emerald-900">
                     Ver empleados →
                 </a>
             </div>
@@ -289,6 +266,7 @@ new class extends Component {
             @endif
             @endif
 
+            {{-- Footer --}}
             <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
                 @if($conn->access_token)
                 <button wire:click="sync({{ $conn->id }})" wire:loading.attr="disabled" wire:target="sync({{ $conn->id }})"
@@ -319,15 +297,15 @@ new class extends Component {
         </div>
         @empty
         <div class="col-span-3 bg-white shadow rounded-lg px-6 py-12 text-center text-sm text-gray-500">
-            No hay conexiones configuradas. Crea una para empezar.
+            No hay conexiones configuradas. Créalas desde la sección <strong>Empresas</strong>.
         </div>
         @endforelse
     </div>
 
-    {{-- Modal --}}
+    {{-- Modal: Crear / Editar --}}
     @if($showModal)
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900">{{ $editing ? 'Editar conexión' : 'Nueva conexión' }}</h3>
                 <button wire:click="$set('showModal', false)" class="text-gray-400 hover:text-gray-600">
@@ -338,56 +316,52 @@ new class extends Component {
             </div>
 
             <div class="px-6 py-4 space-y-4">
+                {{-- Empresa --}}
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Nombre de la conexión</label>
-                    <input wire:model="name" type="text" placeholder="Ej: Prosys" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Email del cliente</label>
-                    <input wire:model="contact_email" type="email" placeholder="admin@empresa.com" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    <p class="mt-1 text-xs text-gray-400">Se enviará el enlace de autorización a este correo.</p>
-                    @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div class="grid grid-cols-1 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">OAuth Client ID</label>
-                        <input wire:model="oauth_client_id" type="text" autocomplete="off" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                        @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">OAuth Client Secret</label>
-                        <input wire:model="oauth_client_secret" type="text" autocomplete="new-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                        @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Tipo de recurso</label>
-                    <select wire:model="resource_owner_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="company">Company</option>
-                        <option value="employee">Employee</option>
-                    </select>
-                </div>
-
-                {{-- Solo al editar: asignar empresa --}}
-                @if($editing)
-                <div class="border-t border-gray-100 pt-4">
-                    <label class="block text-sm font-medium text-gray-700">Empresa <span class="text-gray-400 font-normal">(opcional, asignar después del OAuth)</span></label>
-                    <select wire:model="client_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Sin asignar</option>
+                    <label class="block text-sm font-medium text-gray-700">Empresa</label>
+                    <select wire:model.live="client_id"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        {{ $editing ? 'disabled' : '' }}>
+                        <option value="">Seleccionar empresa...</option>
                         @foreach($clients as $client)
                             <option value="{{ $client->id }}">{{ $client->name }}</option>
                         @endforeach
                     </select>
+                    @error('client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
+
+                {{-- Nombre --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nombre de la conexión</label>
+                    <input wire:model="name" type="text" placeholder="cnx_empresa"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+
+                {{-- Credenciales read-only si hay empresa --}}
+                @if($client_id && !$editing)
+                @php $selectedClient = $clients->find($client_id); @endphp
+                @if($selectedClient && $selectedClient->oauth_client_id)
+                <div class="bg-gray-50 rounded-md px-3 py-2 text-xs text-gray-500 space-y-1">
+                    <p class="font-medium text-gray-600">Credenciales de la empresa</p>
+                    <div class="flex justify-between">
+                        <span>Client ID</span>
+                        <span class="font-mono">{{ Str::limit($selectedClient->oauth_client_id, 20) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Client Secret</span>
+                        <span class="font-mono">••••••••••••</span>
+                    </div>
+                </div>
+                @else
+                <div class="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-700">
+                    Esta empresa no tiene credenciales OAuth configuradas. Edítala primero en la sección Empresas.
+                </div>
+                @endif
                 @endif
             </div>
 
-            {{-- URL generada tras crear --}}
+            {{-- URL generada --}}
             @if($oauthUrl)
             <div class="px-6 pb-4">
                 <div class="bg-emerald-50 border border-emerald-200 rounded-md p-4">
@@ -395,8 +369,7 @@ new class extends Component {
                     <div class="flex gap-2">
                         <input type="text" readonly value="{{ $oauthUrl }}"
                             class="flex-1 text-xs font-mono bg-white border border-emerald-300 rounded px-3 py-2 text-gray-700 focus:outline-none"
-                            onclick="this.select()"
-                        />
+                            onclick="this.select()"/>
                         <button
                             onclick="navigator.clipboard.writeText('{{ $oauthUrl }}').then(() => this.textContent = '✓').catch(() => {}); return false;"
                             class="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition whitespace-nowrap">
@@ -408,8 +381,9 @@ new class extends Component {
             </div>
             @endif
 
-            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-                <button wire:click="$set('showModal', false); $set('oauthUrl', null)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button wire:click="$set('showModal', false); $set('oauthUrl', null)"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     {{ $oauthUrl ? 'Cerrar' : 'Cancelar' }}
                 </button>
                 @if(!$oauthUrl)

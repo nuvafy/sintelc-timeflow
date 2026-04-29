@@ -19,10 +19,10 @@ class FactorialAuthController extends Controller
             return response()->json(['ok' => false, 'message' => 'connection_id es requerido'], 400);
         }
 
-        $connection = FactorialConnection::findOrFail($connectionId);
+        $connection = FactorialConnection::with('client')->findOrFail($connectionId);
 
         $query = http_build_query([
-            'client_id'           => $connection->oauth_client_id,
+            'client_id'           => $connection->client->oauth_client_id,
             'redirect_uri'        => config('services.factorial.redirect'),
             'response_type'       => 'code',
             'resource_owner_type' => $connection->resource_owner_type ?? 'company',
@@ -59,13 +59,13 @@ class FactorialAuthController extends Controller
             return response()->json(['ok' => false, 'message' => 'state (connection_id) ausente en el callback'], 400);
         }
 
-        $connection = FactorialConnection::findOrFail($connectionId);
+        $connection = FactorialConnection::with('client')->findOrFail($connectionId);
 
         $response = Http::asForm()->post(
             config('services.factorial.base_url') . '/oauth/token',
             [
-                'client_id' => $connection->oauth_client_id,
-                'client_secret' => $connection->oauth_client_secret,
+                'client_id' => $connection->client->oauth_client_id,
+                'client_secret' => $connection->client->oauth_client_secret,
                 'code' => $code,
                 'grant_type' => 'authorization_code',
                 'redirect_uri' => config('services.factorial.redirect'),

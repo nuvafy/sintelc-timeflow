@@ -11,6 +11,10 @@ class Client extends Model
         'name',
         'slug',
         'status',
+        'oauth_client_id',
+        'oauth_client_secret',
+        'hq_address',
+        'contact_email',
     ];
 
     public function factorialConnections(): HasMany

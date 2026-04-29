@@ -27,8 +27,7 @@ new class extends Component {
             ->get()
             ->keyBy('external_employee_code');
 
-        // Use device_users if available, otherwise fall back to Excel data
-        $rawUsers = $source->device_users ?? $this->excelFallback();
+        $rawUsers = $source->device_users ?? [];
 
         $this->rows = [];
         foreach ($rawUsers as $user) {
@@ -286,7 +285,7 @@ new class extends Component {
                 @if($source->device_users_fetched_at)
                 · <span class="text-xs text-gray-400">Usuarios del dispositivo: {{ $source->device_users_fetched_at->diffForHumans() }}</span>
                 @else
-                · <span class="text-xs text-amber-600">Sin datos del dispositivo — usando documento</span>
+                · <span class="text-xs text-amber-600">Sin datos del dispositivo — consulta el dispositivo primero</span>
                 @endif
             </p>
         </div>
@@ -374,6 +373,19 @@ new class extends Component {
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
+                @if(empty($rows))
+                <tr>
+                    <td colspan="5" class="px-4 py-12 text-center text-sm text-gray-400">
+                        <div class="flex flex-col items-center gap-2">
+                            <svg class="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                            </svg>
+                            <p>No hay usuarios del dispositivo aún.</p>
+                            <p class="text-xs">Haz clic en <strong>Consultar dispositivo</strong> y espera ~30 segundos.</p>
+                        </div>
+                    </td>
+                </tr>
+                @endif
                 @foreach($rows as $i => $row)
                 <tr class="transition {{ $row['overwritten'] ? 'bg-emerald-50' : ($row['confirmed'] ? 'bg-indigo-50' : 'hover:bg-gray-50') }}">
 

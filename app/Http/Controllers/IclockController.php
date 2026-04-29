@@ -341,8 +341,10 @@ class IclockController extends Controller
         return match ($status) {
             '0'     => 'check_in',
             '1'     => 'check_out',
-            '4'     => 'break_out',
-            '5'     => 'break_in',
+            '2'     => 'break_out',
+            '3'     => 'break_in',
+            '4'     => 'check_in',  // overtime in → check_in
+            '5'     => 'check_out', // overtime out → check_out
             default => 'unknown',
         };
     }

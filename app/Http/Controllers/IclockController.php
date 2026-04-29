@@ -289,13 +289,25 @@ class IclockController extends Controller
         if (!empty($records)) {
             AttendanceLog::insert($records);
 
-            $inserted = AttendanceLog::where('biometric_source_id', $source->id)
-                ->where('sync_status', 'resolved')
-                ->whereIn('occurred_at', array_column($records, 'occurred_at'))
-                ->get();
+            // Despachar sync para los registros recién insertados con empleado resuelto.
+            // Usamos employee_code + occurred_at en UTC para evitar problemas de timezone.
+            $resolvedCodes = array_column(
+                array_filter($records, fn($r) => $r['sync_status'] === 'resolved'),
+                'occurred_at'
+            );
 
-            foreach ($inserted as $attendanceLog) {
-                SyncAttendanceToFactorial::dispatch($attendanceLog->id);
+            if (!empty($resolvedCodes)) {
+                $inserted = AttendanceLog::where('biometric_source_id', $source->id)
+                    ->where('sync_status', 'resolved')
+                    ->whereIn('occurred_at', array_map(
+                        fn($dt) => $dt instanceof \Carbon\Carbon ? $dt->utc()->toDateTimeString() : $dt,
+                        $resolvedCodes
+                    ))
+                    ->get();
+
+                foreach ($inserted as $attendanceLog) {
+                    SyncAttendanceToFactorial::dispatch($attendanceLog->id);
+                }
             }
         }
 

@@ -84,6 +84,10 @@ class IclockController extends Controller
             return $this->handleAttlog($request, $sn);
         }
 
+        if ($table === 'USERINFO') {
+            return $this->handleUserInfo($request, $sn);
+        }
+
         return $this->plainResponse('OK');
     }
 
@@ -153,6 +157,48 @@ class IclockController extends Controller
 
     // ─── Private: Handlers ───────────────────────────────────────────
 
+    private function handleUserInfo(Request $request, ?string $sn): Response
+    {
+        $source = BiometricSource::where('serial_number', $sn)->first();
+
+        if (!$source) {
+            return $this->plainResponse('OK');
+        }
+
+        $lines = $this->splitRecords($request->getContent());
+        $users = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+
+            // Format: PIN=X\tName=Y\tPassword=\tCard=\tRole=0\t...
+            $fields = [];
+            foreach (explode("\t", $line) as $part) {
+                [$key, $val] = array_pad(explode('=', $part, 2), 2, '');
+                $fields[trim($key)] = trim($val);
+            }
+
+            if (empty($fields['PIN'])) continue;
+
+            $users[] = [
+                'pin'  => $fields['PIN'],
+                'name' => $fields['Name'] ?? '',
+                'card' => $fields['Card'] ?? '',
+                'role' => $fields['Role'] ?? '0',
+            ];
+        }
+
+        $source->update([
+            'device_users'            => $users,
+            'device_users_fetched_at' => now(),
+        ]);
+
+        Log::info('ZKTeco USERINFO recibido', ['sn' => $sn, 'count' => count($users)]);
+
+        return $this->plainResponse('OK');
+    }
+
     private function handleAttlog(Request $request, ?string $sn): void
     {
         $source = BiometricSource::where('serial_number', $sn)
@@ -167,6 +213,29 @@ class IclockController extends Controller
         $lines   = $this->splitRecords($request->getContent());
         $records = [];
         $now     = now();
+
+        // Cargar mappings del dispositivo una sola vez
+        $mappings = \App\Models\BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->whereNotNull('factorial_employee_id')
+            ->pluck('factorial_employee_id', 'external_employee_code');
+
+        // Obtener factorial_company_id de la conexión vinculada al proveedor
+        $factorialCompanyId = \App\Models\FactorialConnection::where('client_id', $source->client_id)
+            ->whereNotNull('factorial_company_id')
+            ->value('factorial_company_id');
+
+        // Cache de access_id → employee_id filtrado por empresa Factorial
+        $employeeQuery = \App\Models\FactorialEmployee::whereNotNull('access_id');
+
+        if ($factorialCompanyId) {
+            $employeeQuery->where('company_id', $factorialCompanyId);
+        } else {
+            $employeeQuery->where('factorial_connection_id', function ($q) use ($source) {
+                $q->select('id')->from('factorial_connections')->where('client_id', $source->client_id);
+            });
+        }
+
+        $accessIdMap = $employeeQuery->pluck('id', 'access_id');
 
         foreach ($lines as $line) {
             $parts = explode("\t", $line);
@@ -194,20 +263,24 @@ class IclockController extends Controller
 
             if ($exists) continue;
 
+            // Resolver employee: 1) tabla de mapeo, 2) access_id directo
+            $employeeId = $mappings[$pin] ?? $accessIdMap[$pin] ?? null;
+
             $records[] = [
-                'client_id'           => $source->client_id,
-                'biometric_source_id' => $source->id,
-                'employee_code'       => $pin,
-                'check_type'          => $this->resolveCheckType($status),
-                'occurred_at'         => $occurredAt,
-                'raw_payload'         => json_encode([
+                'client_id'             => $source->client_id,
+                'biometric_source_id'   => $source->id,
+                'factorial_employee_id' => $employeeId,
+                'employee_code'         => $pin,
+                'check_type'            => $this->resolveCheckType($status),
+                'occurred_at'           => $occurredAt,
+                'raw_payload'           => json_encode([
                     'pin'      => $pin,
                     'time'     => $timestamp,
                     'status'   => $status,
                     'verify'   => $verify,
                     'workcode' => $workcode,
                 ]),
-                'sync_status' => 'pending',
+                'sync_status' => $employeeId ? 'resolved' : 'pending',
                 'created_at'  => $now,
                 'updated_at'  => $now,
             ];
@@ -217,7 +290,7 @@ class IclockController extends Controller
             AttendanceLog::insert($records);
 
             $inserted = AttendanceLog::where('biometric_source_id', $source->id)
-                ->where('sync_status', 'pending')
+                ->where('sync_status', 'resolved')
                 ->whereIn('occurred_at', array_column($records, 'occurred_at'))
                 ->get();
 

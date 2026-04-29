@@ -10,6 +10,7 @@ class AttendanceLog extends Model
     protected $fillable = [
         'client_id',
         'biometric_source_id',
+        'factorial_employee_id',
         'external_event_id',
         'employee_code',
         'check_type',
@@ -34,5 +35,10 @@ class AttendanceLog extends Model
     public function biometricSource(): BelongsTo
     {
         return $this->belongsTo(BiometricSource::class);
+    }
+
+    public function factorialEmployee(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\FactorialEmployee::class);
     }
 }

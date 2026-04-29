@@ -21,11 +21,15 @@ class BiometricSource extends Model
         'settings',
         'status',
         'last_ping_at',
+        'device_users',
+        'device_users_fetched_at',
     ];
 
     protected $casts = [
-        'settings'     => 'array',
-        'last_ping_at' => 'datetime',
+        'settings'                => 'array',
+        'device_users'            => 'array',
+        'last_ping_at'            => 'datetime',
+        'device_users_fetched_at' => 'datetime',
     ];
 
     public function client(): BelongsTo

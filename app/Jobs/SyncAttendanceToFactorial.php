@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Models\AttendanceLog;
-use App\Models\BiometricUserSync;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Services\FactorialService;
@@ -37,21 +36,17 @@ class SyncAttendanceToFactorial implements ShouldQueue
             return;
         }
 
-        // 1. Buscar mapeo PIN → empleado Factorial
-        $sync = BiometricUserSync::where('external_employee_code', $log->employee_code)
-            ->where('client_id', $log->client_id)
-            ->first();
-
-        if (!$sync) {
-            $this->fail($log, "No se encontró mapeo para employee_code: {$log->employee_code}");
+        // 1. Verificar que el log tiene empleado resuelto
+        if (!$log->factorial_employee_id) {
+            $this->fail($log, "factorial_employee_id no resuelto para employee_code: {$log->employee_code}");
             return;
         }
 
         // 2. Buscar empleado Factorial
-        $employee = FactorialEmployee::find($sync->factorial_employee_id);
+        $employee = FactorialEmployee::find($log->factorial_employee_id);
 
         if (!$employee) {
-            $this->fail($log, "No se encontró factorial_employee_id: {$sync->factorial_employee_id}");
+            $this->fail($log, "No se encontró factorial_employee_id: {$log->factorial_employee_id}");
             return;
         }
 

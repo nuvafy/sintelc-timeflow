@@ -26,6 +26,10 @@ Route::view('clients', 'clients')
     ->middleware(['auth'])
     ->name('clients');
 
+Route::view('pin-mapping', 'pin-mapping')
+    ->middleware(['auth'])
+    ->name('pin-mapping');
+
 Route::view('employees', 'employees')
     ->middleware(['auth'])
     ->name('employees');

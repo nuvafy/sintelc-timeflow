@@ -313,6 +313,8 @@ new class extends Component {
                         </button>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <a href="{{ route('pin-mapping', ['source' => $device->id]) }}"
+                            class="text-purple-600 hover:text-purple-900 text-sm">Mapear PINs</a>
                         <button wire:click="openPush({{ $device->id }})"
                             title="Enviar usuarios de Factorial al dispositivo"
                             class="text-emerald-600 hover:text-emerald-900">

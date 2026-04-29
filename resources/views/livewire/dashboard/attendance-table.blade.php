@@ -17,8 +17,11 @@ new class extends Component {
 
     public function with(): array
     {
-        $logs = AttendanceLog::with('biometricSource')
-            ->when($this->search, fn($q) => $q->where('employee_code', 'like', "%{$this->search}%"))
+        $logs = AttendanceLog::with(['biometricSource', 'factorialEmployee'])
+            ->when($this->search, fn($q) => $q->where(function ($q2) {
+                $q2->where('employee_code', 'like', "%{$this->search}%")
+                   ->orWhereHas('factorialEmployee', fn($e) => $e->where('full_name', 'like', "%{$this->search}%"));
+            }))
             ->when($this->statusFilter, fn($q) => $q->where('sync_status', $this->statusFilter))
             ->when($this->checkTypeFilter, fn($q) => $q->where('check_type', $this->checkTypeFilter))
             ->orderByDesc('occurred_at')
@@ -36,12 +39,13 @@ new class extends Component {
             <input
                 wire:model.live.debounce.300ms="search"
                 type="text"
-                placeholder="Buscar por código empleado..."
+                placeholder="Buscar por nombre o código..."
                 class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
             <select wire:model.live="statusFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todos los estados</option>
                 <option value="pending">Pendiente</option>
+                <option value="resolved">Resuelto</option>
                 <option value="synced">Sincronizado</option>
                 <option value="failed">Fallido</option>
             </select>
@@ -69,8 +73,14 @@ new class extends Component {
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($logs as $log)
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {{ $log->employee_code }}
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @if($log->factorialEmployee)
+                            <p class="text-sm font-medium text-gray-900">{{ $log->factorialEmployee->full_name }}</p>
+                            <p class="text-xs text-gray-400 font-mono">PIN {{ $log->employee_code }}</p>
+                        @else
+                            <p class="text-sm font-medium text-gray-500 font-mono">{{ $log->employee_code }}</p>
+                            <p class="text-xs text-amber-500">Sin resolver</p>
+                        @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         @php
@@ -89,8 +99,8 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         @php
-                            $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'synced' => 'bg-green-100 text-green-800', 'failed' => 'bg-red-100 text-red-800'];
-                            $statusLabels = ['pending' => 'Pendiente', 'synced' => 'Sincronizado', 'failed' => 'Fallido'];
+                            $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'resolved' => 'bg-indigo-100 text-indigo-700', 'synced' => 'bg-green-100 text-green-800', 'failed' => 'bg-red-100 text-red-800'];
+                            $statusLabels = ['pending' => 'Pendiente', 'resolved' => 'Resuelto', 'synced' => 'Sincronizado', 'failed' => 'Fallido'];
                         @endphp
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusColors[$log->sync_status] ?? 'bg-gray-100 text-gray-800' }}">
                             {{ $statusLabels[$log->sync_status] ?? $log->sync_status }}

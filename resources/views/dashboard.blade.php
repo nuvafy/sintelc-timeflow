@@ -11,11 +11,15 @@
             {{-- Stats --}}
             <livewire:dashboard.attendance-stats />
 
-            {{-- Tabla --}}
-            <livewire:dashboard.attendance-table />
-
-            {{-- Dispositivos --}}
-            <livewire:dashboard.device-status />
+            {{-- Tabla + Dispositivos --}}
+            <div class="flex gap-6 items-start">
+                <div class="flex-1 min-w-0">
+                    <livewire:dashboard.attendance-table />
+                </div>
+                <div class="w-72 flex-shrink-0">
+                    <livewire:dashboard.device-status />
+                </div>
+            </div>
 
         </div>
     </div>

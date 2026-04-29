@@ -17,14 +17,16 @@ new class extends Component {
     }
 }; ?>
 
-<div>
-    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Dispositivos biométricos</h3>
+<div class="bg-white shadow rounded-lg">
+    <div class="px-4 py-4 border-b border-gray-200">
+        <h3 class="text-sm font-medium text-gray-900">Dispositivos biométricos</h3>
+    </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="divide-y divide-gray-200">
         @forelse($devices as $device)
         @php $isActive = $device->status === 'active'; @endphp
-        <div class="bg-white shadow rounded-lg px-5 py-4 flex items-center justify-between">
-            <div class="flex items-center gap-3 min-w-0">
+        <div class="px-4 py-3 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
                 <span class="h-2.5 w-2.5 rounded-full flex-shrink-0 {{ $isActive ? 'bg-green-400' : 'bg-gray-300' }}"></span>
                 <div class="min-w-0">
                     <p class="text-sm font-medium text-gray-900 truncate">{{ $device->name ?? $device->serial_number }}</p>
@@ -32,15 +34,13 @@ new class extends Component {
                     <p class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</p>
                 </div>
             </div>
-            <div class="text-right flex-shrink-0 ml-3">
+            <div class="text-right flex-shrink-0">
                 <p class="text-sm font-semibold text-gray-900">{{ $device->today_count }} <span class="text-xs font-normal text-gray-400">hoy</span></p>
                 <p class="text-xs text-gray-400">{{ $device->total_count }} total</p>
             </div>
         </div>
         @empty
-        <div class="col-span-3 bg-white shadow rounded-lg px-6 py-8 text-center text-sm text-gray-500">
-            No hay dispositivos registrados.
-        </div>
+        <div class="px-4 py-8 text-center text-sm text-gray-500">Sin dispositivos.</div>
         @endforelse
     </div>
 </div>

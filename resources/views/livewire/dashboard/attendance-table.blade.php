@@ -104,8 +104,8 @@ new class extends Component {
                 <option value="">Todos los tipos</option>
                 <option value="check_in">Entrada</option>
                 <option value="check_out">Salida</option>
-                <option value="break_out">Inicio pausa</option>
-                <option value="break_in">Fin pausa</option>
+                <option value="break_in">Inicio pausa</option>
+                <option value="break_out">Fin pausa</option>
             </select>
         </div>
     </div>
@@ -135,8 +135,8 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         @php
-                            $typeLabels = ['check_in' => 'Entrada', 'check_out' => 'Salida', 'break_out' => 'Inicio pausa', 'break_in' => 'Fin pausa'];
-                            $typeColors = ['check_in' => 'bg-green-100 text-green-800', 'check_out' => 'bg-blue-100 text-blue-800', 'break_out' => 'bg-yellow-100 text-yellow-800', 'break_in' => 'bg-purple-100 text-purple-800'];
+                            $typeLabels = ['check_in' => 'Entrada', 'check_out' => 'Salida', 'break_in' => 'Inicio pausa', 'break_out' => 'Fin pausa'];
+                            $typeColors = ['check_in' => 'bg-green-100 text-green-800', 'check_out' => 'bg-blue-100 text-blue-800', 'break_in' => 'bg-yellow-100 text-yellow-800', 'break_out' => 'bg-purple-100 text-purple-800'];
                         @endphp
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $typeColors[$log->check_type] ?? 'bg-gray-100 text-gray-800' }}">
                             {{ $typeLabels[$log->check_type] ?? $log->check_type }}

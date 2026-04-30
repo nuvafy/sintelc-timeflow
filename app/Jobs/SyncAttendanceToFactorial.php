@@ -74,32 +74,16 @@ class SyncAttendanceToFactorial implements ShouldQueue
         try {
             $service = new FactorialService($connection);
 
-            if (in_array($log->check_type, ['break_out', 'break_in'])) {
-                $configs = $service->getBreakConfigurations();
-                $breakConfigId = $configs[0]['id'] ?? null;
-
-                if (!$breakConfigId) {
-                    // Sin break config en Factorial: marcar como synced y esperar
-                    // a que el cliente configure las pausas en Factorial
-                    $log->update([
-                        'sync_status'  => 'synced',
-                        'processed_at' => now(),
-                        'sync_error'   => 'Sin break_configuration en Factorial — pendiente de configuración',
-                    ]);
-                    Log::info('SyncAttendanceToFactorial: break ignorado, sin configuración en Factorial', [
-                        'attendance_log_id' => $log->id,
-                    ]);
-                    return;
-                }
-
-                $payload['time_settings_break_configuration_id'] = $breakConfigId;
-            }
-
+            // Mapeo a Factorial:
+            // check_in  (0 Entrada)      → clock_in
+            // check_out (1 Salida)       → clock_out
+            // break_out (2 Descanso)     → clock_out  (sale a descansar)
+            // break_in  (3 Fin Descanso) → clock_in   (regresa del descanso)
             $response = match ($log->check_type) {
                 'check_in'  => $service->clockIn($payload),
                 'check_out' => $service->clockOut($payload),
-                'break_out' => $service->breakStart($payload),
-                'break_in'  => $service->breakEnd($payload),
+                'break_out' => $service->clockOut($payload),
+                'break_in'  => $service->clockIn($payload),
                 default     => null,
             };
 

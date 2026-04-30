@@ -77,13 +77,13 @@ class SyncAttendanceToFactorial implements ShouldQueue
             // Mapeo a Factorial:
             // check_in  (0 Entrada)      → clock_in
             // check_out (1 Salida)       → clock_out
-            // break_out (2 Descanso)     → clock_out  (sale a descansar)
-            // break_in  (3 Fin Descanso) → clock_in   (regresa del descanso)
+            // break_in  (2 Descanso)     → clock_out  (cierra turno, sale a descansar)
+            // break_out (3 Fin Descanso) → clock_in   (abre turno, regresa del descanso)
             $response = match ($log->check_type) {
                 'check_in'  => $service->clockIn($payload),
                 'check_out' => $service->clockOut($payload),
-                'break_out' => $service->clockOut($payload),
-                'break_in'  => $service->clockIn($payload),
+                'break_in'  => $service->clockOut($payload),
+                'break_out' => $service->clockIn($payload),
                 default     => null,
             };
 

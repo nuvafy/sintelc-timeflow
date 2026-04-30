@@ -96,6 +96,7 @@ new class extends Component {
                 <option value="pending">Pendiente</option>
                 <option value="resolved">Resuelto</option>
                 <option value="synced">Sincronizado</option>
+                <option value="incomplete">Incompleto</option>
                 <option value="failed">Fallido</option>
             </select>
 
@@ -150,8 +151,8 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         @php
-                            $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'resolved' => 'bg-indigo-100 text-indigo-700', 'synced' => 'bg-green-100 text-green-800', 'failed' => 'bg-red-100 text-red-800'];
-                            $statusLabels = ['pending' => 'Pendiente', 'resolved' => 'Resuelto', 'synced' => 'Sincronizado', 'failed' => 'Fallido'];
+                            $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'resolved' => 'bg-indigo-100 text-indigo-700', 'synced' => 'bg-green-100 text-green-800', 'incomplete' => 'bg-gray-100 text-gray-600', 'failed' => 'bg-red-100 text-red-800'];
+                            $statusLabels = ['pending' => 'Pendiente', 'resolved' => 'Resuelto', 'synced' => 'Sincronizado', 'incomplete' => 'Incompleto', 'failed' => 'Fallido'];
                         @endphp
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusColors[$log->sync_status] ?? 'bg-gray-100 text-gray-800' }}">
                             {{ $statusLabels[$log->sync_status] ?? $log->sync_status }}

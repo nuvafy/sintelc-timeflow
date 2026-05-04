@@ -305,7 +305,14 @@ class IclockController extends Controller
                     ))
                     ->get();
 
+                // Whitelist: si FACTORIAL_SYNC_WHITELIST está definida, solo sincronizar esos PINs.
+                // Dejar vacío o quitar la variable para sincronizar todos (banderazo).
+                $whitelist = array_filter(explode(',', env('FACTORIAL_SYNC_WHITELIST', '')));
+
                 foreach ($inserted as $attendanceLog) {
+                    if (!empty($whitelist) && !in_array($attendanceLog->employee_code, $whitelist)) {
+                        continue; // fuera de whitelist, no sincronizar aún
+                    }
                     SyncAttendanceToFactorial::dispatch($attendanceLog->id);
                 }
             }

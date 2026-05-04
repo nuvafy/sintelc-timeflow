@@ -106,15 +106,27 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 'factorial_id'      => $employee->factorial_id,
             ]);
         } catch (\Illuminate\Http\Client\RequestException $e) {
-            // 409 = ya existe en Factorial, se trata como sincronizado
+            // 409 puede significar dos cosas distintas en Factorial:
+            // A) Registro ya existe (duplicado real) → tratar como synced
+            // B) Conflicto con turno programado     → tratar como failed
             if ($e->response->status() === 409) {
+                $body    = $e->response->json() ?? [];
+                $message = $body['errors']['exception'][0] ?? ($body['message'] ?? '');
+
+                // Si el mensaje menciona "turno" es un conflicto de agenda, no un duplicado
+                if (str_contains(strtolower($message), 'turno') || str_contains(strtolower($message), 'shift')) {
+                    $this->fail($log, '409 conflicto de turno: ' . $message);
+                    return; // no reintentar: el error es de configuración en Factorial
+                }
+
+                // Duplicado real: el fichaje ya existía en Factorial
                 $log->update([
                     'sync_status'  => 'synced',
                     'processed_at' => now(),
                     'sync_error'   => null,
                 ]);
 
-                Log::info('SyncAttendanceToFactorial: 409 ya existía en Factorial, marcado como synced', [
+                Log::info('SyncAttendanceToFactorial: 409 duplicado real, marcado como synced', [
                     'attendance_log_id' => $log->id,
                 ]);
 

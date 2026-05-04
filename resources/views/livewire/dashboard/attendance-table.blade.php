@@ -149,7 +149,7 @@ new class extends Component {
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ $log->biometricSource?->name ?? '—' }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 max-w-xs">
                         @php
                             $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'resolved' => 'bg-indigo-100 text-indigo-700', 'synced' => 'bg-green-100 text-green-800', 'incomplete' => 'bg-gray-100 text-gray-600', 'failed' => 'bg-red-100 text-red-800'];
                             $statusLabels = ['pending' => 'Pendiente', 'resolved' => 'Resuelto', 'synced' => 'Sincronizado', 'incomplete' => 'Incompleto', 'failed' => 'Fallido'];
@@ -158,7 +158,7 @@ new class extends Component {
                             {{ $statusLabels[$log->sync_status] ?? $log->sync_status }}
                         </span>
                         @if($log->sync_error)
-                            <p class="text-xs text-red-500 mt-1 break-words whitespace-pre-wrap max-w-xs">{{ $log->sync_error }}</p>
+                            <p class="text-xs text-red-500 mt-1 break-all">{{ $log->sync_error }}</p>
                         @endif
                     </td>
                 </tr>

@@ -158,7 +158,7 @@ new class extends Component {
                             {{ $statusLabels[$log->sync_status] ?? $log->sync_status }}
                         </span>
                         @if($log->sync_error)
-                            <p class="text-xs text-red-500 mt-1 truncate max-w-xs" title="{{ $log->sync_error }}">{{ Str::limit($log->sync_error, 40) }}</p>
+                            <p class="text-xs text-red-500 mt-1 break-words whitespace-pre-wrap max-w-xs">{{ $log->sync_error }}</p>
                         @endif
                     </td>
                 </tr>

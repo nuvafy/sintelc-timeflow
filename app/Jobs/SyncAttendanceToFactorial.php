@@ -165,12 +165,6 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
     // ── Helpers ────────────────────────────────────────────────────
 
-    private function isPolicyConflict(string $message): bool
-    {
-        $lower = strtolower($message);
-        return str_contains($lower, 'turno') || str_contains($lower, 'shift') || str_contains($lower, 'política');
-    }
-
     private function fail(AttendanceLog $log, string $error): void
     {
         $log->update(['sync_status' => 'failed', 'sync_error' => $error]);

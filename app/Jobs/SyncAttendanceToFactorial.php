@@ -107,30 +107,6 @@ class SyncAttendanceToFactorial implements ShouldQueue
             $body    = $e->response->json() ?? [];
             $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
 
-            // 409 duplicado → ya existe en Factorial, marcar como synced
-            if ($status === 409 && !$this->isPolicyConflict($message)) {
-                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null, 'sync_note' => '409 duplicado en Factorial']);
-                Log::info('SyncAttendanceToFactorial: 409 duplicado, marcado como synced', ['attendance_log_id' => $log->id]);
-                return;
-            }
-
-            // Éxito idempotente: el estado en Factorial ya es el que queremos
-            $isClockIn  = in_array($log->check_type, ['check_in', 'break_out']);
-            $isClockOut = in_array($log->check_type, ['check_out', 'break_in']);
-
-            if ($isClockIn && $this->isAlreadyClockedIn($message)) {
-                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null, 'sync_note' => 'Idempotente: ya estaba fichado en Factorial']);
-                Log::info('SyncAttendanceToFactorial: ya estaba fichado (clockIn idempotente)', ['attendance_log_id' => $log->id]);
-                return;
-            }
-
-            if ($isClockOut && $this->isAlreadyClockedOut($message)) {
-                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null, 'sync_note' => 'Idempotente: ya estaba fichado fuera en Factorial']);
-                Log::info('SyncAttendanceToFactorial: ya estaba fichado fuera (clockOut idempotente)', ['attendance_log_id' => $log->id]);
-                return;
-            }
-
-            // Cualquier otro error → intentar toggle
             Log::warning('SyncAttendanceToFactorial: método principal falló, intentando toggle', [
                 'attendance_log_id' => $log->id,
                 'status'            => $status,
@@ -188,20 +164,6 @@ class SyncAttendanceToFactorial implements ShouldQueue
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    private function isAlreadyClockedIn(string $message): bool
-    {
-        $lower = strtolower($message);
-        return str_contains($lower, 'turno en curso') || str_contains($lower, 'shift in progress') || str_contains($lower, 'already clocked in');
-    }
-
-    private function isAlreadyClockedOut(string $message): bool
-    {
-        $lower = strtolower($message);
-        return str_contains($lower, 'no existe') && str_contains($lower, 'turno')
-            || str_contains($lower, 'no open shift')
-            || str_contains($lower, 'already clocked out');
-    }
 
     private function isPolicyConflict(string $message): bool
     {

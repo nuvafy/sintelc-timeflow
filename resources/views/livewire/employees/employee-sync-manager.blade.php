@@ -196,8 +196,8 @@ new class extends Component {
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Factorial</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Vendor</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ID Factorial</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ID Vendor</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapeado</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
@@ -212,10 +212,10 @@ new class extends Component {
                         <div class="text-sm font-medium text-gray-900">{{ $employee->full_name }}</div>
                         <div class="text-xs text-gray-500">{{ $employee->email }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700 text-center">
                         {{ $employee->factorial_id }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm">
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-center">
                         @if(isset($biometricIds[$employee->id]))
                             <span class="text-gray-700">{{ $biometricIds[$employee->id] }}</span>
                         @else

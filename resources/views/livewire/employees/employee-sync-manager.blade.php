@@ -66,7 +66,7 @@ new class extends Component {
             return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients];
         }
 
-        $query = FactorialEmployee::with(['biometricUserSyncs'])
+        $query = FactorialEmployee::query()
             ->where('client_id', $this->client_id)
             ->when($this->search, fn($q) => $q->where(function ($q2) {
                 $q2->where('full_name', 'like', "%{$this->search}%")
@@ -192,16 +192,10 @@ new class extends Component {
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($employees as $employee)
                 @php
-                    $syncs      = $employee->biometricUserSyncs;
-                    $hasPending = $syncs->contains('sync_status', 'pending');
-                    $hasFailed  = $syncs->contains('sync_status', 'failed');
-                    $hasSynced  = $syncs->contains('sync_status', 'synced');
-                    $syncLabel  = match(true) {
-                        $hasPending => ['bg-yellow-100 text-yellow-800', 'Pendiente'],
-                        $hasFailed  => ['bg-red-100 text-red-800', 'Error'],
-                        $hasSynced  => ['bg-green-100 text-green-800', 'Sincronizado'],
-                        default     => ['bg-gray-100 text-gray-600', 'Sin sync'],
-                    };
+                    // Sincronizado = tenemos el PIN biométrico (access_id) Y el ID de Factorial vinculados en nuestra BD
+                    $syncLabel = $employee->access_id
+                        ? ['bg-green-100 text-green-800', 'Sincronizado']
+                        : ['bg-gray-100 text-gray-600', 'Sin PIN biométrico'];
                 @endphp
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">

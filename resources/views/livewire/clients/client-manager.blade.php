@@ -248,10 +248,9 @@ new class extends Component {
                 </div>
                 @endif
 
-                {{-- Conexión Factorial + Proveedor biométrico --}}
+                {{-- Conexiones Factorial --}}
                 <div class="space-y-2">
                     <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Conexiones</p>
-                    {{-- Factorial --}}
                     @forelse($client->factorialConnections as $conn)
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2 text-sm text-gray-700">
@@ -265,13 +264,15 @@ new class extends Component {
                     @empty
                     <p class="text-sm text-gray-400 italic">Sin conexión Factorial</p>
                     @endforelse
-                    {{-- Proveedor biométrico --}}
+                </div>
+
+                {{-- Proveedores biométricos --}}
+                <div class="space-y-2">
+                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Proveedores biométricos</p>
                     @forelse($client->biometricProviders as $provider)
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2 text-sm text-gray-700">
-                            <span class="text-xs text-gray-400">Proveedor biométrico</span>
-                            <span class="font-mono uppercase text-sm">{{ $provider->vendor }}</span>
-                        </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                        {{ $provider->name }}
+                        <span class="text-xs text-gray-400 font-mono uppercase">{{ $provider->vendor }}</span>
                     </div>
                     @empty
                     <div class="flex items-center justify-between">

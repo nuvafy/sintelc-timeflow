@@ -63,7 +63,7 @@ new class extends Component {
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients];
+            return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -81,11 +81,21 @@ new class extends Component {
             ->distinct('employee_code')
             ->count('employee_code');
 
+        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
+        $vendorName = $provider?->vendor ?? 'Biométrico';
+
+        $mappedEmployeeIds = BiometricUserSync::where('client_id', $this->client_id)
+            ->whereNotNull('factorial_employee_id')
+            ->pluck('factorial_employee_id')
+            ->flip();
+
         return [
-            'employees'       => $query->paginate(20),
-            'unresolved'      => collect(),
-            'unresolvedCount' => $unresolvedCount,
-            'clients'         => $clients,
+            'employees'        => $query->paginate(20),
+            'unresolved'       => collect(),
+            'unresolvedCount'  => $unresolvedCount,
+            'clients'          => $clients,
+            'vendorName'       => $vendorName,
+            'mappedEmployeeIds'=> $mappedEmployeeIds,
         ];
     }
 
@@ -184,29 +194,37 @@ new class extends Component {
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN biométrico</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Factorial</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sync biométrico</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Factorial</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Vendor</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapeado</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($employees as $employee)
                 @php
-                    // Sincronizado = tenemos el PIN biométrico (access_id) Y el ID de Factorial vinculados en nuestra BD
-                    $syncLabel = $employee->access_id
-                        ? ['bg-green-100 text-green-800', 'Sincronizado']
-                        : ['bg-gray-100 text-gray-600', 'Sin PIN biométrico'];
+                    $isMapped = isset($mappedEmployeeIds[$employee->id]);
                 @endphp
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $employee->full_name }}</div>
                         <div class="text-xs text-gray-500">{{ $employee->email }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
+                        {{ $employee->factorial_id }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm">
                         @if($employee->access_id)
-                            <span class="font-mono text-sm text-gray-800">{{ $employee->access_id }}</span>
+                            <span class="text-gray-700">{{ $employee->access_id }}</span>
                         @else
-                            <span class="text-xs text-red-500 font-medium">Sin PIN</span>
+                            <span class="text-red-400 text-xs">Sin asignar</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @if($isMapped)
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Mapeado</span>
+                        @else
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500">Sin mapear</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -218,15 +236,10 @@ new class extends Component {
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">Inactivo</span>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $syncLabel[0] }}">
-                            {{ $syncLabel[1] }}
-                        </span>
-                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="4" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
                         @if(!$this->client_id)
                             Selecciona una empresa para ver sus empleados.
                         @else

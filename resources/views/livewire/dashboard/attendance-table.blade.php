@@ -40,7 +40,7 @@ new class extends Component {
 
         // Sin filtros: últimos 5 registros más recientes
         if (!$this->hasFilters()) {
-            $logs = $query->limit(10)->get();
+            $logs = $query->limit(5)->get();
             return [
                 'logs'    => $logs,
                 'clients' => Client::orderBy('name')->get(),
@@ -124,7 +124,7 @@ new class extends Component {
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($logs as $log)
-                <tr class="hover:bg-gray-50">
+                <tr class="hover:bg-gray-50 last:border-b-0">
                     <td class="px-6 py-4 whitespace-nowrap">
                         @if($log->factorialEmployee)
                             <p class="text-sm font-medium text-gray-900">{{ $log->factorialEmployee->full_name }}</p>

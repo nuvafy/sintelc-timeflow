@@ -146,7 +146,7 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
                         <p>{{ $log->occurred_at->format('d/m/Y') }}</p>
-                        <p class="font-mono">{{ $log->occurred_at->format('H:i:s') }}</p>
+                        <p>{{ $log->occurred_at->format('H:i:s') }}</p>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ $log->biometricSource?->name ?? '—' }}

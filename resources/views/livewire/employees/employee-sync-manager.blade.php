@@ -205,7 +205,7 @@ new class extends Component {
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($employees as $employee)
                 @php
-                    $isMapped = isset($mappedEmployeeIds[$employee->id]);
+                    $isMapped = isset($biometricIds[$employee->id]);
                 @endphp
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">

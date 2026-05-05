@@ -217,15 +217,15 @@ new class extends Component {
             <div class="px-5 py-4 flex items-center justify-between border-b border-gray-100">
                 <div class="min-w-0 flex-1">
                     <h3 class="text-base font-semibold text-gray-900 truncate">{{ $client->name }}</h3>
-                    <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $client->slug }}</p>
                     @if($client->contact_email)
-                    <div class="flex items-center gap-1 mt-1 text-xs text-gray-400">
+                    <div class="flex items-center gap-1 mt-0.5 text-xs text-gray-400">
                         <svg class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                         </svg>
                         <span>{{ $client->contact_email }}</span>
                     </div>
                     @endif
+                    <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $client->slug }}</p>
                 </div>
                 <div class="flex items-center gap-3 ml-3 flex-shrink-0">
                     <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">

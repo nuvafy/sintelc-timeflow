@@ -86,38 +86,31 @@ class FactorialService
         )->json();
     }
 
-    public function clockIn(array $payload): array
+    public function getShifts(array $query = []): array
+    {
+        $response = $this->request(
+            'get',
+            '/api/2026-04-01/resources/attendance/shifts',
+            ['query' => $query]
+        )->json();
+
+        return $response['data'] ?? $response;
+    }
+
+    public function createShift(array $payload): array
     {
         return $this->request(
             'post',
-            '/api/2026-04-01/resources/attendance/shifts/clock_in',
+            '/api/2026-04-01/resources/attendance/shifts',
             ['json' => $payload]
         )->json();
     }
 
-    public function clockOut(array $payload): array
+    public function updateShift(int $shiftId, array $payload): array
     {
         return $this->request(
-            'post',
-            '/api/2026-04-01/resources/attendance/shifts/clock_out',
-            ['json' => $payload]
-        )->json();
-    }
-
-    public function breakStart(array $payload): array
-    {
-        return $this->request(
-            'post',
-            '/api/2026-04-01/resources/attendance/shifts/break_start',
-            ['json' => $payload]
-        )->json();
-    }
-
-    public function breakEnd(array $payload): array
-    {
-        return $this->request(
-            'post',
-            '/api/2026-04-01/resources/attendance/shifts/break_end',
+            'put',
+            "/api/2026-04-01/resources/attendance/shifts/{$shiftId}",
             ['json' => $payload]
         )->json();
     }

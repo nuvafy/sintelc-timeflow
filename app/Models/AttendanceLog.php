@@ -11,6 +11,8 @@ class AttendanceLog extends Model
         'client_id',
         'biometric_source_id',
         'factorial_employee_id',
+        'factorial_shift_id',
+        'shift_closed',
         'external_event_id',
         'employee_code',
         'check_type',
@@ -22,9 +24,10 @@ class AttendanceLog extends Model
     ];
 
     protected $casts = [
-        'occurred_at' => 'datetime',
-        'processed_at' => 'datetime',
-        'raw_payload' => 'array',
+        'occurred_at'   => 'datetime',
+        'processed_at'  => 'datetime',
+        'raw_payload'   => 'array',
+        'shift_closed'  => 'boolean',
     ];
 
     public function client(): BelongsTo

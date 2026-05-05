@@ -63,7 +63,7 @@ new class extends Component {
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect()];
+            return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -84,10 +84,11 @@ new class extends Component {
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         $vendorName = $provider?->vendor ?? 'Biométrico';
 
-        $mappedEmployeeIds = BiometricUserSync::where('client_id', $this->client_id)
+        $biometricIds = BiometricUserSync::where('client_id', $this->client_id)
             ->whereNotNull('factorial_employee_id')
-            ->pluck('factorial_employee_id')
-            ->flip();
+            ->pluck('external_employee_code', 'factorial_employee_id');
+
+        $mappedEmployeeIds = $biometricIds->flip();
 
         return [
             'employees'        => $query->paginate(20),
@@ -95,7 +96,8 @@ new class extends Component {
             'unresolvedCount'  => $unresolvedCount,
             'clients'          => $clients,
             'vendorName'       => $vendorName,
-            'mappedEmployeeIds'=> $mappedEmployeeIds,
+            'mappedEmployeeIds' => $mappedEmployeeIds,
+            'biometricIds'      => $biometricIds,
         ];
     }
 
@@ -214,17 +216,17 @@ new class extends Component {
                         {{ $employee->factorial_id }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap font-mono text-sm">
-                        @if($employee->access_id)
-                            <span class="text-gray-700">{{ $employee->access_id }}</span>
+                        @if(isset($biometricIds[$employee->id]))
+                            <span class="text-gray-700">{{ $biometricIds[$employee->id] }}</span>
                         @else
                             <span class="text-red-400 text-xs">Sin asignar</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         @if($isMapped)
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Mapeado</span>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Listo</span>
                         @else
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500">Sin mapear</span>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">Pendiente</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">

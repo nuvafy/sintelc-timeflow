@@ -191,7 +191,8 @@ new class extends Component {
 
     public function saveMapping(): void
     {
-        $source = BiometricSource::findOrFail($this->sourceId);
+        $source   = BiometricSource::findOrFail($this->sourceId);
+        $resolved = 0;
 
         foreach ($this->newRows as $row) {
             if (!$row['confirmed'] || !$row['employee_id']) continue;
@@ -208,12 +209,14 @@ new class extends Component {
                     'pin_overwritten'       => false,
                 ]
             );
+
+            $resolved += $this->resolveLogsForMapping($source, $row['pin'], $row['employee_id']);
         }
 
         $this->loadMappedRows();
         $this->loadFactorialRows();
         $this->buildNewRows();
-        $this->notice = 'Mapeo guardado correctamente.';
+        $this->notice = 'Mapeo guardado.' . ($resolved > 0 ? " {$resolved} registro(s) histórico(s) resueltos." : '');
     }
 
     public function overwritePins(): void
@@ -299,28 +302,53 @@ new class extends Component {
         $source = BiometricSource::findOrFail($this->sourceId);
         $saved  = 0;
 
+        $resolved = 0;
+
         foreach ($this->factorialRows as $row) {
             if (!$row['dirty'] || trim($row['biometric_id']) === '') continue;
 
+            $biometricId = trim($row['biometric_id']);
+
             BiometricUserSync::updateOrCreate(
                 [
-                    'biometric_provider_id'  => $source->biometric_provider_id,
-                    'factorial_employee_id'  => $row['employee_id'],
+                    'biometric_provider_id' => $source->biometric_provider_id,
+                    'factorial_employee_id' => $row['employee_id'],
                 ],
                 [
-                    'client_id'             => $source->client_id,
-                    'external_employee_code' => trim($row['biometric_id']),
-                    'sync_status'           => 'mapped',
-                    'pin_overwritten'       => false,
+                    'client_id'              => $source->client_id,
+                    'external_employee_code' => $biometricId,
+                    'sync_status'            => 'mapped',
+                    'pin_overwritten'        => false,
                 ]
             );
 
+            $resolved += $this->resolveLogsForMapping($source, $biometricId, $row['employee_id']);
             $saved++;
         }
 
         $this->loadMappedRows();
         $this->loadFactorialRows();
-        $this->notice = "{$saved} mapeo(s) guardado(s) correctamente.";
+        $this->notice = "{$saved} mapeo(s) guardado(s)." . ($resolved > 0 ? " {$resolved} registro(s) histórico(s) resueltos." : '');
+    }
+
+    // ── Resolución automática de logs históricos ───────────────────
+
+    protected function resolveLogsForMapping(BiometricSource $source, string $employeeCode, int $factorialEmployeeId): int
+    {
+        $logs = \App\Models\AttendanceLog::where('biometric_source_id', $source->id)
+            ->where('employee_code', $employeeCode)
+            ->whereNull('factorial_employee_id')
+            ->get();
+
+        foreach ($logs as $log) {
+            $log->update([
+                'factorial_employee_id' => $factorialEmployeeId,
+                'sync_status'           => 'resolved',
+            ]);
+            SyncAttendanceToFactorial::dispatch($log->id);
+        }
+
+        return $logs->count();
     }
 
     // ── Helpers ────────────────────────────────────────────────────

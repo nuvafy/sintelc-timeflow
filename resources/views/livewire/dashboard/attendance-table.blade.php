@@ -40,7 +40,7 @@ new class extends Component {
 
         // Sin filtros: últimos 5 registros más recientes
         if (!$this->hasFilters()) {
-            $logs = $query->limit(5)->get();
+            $logs = $query->limit(10)->get();
             return [
                 'logs'    => $logs,
                 'clients' => Client::orderBy('name')->get(),
@@ -111,7 +111,7 @@ new class extends Component {
         </div>
     </div>
 
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto overflow-hidden rounded-b-lg">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>

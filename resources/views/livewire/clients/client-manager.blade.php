@@ -270,8 +270,7 @@ new class extends Component {
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2 text-sm text-gray-700">
                             <span class="text-xs text-gray-400">Proveedor biométrico</span>
-                            {{ $provider->name }}
-                            <span class="text-xs text-gray-400 font-mono uppercase">{{ $provider->vendor }}</span>
+                            <span class="font-mono uppercase text-sm">{{ $provider->vendor }}</span>
                         </div>
                     </div>
                     @empty

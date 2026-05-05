@@ -113,7 +113,23 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            // 409 por política o cualquier otro error → intentar toggle
+            // Éxito idempotente: el estado en Factorial ya es el que queremos
+            $isClockIn  = in_array($log->check_type, ['check_in', 'break_out']);
+            $isClockOut = in_array($log->check_type, ['check_out', 'break_in']);
+
+            if ($isClockIn && $this->isAlreadyClockedIn($message)) {
+                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null]);
+                Log::info('SyncAttendanceToFactorial: ya estaba fichado (clockIn idempotente)', ['attendance_log_id' => $log->id]);
+                return;
+            }
+
+            if ($isClockOut && $this->isAlreadyClockedOut($message)) {
+                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null]);
+                Log::info('SyncAttendanceToFactorial: ya estaba fichado fuera (clockOut idempotente)', ['attendance_log_id' => $log->id]);
+                return;
+            }
+
+            // Cualquier otro error → intentar toggle
             Log::warning('SyncAttendanceToFactorial: método principal falló, intentando toggle', [
                 'attendance_log_id' => $log->id,
                 'status'            => $status,
@@ -170,6 +186,20 @@ class SyncAttendanceToFactorial implements ShouldQueue
     }
 
     // ── Helpers ────────────────────────────────────────────────────
+
+    private function isAlreadyClockedIn(string $message): bool
+    {
+        $lower = strtolower($message);
+        return str_contains($lower, 'turno en curso') || str_contains($lower, 'shift in progress') || str_contains($lower, 'already clocked in');
+    }
+
+    private function isAlreadyClockedOut(string $message): bool
+    {
+        $lower = strtolower($message);
+        return str_contains($lower, 'no existe') && str_contains($lower, 'turno')
+            || str_contains($lower, 'no open shift')
+            || str_contains($lower, 'already clocked out');
+    }
 
     private function isPolicyConflict(string $message): bool
     {

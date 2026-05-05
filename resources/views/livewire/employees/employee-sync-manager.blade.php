@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AttendanceLog;
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\Client;
@@ -12,26 +13,57 @@ use Livewire\WithPagination;
 new class extends Component {
     use WithPagination;
 
-    public ?int $client_id = null;
-    public string $search = '';
+    public ?int  $client_id = null;
+    public string $search   = '';
+    public string $tab      = 'factorial'; // 'factorial' | 'unresolved'
 
-    public function updatedSearch(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedClientId(): void
-    {
-        $this->resetPage();
-    }
+    public function updatedSearch(): void   { $this->resetPage(); }
+    public function updatedClientId(): void { $this->resetPage(); }
+    public function updatedTab(): void      { $this->resetPage(); }
 
     public function with(): array
     {
-        if (!$this->client_id) {
+        $clients = Client::orderBy('name')->get();
+
+        // ── Tab: Sin asignar ────────────────────────────────────────
+        if ($this->tab === 'unresolved') {
+            if (!$this->client_id) {
+                return ['employees' => collect(), 'unresolved' => collect(), 'clients' => $clients, 'unresolvedCount' => 0];
+            }
+
+            // Nombres desde device_users del biométrico
+            $deviceUsers = collect();
+            BiometricSource::where('client_id', $this->client_id)->get()
+                ->each(function ($source) use (&$deviceUsers) {
+                    foreach ($source->device_users ?? [] as $u) {
+                        $deviceUsers[$u['pin']] = $u['name'] ?? null;
+                    }
+                });
+
+            $unresolved = AttendanceLog::where('client_id', $this->client_id)
+                ->whereNull('factorial_employee_id')
+                ->when($this->search, fn($q) => $q->where('employee_code', 'like', "%{$this->search}%"))
+                ->selectRaw('employee_code, COUNT(*) as total, MAX(occurred_at) as last_seen')
+                ->groupBy('employee_code')
+                ->orderByDesc('last_seen')
+                ->paginate(20);
+
+            $unresolved->getCollection()->transform(function ($row) use ($deviceUsers) {
+                $row->device_name = $deviceUsers[$row->employee_code] ?? null;
+                return $row;
+            });
+
             return [
-                'employees' => collect(),
-                'clients'   => Client::orderBy('name')->get(),
+                'employees'      => collect(),
+                'unresolved'     => $unresolved,
+                'unresolvedCount'=> $unresolved->total(),
+                'clients'        => $clients,
             ];
+        }
+
+        // ── Tab: Empleados Factorial ────────────────────────────────
+        if (!$this->client_id) {
+            return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients];
         }
 
         $query = FactorialEmployee::with(['biometricUserSyncs'])
@@ -43,9 +75,17 @@ new class extends Component {
             }))
             ->orderBy('full_name');
 
+        // Contador de sin asignar para badge en tab
+        $unresolvedCount = AttendanceLog::where('client_id', $this->client_id)
+            ->whereNull('factorial_employee_id')
+            ->distinct('employee_code')
+            ->count('employee_code');
+
         return [
-            'employees' => $query->paginate(20),
-            'clients'   => Client::orderBy('name')->get(),
+            'employees'       => $query->paginate(20),
+            'unresolved'      => collect(),
+            'unresolvedCount' => $unresolvedCount,
+            'clients'         => $clients,
         ];
     }
 
@@ -73,7 +113,6 @@ new class extends Component {
                 ]
             );
 
-            // Encolar comando al dispositivo asociado al proveedor
             $sources = BiometricSource::where('biometric_provider_id', $provider->id)
                 ->where('status', 'active')
                 ->get();
@@ -98,7 +137,7 @@ new class extends Component {
 
 <div>
     {{-- Filtros --}}
-    <div class="flex flex-col sm:flex-row gap-3 mb-6">
+    <div class="flex flex-col sm:flex-row gap-3 mb-4">
         <div class="flex-1">
             <input
                 wire:model.live.debounce.300ms="search"
@@ -117,13 +156,35 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- Tabla --}}
+    {{-- Tabs --}}
+    <div class="border-b border-gray-200 mb-4">
+        <nav class="-mb-px flex gap-6">
+            <button
+                wire:click="$set('tab', 'factorial')"
+                class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                Empleados en Factorial
+            </button>
+            <button
+                wire:click="$set('tab', 'unresolved')"
+                class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 {{ $tab === 'unresolved' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                Sin asignar en biométrico
+                @if($unresolvedCount > 0)
+                    <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
+                        {{ $unresolvedCount }}
+                    </span>
+                @endif
+            </button>
+        </nav>
+    </div>
+
+    {{-- TAB: Empleados Factorial --}}
+    @if($tab === 'factorial')
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID en Factorial</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN biométrico</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Factorial</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sync biométrico</th>
@@ -192,4 +253,64 @@ new class extends Component {
         </div>
         @endif
     </div>
+    @endif
+
+    {{-- TAB: Sin asignar --}}
+    @if($tab === 'unresolved')
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        @if(!$client_id)
+            <p class="px-6 py-10 text-center text-sm text-gray-500">Selecciona una empresa para ver los PINs sin asignar.</p>
+        @else
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-amber-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN biométrico</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última actividad</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                @forelse($unresolved as $row)
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="font-mono text-sm font-semibold text-gray-900">{{ $row->employee_code }}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @if($row->device_name)
+                            <span class="text-sm text-gray-800">{{ $row->device_name }}</span>
+                        @else
+                            <span class="text-xs text-gray-400 italic">Sin nombre en dispositivo</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {{ $row->total }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{ \Carbon\Carbon::parse($row->last_seen)->format('d/m/Y H:i') }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">
+                            Sin asignar
+                        </span>
+                    </td>
+                </tr>
+                @empty
+                <tr>
+                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                        ✓ Todos los PINs están asignados a un empleado de Factorial.
+                    </td>
+                </tr>
+                @endforelse
+            </tbody>
+        </table>
+        @if($unresolved instanceof \Illuminate\Pagination\LengthAwarePaginator && $unresolved->hasPages())
+        <div class="px-6 py-4 border-t border-gray-200">
+            {{ $unresolved->links() }}
+        </div>
+        @endif
+        @endif
+    </div>
+    @endif
 </div>

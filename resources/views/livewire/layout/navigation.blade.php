@@ -1,16 +1,21 @@
 <?php
 
 use App\Livewire\Actions\Logout;
+use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use Livewire\Volt\Component;
 
 new class extends Component
 {
-    public int $unassignedDevices = 0;
+    public int $unassignedDevices   = 0;
+    public int $unresolvedEmployees = 0;
 
     public function mount(): void
     {
-        $this->unassignedDevices = BiometricSource::whereNull('client_id')->count();
+        $this->unassignedDevices   = BiometricSource::whereNull('client_id')->count();
+        $this->unresolvedEmployees = AttendanceLog::whereNull('factorial_employee_id')
+            ->distinct('employee_code')
+            ->count('employee_code');
     }
 
     public function logout(Logout $logout): void
@@ -68,7 +73,14 @@ new class extends Component
                                     Conexiones
                                 </x-dropdown-link>
                                 <x-dropdown-link href="{{ route('employees') }}" wire:navigate>
-                                    Empleados
+                                    <span class="flex items-center justify-between gap-2">
+                                        Empleados
+                                        @if($unresolvedEmployees > 0)
+                                            <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
+                                                {{ $unresolvedEmployees }}
+                                            </span>
+                                        @endif
+                                    </span>
                                 </x-dropdown-link>
                             </div>
                         </div>
@@ -141,6 +153,9 @@ new class extends Component
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
                 &nbsp;&nbsp;↳ Empleados
+                @if($unresolvedEmployees > 0)
+                    <span class="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">{{ $unresolvedEmployees }}</span>
+                @endif
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices') || request()->routeIs('pin-mapping')" wire:navigate>
                 Dispositivos

@@ -167,6 +167,8 @@ new class extends Component {
                         </span>
                         @if($log->sync_error)
                             <p class="text-xs text-red-500 mt-1 break-all">{{ $log->sync_error }}</p>
+                        @elseif($log->sync_note)
+                            <p class="text-xs text-gray-400 mt-1">{{ $log->sync_note }}</p>
                         @endif
                     </td>
                 </tr>

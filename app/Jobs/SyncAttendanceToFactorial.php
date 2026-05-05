@@ -93,6 +93,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 'sync_status'        => 'synced',
                 'processed_at'       => now(),
                 'sync_error'         => null,
+                'sync_note'          => 'clock_in/clock_out directo',
             ]);
 
             Log::info('SyncAttendanceToFactorial: OK (método principal)', [
@@ -108,7 +109,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
             // 409 duplicado → ya existe en Factorial, marcar como synced
             if ($status === 409 && !$this->isPolicyConflict($message)) {
-                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null]);
+                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null, 'sync_note' => '409 duplicado en Factorial']);
                 Log::info('SyncAttendanceToFactorial: 409 duplicado, marcado como synced', ['attendance_log_id' => $log->id]);
                 return;
             }
@@ -118,13 +119,13 @@ class SyncAttendanceToFactorial implements ShouldQueue
             $isClockOut = in_array($log->check_type, ['check_out', 'break_in']);
 
             if ($isClockIn && $this->isAlreadyClockedIn($message)) {
-                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null]);
+                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null, 'sync_note' => 'Idempotente: ya estaba fichado en Factorial']);
                 Log::info('SyncAttendanceToFactorial: ya estaba fichado (clockIn idempotente)', ['attendance_log_id' => $log->id]);
                 return;
             }
 
             if ($isClockOut && $this->isAlreadyClockedOut($message)) {
-                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null]);
+                $log->update(['sync_status' => 'synced', 'processed_at' => now(), 'sync_error' => null, 'sync_note' => 'Idempotente: ya estaba fichado fuera en Factorial']);
                 Log::info('SyncAttendanceToFactorial: ya estaba fichado fuera (clockOut idempotente)', ['attendance_log_id' => $log->id]);
                 return;
             }
@@ -165,6 +166,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 'sync_status'        => 'synced',
                 'processed_at'       => now(),
                 'sync_error'         => null,
+                'sync_note'          => 'toggle fallback',
             ]);
 
             Log::info('SyncAttendanceToFactorial: OK (toggle fallback)', [

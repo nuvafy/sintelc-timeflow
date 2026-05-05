@@ -21,6 +21,7 @@ class AttendanceLog extends Model
         'processed_at',
         'sync_status',
         'sync_error',
+        'sync_note',
     ];
 
     protected $casts = [

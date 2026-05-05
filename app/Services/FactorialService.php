@@ -97,6 +97,33 @@ class FactorialService
         return $response['data'] ?? $response;
     }
 
+    public function clockIn(array $payload): array
+    {
+        return $this->request(
+            'post',
+            '/api/2026-04-01/resources/attendance/shifts/clock_in',
+            ['json' => $payload]
+        )->json();
+    }
+
+    public function clockOut(array $payload): array
+    {
+        return $this->request(
+            'post',
+            '/api/2026-04-01/resources/attendance/shifts/clock_out',
+            ['json' => $payload]
+        )->json();
+    }
+
+    public function toggleClock(array $payload): array
+    {
+        return $this->request(
+            'post',
+            '/api/2026-04-01/resources/attendance/shifts/toggle_clock',
+            ['json' => $payload]
+        )->json();
+    }
+
     public function createShift(array $payload): array
     {
         return $this->request(

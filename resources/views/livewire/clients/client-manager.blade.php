@@ -218,6 +218,14 @@ new class extends Component {
                 <div class="min-w-0 flex-1">
                     <h3 class="text-base font-semibold text-gray-900 truncate">{{ $client->name }}</h3>
                     <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $client->slug }}</p>
+                    @if($client->contact_email)
+                    <div class="flex items-center gap-1 mt-1 text-xs text-gray-400">
+                        <svg class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                        <span>{{ $client->contact_email }}</span>
+                    </div>
+                    @endif
                 </div>
                 <div class="flex items-center gap-3 ml-3 flex-shrink-0">
                     <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
@@ -229,26 +237,14 @@ new class extends Component {
             {{-- Body --}}
             <div class="px-5 py-4 space-y-4 flex-1">
 
-                {{-- Info empresa --}}
-                @if($client->hq_address || $client->contact_email)
-                <div class="space-y-1 text-xs text-gray-500">
-                    @if($client->hq_address)
-                    <div class="flex items-start gap-1.5">
-                        <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        <span>{{ $client->hq_address }}</span>
-                    </div>
-                    @endif
-                    @if($client->contact_email)
-                    <div class="flex items-center gap-1.5">
-                        <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                        </svg>
-                        <span>{{ $client->contact_email }}</span>
-                    </div>
-                    @endif
+                {{-- Dirección HQ --}}
+                @if($client->hq_address)
+                <div class="flex items-start gap-1.5 text-xs text-gray-500">
+                    <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <span>{{ $client->hq_address }}</span>
                 </div>
                 @endif
 
@@ -269,18 +265,13 @@ new class extends Component {
                     @empty
                     <p class="text-sm text-gray-400 italic">Sin conexión Factorial</p>
                     @endforelse
-                    {{-- Biométrico --}}
+                    {{-- Proveedor biométrico --}}
                     @forelse($client->biometricProviders as $provider)
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2 text-sm text-gray-700">
-                            <span class="text-xs text-gray-400">Biométrico</span>
+                            <span class="text-xs text-gray-400">Proveedor biométrico</span>
                             {{ $provider->name }}
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $provider->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
-                                {{ $provider->status === 'active' ? 'Activo' : 'Inactivo' }}
-                            </span>
-                            <button wire:click="deleteProvider({{ $provider->id }})" wire:confirm="¿Eliminar este proveedor?" class="text-xs text-red-500 hover:text-red-700">Eliminar</button>
+                            <span class="text-xs text-gray-400 font-mono uppercase">{{ $provider->vendor }}</span>
                         </div>
                     </div>
                     @empty

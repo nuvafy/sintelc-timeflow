@@ -252,49 +252,29 @@ new class extends Component {
                 </div>
                 @endif
 
-                {{-- Conexión Factorial --}}
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Conexión Factorial</p>
-                        <a href="{{ route('connections', ['client_id' => $client->id]) }}" wire:navigate
-                            class="inline-flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                            <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                            </svg>
-                            Nueva conexión
-                        </a>
-                    </div>
+                {{-- Conexión Factorial + Proveedor biométrico --}}
+                <div class="space-y-2">
+                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Conexiones</p>
+                    {{-- Factorial --}}
                     @forelse($client->factorialConnections as $conn)
                     <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-700">{{ $conn->name }}</span>
+                        <div class="flex items-center gap-2 text-sm text-gray-700">
+                            <span class="text-xs text-gray-400">Factorial</span>
+                            {{ $conn->name }}
+                        </div>
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $conn->access_token ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
                             {{ $conn->access_token ? 'Conectado' : 'Sin conectar' }}
                         </span>
                     </div>
                     @empty
-                    <p class="text-sm text-gray-400 italic">Sin conexión asignada</p>
+                    <p class="text-sm text-gray-400 italic">Sin conexión Factorial</p>
                     @endforelse
-                </div>
-
-                {{-- Proveedor biométrico --}}
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Proveedor biométrico</p>
-                        @if($client->biometricProviders->isEmpty())
-                        <button wire:click="openProvider({{ $client->id }})"
-                            class="inline-flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                            <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                            </svg>
-                            Agregar
-                        </button>
-                        @endif
-                    </div>
+                    {{-- Biométrico --}}
                     @forelse($client->biometricProviders as $provider)
                     <div class="flex items-center justify-between">
-                        <div>
-                            <span class="text-sm text-gray-700">{{ $provider->name }}</span>
-                            <span class="ml-2 text-xs text-gray-400 font-mono">{{ $provider->vendor }}</span>
+                        <div class="flex items-center gap-2 text-sm text-gray-700">
+                            <span class="text-xs text-gray-400">Biométrico</span>
+                            {{ $provider->name }}
                         </div>
                         <div class="flex items-center gap-3">
                             <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $provider->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
@@ -304,7 +284,10 @@ new class extends Component {
                         </div>
                     </div>
                     @empty
-                    <p class="text-sm text-gray-400 italic">Sin proveedor configurado</p>
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm text-gray-400 italic">Sin proveedor biométrico</p>
+                        <button wire:click="openProvider({{ $client->id }})" class="text-xs text-indigo-600 hover:text-indigo-800">+ Agregar</button>
+                    </div>
                     @endforelse
                 </div>
 
@@ -391,21 +374,6 @@ new class extends Component {
                     @endif
                 </div>
 
-                {{-- Stats --}}
-                <div class="flex gap-6 pt-1 border-t border-gray-100">
-                    <div class="text-center">
-                        <p class="text-lg font-semibold text-gray-800">{{ $client->biometric_sources_count }}</p>
-                        <p class="text-xs text-gray-400">Dispositivos</p>
-                    </div>
-                    <div class="text-center">
-                        <p class="text-lg font-semibold text-gray-800">{{ $client->factorial_connections_count }}</p>
-                        <p class="text-xs text-gray-400">Conexiones</p>
-                    </div>
-                    <div class="text-center">
-                        <p class="text-lg font-semibold text-gray-800">{{ $client->factorialLocations->count() }}</p>
-                        <p class="text-xs text-gray-400">Locaciones</p>
-                    </div>
-                </div>
             </div>
 
             {{-- Footer --}}

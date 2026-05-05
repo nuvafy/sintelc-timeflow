@@ -10,8 +10,10 @@ use Livewire\Volt\Component;
 new class extends Component {
 
     public int    $sourceId;
-    public array  $mappedRows = [];   // BiometricUserSync records (always shown)
-    public array  $newRows    = [];   // device_users not yet mapped (after sync)
+    public string $tab       = 'device'; // 'device' | 'factorial'
+    public array  $mappedRows = [];
+    public array  $newRows    = [];
+    public array  $factorialRows = [];
     public bool   $syncing    = false;
     public string $notice     = '';
 
@@ -19,6 +21,7 @@ new class extends Component {
     {
         $this->sourceId = $sourceId;
         $this->loadMappedRows();
+        $this->loadFactorialRows();
     }
 
     // ── Loaders ────────────────────────────────────────────────────
@@ -42,6 +45,26 @@ new class extends Component {
                 'overwritten'   => $sync->pin_overwritten ?? false,
             ];
         })->toArray();
+    }
+
+    protected function loadFactorialRows(): void
+    {
+        $source    = BiometricSource::findOrFail($this->sourceId);
+        $employees = $this->getEmployees($source);
+
+        $existingMappings = BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->pluck('external_employee_code', 'factorial_employee_id')
+            ->map(fn($code) => (string) $code);
+
+        $this->factorialRows = $employees->map(function ($emp) use ($existingMappings) {
+            return [
+                'employee_id'   => $emp->id,
+                'employee_name' => $emp->full_name,
+                'biometric_id'  => $existingMappings[$emp->id] ?? '',
+                'saved'         => isset($existingMappings[$emp->id]),
+                'dirty'         => false,
+            ];
+        })->values()->toArray();
     }
 
     protected function buildNewRows(): void
@@ -116,7 +139,15 @@ new class extends Component {
         ];
     }
 
-    // ── Sync ───────────────────────────────────────────────────────
+    // ── Tab ────────────────────────────────────────────────────────
+
+    public function switchTab(string $tab): void
+    {
+        $this->tab    = $tab;
+        $this->notice = '';
+    }
+
+    // ── Modo A: Desde dispositivo ──────────────────────────────────
 
     public function queryDevice(): void
     {
@@ -141,13 +172,11 @@ new class extends Component {
         $this->loadMappedRows();
         $this->buildNewRows();
 
-        $count         = count($this->newRows);
-        $this->notice  = $count > 0
+        $count        = count($this->newRows);
+        $this->notice = $count > 0
             ? "{$count} usuario(s) nuevo(s) encontrado(s) en el dispositivo. Asígnalos a un empleado y guarda el mapeo."
             : 'Sincronización completada. No hay usuarios nuevos sin mapear.';
     }
-
-    // ── Mapeo de nuevos usuarios ───────────────────────────────────
 
     public function updateEmployee(int $index, string $value): void
     {
@@ -182,11 +211,10 @@ new class extends Component {
         }
 
         $this->loadMappedRows();
+        $this->loadFactorialRows();
         $this->buildNewRows();
         $this->notice = 'Mapeo guardado correctamente.';
     }
-
-    // ── Sobrescribir PINs ──────────────────────────────────────────
 
     public function overwritePins(): void
     {
@@ -223,8 +251,6 @@ new class extends Component {
         $this->notice = "{$count} comandos de sobrescritura enviados al dispositivo.";
     }
 
-    // ── Histórico ──────────────────────────────────────────────────
-
     public function processHistoric(): void
     {
         $source   = BiometricSource::findOrFail($this->sourceId);
@@ -260,6 +286,43 @@ new class extends Component {
         $this->notice = "Histórico procesado: {$resolved} de {$total} registros resueltos.";
     }
 
+    // ── Modo B: Desde Factorial ────────────────────────────────────
+
+    public function updateBiometricId(int $index, string $value): void
+    {
+        $this->factorialRows[$index]['biometric_id'] = $value;
+        $this->factorialRows[$index]['dirty']        = true;
+    }
+
+    public function saveFactorialMapping(): void
+    {
+        $source = BiometricSource::findOrFail($this->sourceId);
+        $saved  = 0;
+
+        foreach ($this->factorialRows as $row) {
+            if (!$row['dirty'] || trim($row['biometric_id']) === '') continue;
+
+            BiometricUserSync::updateOrCreate(
+                [
+                    'biometric_provider_id'  => $source->biometric_provider_id,
+                    'factorial_employee_id'  => $row['employee_id'],
+                ],
+                [
+                    'client_id'             => $source->client_id,
+                    'external_employee_code' => trim($row['biometric_id']),
+                    'sync_status'           => 'mapped',
+                    'pin_overwritten'       => false,
+                ]
+            );
+
+            $saved++;
+        }
+
+        $this->loadMappedRows();
+        $this->loadFactorialRows();
+        $this->notice = "{$saved} mapeo(s) guardado(s) correctamente.";
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     public function confirmedNewCount(): int
@@ -276,13 +339,18 @@ new class extends Component {
     {
         return collect($this->mappedRows)->filter(fn($r) => $r['overwritten'])->count();
     }
+
+    public function dirtyFactorialCount(): int
+    {
+        return collect($this->factorialRows)->filter(fn($r) => $r['dirty'] && trim($r['biometric_id']) !== '')->count();
+    }
 }; ?>
 
 <div>
     {{-- Header --}}
     <div class="flex items-start justify-between mb-6">
         <div>
-            <h2 class="text-xl font-semibold text-gray-800">Mapeo de PINs biométricos</h2>
+            <h2 class="text-xl font-semibold text-gray-800">Mapeo de IDs biométricos</h2>
             <p class="text-sm text-gray-500 mt-0.5">
                 <span class="font-mono text-gray-700">{{ $source->serial_number }}</span>
                 <span class="mx-1 text-gray-300">·</span>
@@ -294,7 +362,6 @@ new class extends Component {
             </p>
         </div>
 
-        {{-- Stats pills --}}
         <div class="flex items-center gap-3">
             <div class="flex items-center gap-1 px-3 py-1 bg-indigo-50 rounded-full">
                 <span class="text-sm font-semibold text-indigo-700">{{ count($mappedRows) }}</span>
@@ -325,7 +392,24 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Sync bar (Alpine-powered countdown) ────────────────────── --}}
+    {{-- Tabs --}}
+    <div class="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit">
+        <button wire:click="switchTab('device')"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition {{ $tab === 'device' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700' }}">
+            Desde dispositivo
+        </button>
+        <button wire:click="switchTab('factorial')"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition {{ $tab === 'factorial' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700' }}">
+            Desde Factorial
+        </button>
+    </div>
+
+    {{-- ═══════════════════════════════════════════════════════════════
+         TAB A: DESDE DISPOSITIVO
+    ════════════════════════════════════════════════════════════════ --}}
+    @if($tab === 'device')
+
+    {{-- Sync bar --}}
     <div
         x-data="{
             countdown: 0,
@@ -348,12 +432,8 @@ new class extends Component {
         @sync-started.window="startCountdown()"
         class="flex items-center gap-4 mb-6 px-5 py-4 bg-white rounded-xl border border-gray-200 shadow-sm"
     >
-        {{-- Sync button --}}
-        <button
-            wire:click="queryDevice"
-            :disabled="countdown > 0"
-            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        >
+        <button wire:click="queryDevice" :disabled="countdown > 0"
+            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
             <svg wire:loading wire:target="queryDevice" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
@@ -361,10 +441,9 @@ new class extends Component {
             <svg wire:loading.remove wire:target="queryDevice" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-            <span>Sincronizar</span>
+            <span>Consultar dispositivo</span>
         </button>
 
-        {{-- Countdown ring --}}
         <div x-show="countdown > 0" x-transition class="flex items-center gap-3">
             <div class="relative" style="width:44px;height:44px;">
                 <svg style="width:44px;height:44px;transform:rotate(-90deg)" viewBox="0 0 44 44">
@@ -372,13 +451,9 @@ new class extends Component {
                     <circle cx="22" cy="22" r="18" fill="none" stroke="#6366f1" stroke-width="3"
                         :stroke-dasharray="circumference"
                         :stroke-dashoffset="dashoffset"
-                        style="transition: stroke-dashoffset 1s linear; stroke-linecap: round;"
-                    />
+                        style="transition: stroke-dashoffset 1s linear; stroke-linecap: round;"/>
                 </svg>
-                <span
-                    class="absolute inset-0 flex items-center justify-center text-xs font-bold text-indigo-600"
-                    x-text="countdown"
-                ></span>
+                <span class="absolute inset-0 flex items-center justify-center text-xs font-bold text-indigo-600" x-text="countdown"></span>
             </div>
             <div>
                 <p class="text-sm font-medium text-gray-700">Esperando respuesta del dispositivo…</p>
@@ -386,7 +461,6 @@ new class extends Component {
             </div>
         </div>
 
-        {{-- Idle info --}}
         <div x-show="countdown === 0" class="text-xs text-gray-400 ml-auto">
             @if($source->device_users_fetched_at)
                 Última consulta: {{ $source->device_users_fetched_at->diffForHumans() }}
@@ -396,16 +470,13 @@ new class extends Component {
         </div>
     </div>
 
-
-    {{-- ── Sección: Usuarios ya mapeados ──────────────────────────── --}}
+    {{-- Usuarios ya mapeados --}}
     <div class="mb-6">
         <div class="flex items-center justify-between mb-3">
-            <div>
-                <h3 class="text-sm font-semibold text-gray-700">
-                    Usuarios mapeados
-                    <span class="ml-1.5 px-1.5 py-0.5 text-xs font-normal bg-gray-100 text-gray-500 rounded-full">{{ count($mappedRows) }}</span>
-                </h3>
-            </div>
+            <h3 class="text-sm font-semibold text-gray-700">
+                Usuarios mapeados
+                <span class="ml-1.5 px-1.5 py-0.5 text-xs font-normal bg-gray-100 text-gray-500 rounded-full">{{ count($mappedRows) }}</span>
+            </h3>
             <div class="flex items-center gap-2">
                 @if(count($mappedRows) > 0)
                 <button wire:click="processHistoric"
@@ -419,12 +490,12 @@ new class extends Component {
                 @endif
                 @if($this->pendingOverwriteCount() > 0)
                 <button wire:click="overwritePins"
-                    wire:confirm="¿Sobrescribir {{ $this->pendingOverwriteCount() }} PINs en el dispositivo? El equipo actualizará los PINs al access_id de Factorial. Esta acción no se puede deshacer fácilmente."
+                    wire:confirm="¿Sobrescribir {{ $this->pendingOverwriteCount() }} IDs en el dispositivo? Esta acción no se puede deshacer fácilmente."
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
-                    Sobrescribir PINs ({{ $this->pendingOverwriteCount() }})
+                    Sobrescribir IDs ({{ $this->pendingOverwriteCount() }})
                 </button>
                 @endif
             </div>
@@ -436,14 +507,14 @@ new class extends Component {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
             <p class="text-sm text-gray-400">No hay usuarios mapeados aún.</p>
-            <p class="text-xs text-gray-400">Haz clic en <strong class="text-gray-600">Sincronizar</strong> para consultar el dispositivo y obtener la lista de usuarios.</p>
+            <p class="text-xs text-gray-400">Consulta el dispositivo o usa la pestaña <strong class="text-gray-600">Desde Factorial</strong> para mapear manualmente.</p>
         </div>
         @else
         <div class="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
             <table class="min-w-full divide-y divide-gray-100">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">PIN</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">ID Biométrico</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado Factorial</th>
                         <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Estado</th>
@@ -455,13 +526,11 @@ new class extends Component {
                         <td class="px-4 py-3">
                             <span class="font-mono text-sm font-bold text-gray-800">{{ $row['pin'] }}</span>
                         </td>
-                        <td class="px-4 py-3 text-sm text-gray-500">
-                            {{ $row['hint'] ?: '—' }}
-                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-500">{{ $row['hint'] ?: '—' }}</td>
                         <td class="px-4 py-3">
                             <span class="text-sm text-gray-800">{{ $row['employee_name'] }}</span>
                             @if($row['overwritten'])
-                                <span class="ml-2 text-xs font-mono text-emerald-600">PIN unificado</span>
+                                <span class="ml-2 text-xs font-mono text-emerald-600">ID unificado</span>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-center">
@@ -479,8 +548,7 @@ new class extends Component {
         @endif
     </div>
 
-
-    {{-- ── Sección: Usuarios nuevos sin mapear ─────────────────────── --}}
+    {{-- Usuarios nuevos sin mapear --}}
     @if(!empty($newRows))
     <div>
         <div class="flex items-center justify-between mb-3">
@@ -505,7 +573,7 @@ new class extends Component {
             <table class="min-w-full divide-y divide-amber-100">
                 <thead style="background-color: #fffbeb;">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-amber-700 uppercase tracking-wider w-20">PIN</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-amber-700 uppercase tracking-wider w-32">ID Biométrico</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-amber-700 uppercase tracking-wider">Nombre en dispositivo</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-amber-700 uppercase tracking-wider">Asignar empleado</th>
                         <th class="px-4 py-3 text-center text-xs font-medium text-amber-700 uppercase tracking-wider w-28">Confirmar</th>
@@ -517,15 +585,11 @@ new class extends Component {
                         <td class="px-4 py-3">
                             <span class="font-mono text-sm font-bold text-gray-800">{{ $row['pin'] }}</span>
                         </td>
-                        <td class="px-4 py-3 text-sm text-gray-500">
-                            {{ $row['hint'] ?: '—' }}
-                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-500">{{ $row['hint'] ?: '—' }}</td>
                         <td class="px-4 py-3">
-                            <select
-                                wire:change="updateEmployee({{ $i }}, $event.target.value)"
+                            <select wire:change="updateEmployee({{ $i }}, $event.target.value)"
                                 class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500 {{ $row['confirmed'] ? 'bg-indigo-50 border-indigo-300' : '' }}"
-                                {{ $row['confirmed'] ? 'disabled' : '' }}
-                            >
+                                {{ $row['confirmed'] ? 'disabled' : '' }}>
                                 <option value="">Sin asignar</option>
                                 @foreach($employees as $emp)
                                     <option value="{{ $emp->id }}" {{ $row['employee_id'] == $emp->id ? 'selected' : '' }}>
@@ -535,14 +599,10 @@ new class extends Component {
                             </select>
                         </td>
                         <td class="px-4 py-3 text-center">
-                            <button
-                                wire:click="toggleConfirm({{ $i }})"
+                            <button wire:click="toggleConfirm({{ $i }})"
                                 @if(!$row['employee_id']) disabled @endif
                                 class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full transition
-                                    {{ $row['confirmed']
-                                        ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40' }}"
-                            >
+                                    {{ $row['confirmed'] ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40' }}">
                                 {{ $row['confirmed'] ? '✓ Confirmado' : 'Confirmar' }}
                             </button>
                         </td>
@@ -553,4 +613,61 @@ new class extends Component {
         </div>
     </div>
     @endif
+
+    @endif {{-- fin tab device --}}
+
+
+    {{-- ═══════════════════════════════════════════════════════════════
+         TAB B: DESDE FACTORIAL
+    ════════════════════════════════════════════════════════════════ --}}
+    @if($tab === 'factorial')
+
+    <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-gray-500">Asigna manualmente el ID biométrico a cada empleado de Factorial.</p>
+        <button wire:click="saveFactorialMapping"
+            @if($this->dirtyFactorialCount() === 0) disabled @endif
+            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Guardar ({{ $this->dirtyFactorialCount() }})
+        </button>
+    </div>
+
+    <div class="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
+        <table class="min-w-full divide-y divide-gray-100">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado Factorial</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">ID Biométrico</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Estado</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-100">
+                @foreach($factorialRows as $i => $row)
+                <tr class="{{ $row['dirty'] ? 'bg-yellow-50' : ($row['saved'] ? 'bg-emerald-50' : '') }} hover:bg-gray-50 transition">
+                    <td class="px-4 py-3 text-sm text-gray-800 font-medium">{{ $row['employee_name'] }}</td>
+                    <td class="px-4 py-3">
+                        <input type="text"
+                            value="{{ $row['biometric_id'] }}"
+                            wire:change="updateBiometricId({{ $i }}, $event.target.value)"
+                            placeholder="Ej. 44"
+                            class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500 {{ $row['dirty'] ? 'border-yellow-400 bg-yellow-50' : '' }}">
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        @if($row['dirty'])
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">Sin guardar</span>
+                        @elseif($row['saved'])
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700">Mapeado</span>
+                        @else
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-400">Sin mapear</span>
+                        @endif
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+
+    @endif {{-- fin tab factorial --}}
 </div>

@@ -185,7 +185,6 @@ new class extends Component {
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN biométrico</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Factorial</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sync biométrico</th>
                 </tr>
@@ -216,9 +215,6 @@ new class extends Component {
                             <span class="text-xs text-red-500 font-medium">Sin PIN</span>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {{ $employee->company_identifier ?? '—' }}
-                    </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         @if($employee->active)
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Activo</span>
@@ -236,7 +232,7 @@ new class extends Component {
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="4" class="px-6 py-10 text-center text-sm text-gray-500">
                         @if(!$this->client_id)
                             Selecciona una empresa para ver sus empleados.
                         @else

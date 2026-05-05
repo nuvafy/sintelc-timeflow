@@ -128,7 +128,11 @@ new class extends Component {
                     <td class="px-6 py-4 whitespace-nowrap">
                         @if($log->factorialEmployee)
                             <p class="text-sm font-medium text-gray-900">{{ $log->factorialEmployee->full_name }}</p>
-                            <p class="text-xs text-gray-400 font-mono">PIN {{ $log->employee_code }}</p>
+                            <p class="text-xs text-gray-400 font-mono">
+                                ID Biométrico: {{ $log->employee_code }}
+                                <span class="mx-1 text-gray-300">·</span>
+                                ID Factorial: {{ $log->factorialEmployee->factorial_id }}
+                            </p>
                         @else
                             <p class="text-sm font-medium text-gray-500 font-mono">{{ $log->employee_code }}</p>
                             <p class="text-xs text-amber-500">Sin resolver</p>

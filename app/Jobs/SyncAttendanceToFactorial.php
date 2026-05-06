@@ -65,7 +65,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
     {
         $payload = [
             'employee_id' => $employee->factorial_id,
-            'now'         => $log->occurred_at->setTimezone(config('app.timezone'))->toIso8601String(),
+            'now'         => $log->occurred_at->format('Y-m-d\TH:i:s'),
         ];
 
         if ($employee->location_id) {
@@ -126,7 +126,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
     {
         $payload = [
             'employee_id' => $employee->factorial_id,
-            'clock_time'  => $log->occurred_at->setTimezone(config('app.timezone'))->toIso8601String(),
+            'clock_time'  => $log->occurred_at->format('Y-m-d\TH:i:s'),
         ];
 
         if ($employee->location_id) {

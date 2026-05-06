@@ -300,7 +300,7 @@ class IclockController extends Controller
                 $inserted = AttendanceLog::where('biometric_source_id', $source->id)
                     ->where('sync_status', 'resolved')
                     ->whereIn('occurred_at', array_map(
-                        fn($dt) => $dt instanceof \Carbon\Carbon ? $dt->utc()->toDateTimeString() : $dt,
+                        fn($dt) => $dt instanceof \Carbon\Carbon ? $dt->format('Y-m-d H:i:s') : $dt,
                         $resolvedCodes
                     ))
                     ->get();

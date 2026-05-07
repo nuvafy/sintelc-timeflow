@@ -33,7 +33,6 @@ class FactorialService
 
         $request = Http::withToken($this->accessToken())
             ->acceptJson()
-            ->retry(3, 200)
             ->timeout(30);
 
         $response = match (strtolower($method)) {

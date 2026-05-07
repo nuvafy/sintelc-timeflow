@@ -224,6 +224,17 @@ class IclockController extends Controller
             ->whereNotNull('factorial_company_id')
             ->value('factorial_company_id');
 
+        // Configuración de asistencia del cliente (IDs de status → check_type)
+        $attendanceConfig = \App\Models\ClientAttendanceConfig::where('client_id', $source->client_id)->first();
+
+        if (!$attendanceConfig) {
+            Log::warning('ZKTeco ATTLOG: cliente sin configuración de asistencia, registros ignorados', [
+                'client_id' => $source->client_id,
+                'sn'        => $sn,
+            ]);
+            $this->plainResponse('OK: 0');
+        }
+
         // Cache de access_id → employee_id filtrado por empresa Factorial
         $employeeQuery = \App\Models\FactorialEmployee::whereNotNull('access_id');
 
@@ -271,7 +282,7 @@ class IclockController extends Controller
                 'biometric_source_id'   => $source->id,
                 'factorial_employee_id' => $employeeId,
                 'employee_code'         => $pin,
-                'check_type'            => $this->resolveCheckType($status),
+                'check_type'            => $attendanceConfig->resolveCheckType($status) ?? 'unknown',
                 'occurred_at'           => $occurredAt,
                 'raw_payload'           => json_encode([
                     'pin'      => $pin,

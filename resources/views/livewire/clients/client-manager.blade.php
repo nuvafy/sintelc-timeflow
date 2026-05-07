@@ -3,6 +3,7 @@
 use App\Models\Client;
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
+use App\Models\ClientAttendanceConfig;
 use App\Models\FactorialConnection;
 use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
@@ -21,6 +22,13 @@ new class extends Component {
     public string $oauth_client_secret = '';
     public string $hq_address          = '';
     public string $contact_email       = '';
+
+    // ── Configuración de asistencia ───────────────────────────────
+    public string $checkin_id  = '0';
+    public string $checkout_id = '1';
+    public bool   $has_breaks  = false;
+    public string $breakin_id  = '';
+    public string $breakout_id = '';
 
     // ── Proveedor biométrico ───────────────────────────────────────
     public bool $showProviderModal  = false;
@@ -71,13 +79,21 @@ new class extends Component {
         $this->oauth_client_secret = $client->oauth_client_secret ?? '';
         $this->hq_address          = $client->hq_address ?? '';
         $this->contact_email       = $client->contact_email ?? '';
+
+        $config = ClientAttendanceConfig::where('client_id', $id)->first();
+        $this->checkin_id  = $config?->checkin_id  ?? '0';
+        $this->checkout_id = $config?->checkout_id ?? '1';
+        $this->has_breaks  = $config?->has_breaks  ?? false;
+        $this->breakin_id  = $config?->breakin_id  ?? '';
+        $this->breakout_id = $config?->breakout_id ?? '';
+
         $this->editing   = true;
         $this->showModal = true;
     }
 
     public function save(): void
     {
-        $this->validate([
+        $rules = [
             'name'                => 'required|string|max:255',
             'slug'                => 'required|string|max:255|alpha_dash',
             'status'              => 'required|in:active,inactive',
@@ -85,7 +101,14 @@ new class extends Component {
             'oauth_client_secret' => 'required|string|max:500',
             'hq_address'          => 'nullable|string|max:500',
             'contact_email'       => 'nullable|email|max:255',
-        ]);
+            'checkin_id'          => 'required|string|max:10',
+            'checkout_id'         => 'required|string|max:10',
+            'has_breaks'          => 'boolean',
+            'breakin_id'          => $this->has_breaks ? 'required|string|max:10' : 'nullable',
+            'breakout_id'         => $this->has_breaks ? 'required|string|max:10' : 'nullable',
+        ];
+
+        $this->validate($rules);
 
         $data = [
             'name'                => $this->name,
@@ -98,10 +121,22 @@ new class extends Component {
         ];
 
         if ($this->editing) {
-            Client::findOrFail($this->editingId)->update($data);
+            $client = Client::findOrFail($this->editingId);
+            $client->update($data);
         } else {
-            Client::create($data);
+            $client = Client::create($data);
         }
+
+        ClientAttendanceConfig::updateOrCreate(
+            ['client_id' => $client->id],
+            [
+                'checkin_id'  => $this->checkin_id,
+                'checkout_id' => $this->checkout_id,
+                'has_breaks'  => $this->has_breaks,
+                'breakin_id'  => $this->has_breaks ? $this->breakin_id : null,
+                'breakout_id' => $this->has_breaks ? $this->breakout_id : null,
+            ]
+        );
 
         $this->showModal = false;
         $this->resetClientForm();
@@ -193,6 +228,11 @@ new class extends Component {
         $this->oauth_client_secret = '';
         $this->hq_address          = '';
         $this->contact_email       = '';
+        $this->checkin_id          = '0';
+        $this->checkout_id         = '1';
+        $this->has_breaks          = false;
+        $this->breakin_id          = '';
+        $this->breakout_id         = '';
         $this->resetValidation();
     }
 }; ?>
@@ -456,6 +496,50 @@ new class extends Component {
                         <option value="active">Activa</option>
                         <option value="inactive">Inactiva</option>
                     </select>
+                </div>
+
+                {{-- Configuración de asistencia --}}
+                <div class="border-t border-gray-100 pt-4 space-y-4">
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Configuración de asistencia biométrica</p>
+                    <p class="text-xs text-gray-400">Indica qué ID de status envía el dispositivo para cada tipo de marca.</p>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">ID Entrada</label>
+                            <input wire:model="checkin_id" type="text" placeholder="0"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('checkin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">ID Salida</label>
+                            <input wire:model="checkout_id" type="text" placeholder="1"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('checkout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <input wire:model.live="has_breaks" type="checkbox" id="has_breaks"
+                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
+                        <label for="has_breaks" class="text-sm text-gray-700">¿Tiene pausas / descansos?</label>
+                    </div>
+
+                    @if($has_breaks)
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">ID Inicio pausa</label>
+                            <input wire:model="breakin_id" type="text" placeholder="2"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('breakin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">ID Fin pausa</label>
+                            <input wire:model="breakout_id" type="text" placeholder="3"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('breakout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
 

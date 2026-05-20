@@ -28,7 +28,7 @@ new class extends Component {
 
     public function with(): array
     {
-        $query = AttendanceLog::with(['biometricSource', 'factorialEmployee'])
+        $query = AttendanceLog::with(['biometricSource', 'factorialEmployee', 'client'])
             ->when($this->search, fn($q) => $q->where(function ($q2) {
                 $q2->where('employee_code', 'like', "%{$this->search}%")
                    ->orWhereHas('factorialEmployee', fn($e) => $e->where('full_name', 'like', "%{$this->search}%"));
@@ -117,8 +117,8 @@ new class extends Component {
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha y hora</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiempo</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
             </thead>
@@ -145,6 +145,9 @@ new class extends Component {
                         </span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
+                        @if($log->biometricSource)
+                            <p class="text-xs text-gray-400 font-mono mb-1">{{ $log->biometricSource->name }}</p>
+                        @endif
                         <p class="flex items-center gap-1">
                             <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             {{ $log->occurred_at->format('d/m/Y') }}
@@ -155,7 +158,7 @@ new class extends Component {
                         </p>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {{ $log->biometricSource?->name ?? '—' }}
+                        {{ $log->client?->name ?? '—' }}
                     </td>
                     <td class="px-6 py-4 max-w-xs">
                         @php

@@ -244,6 +244,7 @@ class IclockController extends Controller
 
         // ── Pre-cargar claves únicas ya existentes (evita N+1 de exists()) ──
         $existingKeys = AttendanceLog::where('biometric_source_id', $source->id)
+            ->where('occurred_at', '>=', now()->subDays(7))
             ->pluck(\Illuminate\Support\Facades\DB::raw("CONCAT(employee_code, '|', occurred_at)"))
             ->flip();
 

@@ -319,14 +319,19 @@ new class extends Component {
                 {{-- Empresa --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Empresa</label>
-                    <select wire:model.live="client_id"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        {{ $editing ? 'disabled' : '' }}>
-                        <option value="">Seleccionar empresa...</option>
-                        @foreach($clients as $client)
-                            <option value="{{ $client->id }}">{{ $client->name }}</option>
-                        @endforeach
-                    </select>
+                    @if($editing)
+                        <p class="mt-1 block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                            {{ $clients->find($client_id)?->name ?? '—' }}
+                        </p>
+                    @else
+                        <select wire:model.live="client_id"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <option value="">Seleccionar empresa...</option>
+                            @foreach($clients as $client)
+                                <option value="{{ $client->id }}">{{ $client->name }}</option>
+                            @endforeach
+                        </select>
+                    @endif
                     @error('client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
 

@@ -127,6 +127,18 @@ new class extends Component {
             $client = Client::create($data);
         }
 
+        // Crear conexión automáticamente si el cliente no tiene una
+        if (!$this->editing) {
+            $hasConnection = FactorialConnection::where('client_id', $client->id)->exists();
+            if (!$hasConnection) {
+                FactorialConnection::create([
+                    'client_id'           => $client->id,
+                    'name'                => 'cnx_' . $this->slug,
+                    'resource_owner_type' => 'company',
+                ]);
+            }
+        }
+
         ClientAttendanceConfig::updateOrCreate(
             ['client_id' => $client->id],
             [
@@ -434,58 +446,60 @@ new class extends Component {
             </div>
 
             <div class="px-6 py-4 space-y-4">
-                {{-- Nombre --}}
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Nombre</label>
-                    <input wire:model.live="name" type="text" placeholder="Ej: Grupo MLA"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                {{-- Nombre + Slug --}}
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Nombre</label>
+                        <input wire:model.live="name" type="text" placeholder="Ej: Grupo MLA"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Slug</label>
+                        <input wire:model="slug" type="text"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
                 </div>
 
-                {{-- Slug --}}
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Slug</label>
-                    <input wire:model="slug" type="text"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                {{-- Dirección HQ --}}
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">
-                        Dirección HQ <span class="text-gray-400 font-normal">(opcional)</span>
-                    </label>
-                    <input wire:model="hq_address" type="text" placeholder="Ej: Av. Insurgentes Sur 1234, CDMX"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('hq_address') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                {{-- Email de contacto --}}
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">
-                        Email de contacto <span class="text-gray-400 font-normal">(opcional)</span>
-                    </label>
-                    <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                {{-- Dirección HQ + Email --}}
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">
+                            Dirección HQ <span class="text-gray-400 font-normal">(opcional)</span>
+                        </label>
+                        <input wire:model="hq_address" type="text" placeholder="Ej: Av. Insurgentes Sur 1234, CDMX"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('hq_address') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">
+                            Email de contacto <span class="text-gray-400 font-normal">(opcional)</span>
+                        </label>
+                        <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
                 </div>
 
                 {{-- OAuth credentials --}}
                 <div class="border-t border-gray-100 pt-4 space-y-4">
                     <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Credenciales Factorial OAuth</p>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Client ID</label>
-                        <input wire:model="oauth_client_id" type="text" autocomplete="off"
-                            placeholder="thAYmPF7qXq..."
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                        @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Client Secret</label>
-                        <input wire:model="oauth_client_secret" type="password" autocomplete="new-password"
-                            placeholder="••••••••••••••••"
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                        @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Client ID</label>
+                            <input wire:model="oauth_client_id" type="text" autocomplete="off"
+                                placeholder="thAYmPF7qXq..."
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Client Secret</label>
+                            <input wire:model="oauth_client_secret" type="password" autocomplete="new-password"
+                                placeholder="••••••••••••••••"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
                     </div>
                 </div>
 

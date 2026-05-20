@@ -25,67 +25,86 @@ class ResolveAttendanceLogs extends Command
             $query->where('biometric_source_id', $sourceId);
         }
 
-        $logs = $query->with('biometricSource')->get();
+        $total = $query->count();
 
-        if ($logs->isEmpty()) {
+        if ($total === 0) {
             $this->info('No hay registros pendientes de resolución.');
             return self::SUCCESS;
         }
 
-        $this->info("Procesando {$logs->count()} registros...");
+        $this->info("Procesando {$total} registros...");
 
-        $resolved = 0;
+        $resolved   = 0;
         $unresolved = 0;
+        $delay      = 0;
 
-        foreach ($logs as $log) {
-            $source = $log->biometricSource;
-            if (!$source) { $unresolved++; continue; }
+        // Pre-cargar mappings y employees por fuente para evitar N+1
+        $mappingsCache   = [];
+        $accessIdCache   = [];
+        $companyIdCache  = [];
 
-            $employeeId = $this->resolveEmployee($log->employee_code, $source);
+        $query->with('biometricSource')->chunkById(100, function ($logs) use (
+            &$resolved, &$unresolved, &$delay,
+            &$mappingsCache, &$accessIdCache, &$companyIdCache
+        ) {
+            $resolvedIds = [];
 
-            if ($employeeId) {
-                $log->update([
+            foreach ($logs as $log) {
+                $source = $log->biometricSource;
+                if (!$source) { $unresolved++; continue; }
+
+                $providerId = $source->biometric_provider_id;
+                $clientId   = $source->client_id;
+
+                // Cache mappings por proveedor
+                if (!isset($mappingsCache[$providerId])) {
+                    $mappingsCache[$providerId] = BiometricUserSync::where('biometric_provider_id', $providerId)
+                        ->whereNotNull('factorial_employee_id')
+                        ->pluck('factorial_employee_id', 'external_employee_code');
+                }
+
+                // Cache employees por cliente
+                if (!isset($accessIdCache[$clientId])) {
+                    $companyIdCache[$clientId] = \App\Models\FactorialConnection::where('client_id', $clientId)
+                        ->whereNotNull('factorial_company_id')
+                        ->value('factorial_company_id');
+
+                    $empQuery = FactorialEmployee::whereNotNull('access_id');
+                    if ($companyIdCache[$clientId]) {
+                        $empQuery->where('company_id', $companyIdCache[$clientId]);
+                    } else {
+                        $empQuery->where('factorial_connection_id', function ($q) use ($clientId) {
+                            $q->select('id')->from('factorial_connections')->where('client_id', $clientId);
+                        });
+                    }
+                    $accessIdCache[$clientId] = $empQuery->pluck('id', 'access_id');
+                }
+
+                $employeeId = $mappingsCache[$providerId][$log->employee_code]
+                    ?? $accessIdCache[$clientId][$log->employee_code]
+                    ?? null;
+
+                if ($employeeId) {
+                    $resolvedIds[$log->id] = $employeeId;
+                    $resolved++;
+                } else {
+                    $unresolved++;
+                }
+            }
+
+            // Batch update en lugar de update individual
+            foreach ($resolvedIds as $logId => $employeeId) {
+                AttendanceLog::where('id', $logId)->update([
                     'factorial_employee_id' => $employeeId,
                     'sync_status'           => 'resolved',
                 ]);
-                SyncAttendanceToFactorial::dispatch($log->id);
-                $resolved++;
-            } else {
-                $unresolved++;
+                SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
+                $delay += 2;
             }
-        }
+        });
 
         $this->info("Resueltos: {$resolved} | Sin resolver: {$unresolved}");
 
         return self::SUCCESS;
-    }
-
-    protected function resolveEmployee(string $employeeCode, BiometricSource $source): ?int
-    {
-        // Estrategia 1: tabla de mapeo
-        $sync = BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
-            ->where('external_employee_code', $employeeCode)
-            ->first();
-
-        if ($sync) {
-            return $sync->factorial_employee_id;
-        }
-
-        // Estrategia 2: match directo por access_id, filtrado por factorial_company_id
-        $factorialCompanyId = \App\Models\FactorialConnection::where('client_id', $source->client_id)
-            ->whereNotNull('factorial_company_id')
-            ->value('factorial_company_id');
-
-        $query = FactorialEmployee::where('access_id', $employeeCode);
-
-        if ($factorialCompanyId) {
-            $query->where('company_id', $factorialCompanyId);
-        } else {
-            $query->where('factorial_connection_id', function ($q) use ($source) {
-                $q->select('id')->from('factorial_connections')->where('client_id', $source->client_id);
-            });
-        }
-
-        return $query->value('id');
     }
 }

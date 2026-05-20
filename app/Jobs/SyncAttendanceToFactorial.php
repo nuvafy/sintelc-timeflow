@@ -63,13 +63,16 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
     private function syncWithFallback(AttendanceLog $log, FactorialEmployee $employee, FactorialService $service): void
     {
+        $workplaceId = $log->biometricSource?->factorial_location_id;
+
         $payload = [
             'employee_id' => $employee->factorial_id,
             'now'         => $log->occurred_at->format('Y-m-d\TH:i:s'),
         ];
 
-        if ($employee->location_id) {
-            $payload['workplace_id'] = $employee->location_id;
+        if ($workplaceId) {
+            $payload['workplace_id']  = $workplaceId;
+            $payload['location_type'] = 'office';
         }
 
         try {
@@ -124,12 +127,15 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
     private function tryToggle(AttendanceLog $log, FactorialEmployee $employee, FactorialService $service, string $primaryError): void
     {
+        $workplaceId = $log->biometricSource?->factorial_location_id;
+
         $payload = [
             'employee_id' => $employee->factorial_id,
             'clock_time'  => $log->occurred_at->format('Y-m-d\TH:i:s'),
         ];
 
-        if ($employee->location_id) {
+        if ($workplaceId) {
+            $payload['workplace_id']  = $workplaceId;
             $payload['location_type'] = 'office';
         }
 

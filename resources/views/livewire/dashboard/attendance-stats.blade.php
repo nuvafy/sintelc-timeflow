@@ -26,12 +26,22 @@ new class extends Component {
 
     public function retryFailed(): void
     {
-        $failed = AttendanceLog::where('sync_status', 'failed')->get();
+        $delay = 0;
 
-        foreach ($failed as $log) {
-            $log->update(['sync_status' => 'pending', 'sync_error' => null]);
-            SyncAttendanceToFactorial::dispatch($log->id);
-        }
+        AttendanceLog::where('sync_status', 'failed')
+            ->chunkById(50, function ($logs) use (&$delay) {
+                $ids = $logs->pluck('id');
+
+                AttendanceLog::whereIn('id', $ids)->update([
+                    'sync_status' => 'pending',
+                    'sync_error'  => null,
+                ]);
+
+                foreach ($ids as $id) {
+                    SyncAttendanceToFactorial::dispatch($id)->delay(now()->addSeconds($delay));
+                    $delay += 3;
+                }
+            });
 
         $this->loadStats();
     }

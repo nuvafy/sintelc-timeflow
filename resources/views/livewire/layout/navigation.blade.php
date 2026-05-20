@@ -87,7 +87,7 @@ new class extends Component
                     </div>
 
                     <!-- Dispositivos -->
-                    <x-nav-link :href="route('devices')" :active="request()->routeIs('devices') || request()->routeIs('pin-mapping')" wire:navigate>
+                    <x-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
                         Dispositivos
                         @if($unassignedDevices > 0)
                             <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
@@ -157,7 +157,7 @@ new class extends Component
                     <span class="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">{{ $unresolvedEmployees }}</span>
                 @endif
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices') || request()->routeIs('pin-mapping')" wire:navigate>
+            <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
                 Dispositivos
                 @if($unassignedDevices > 0)
                     ({{ $unassignedDevices }} sin asignar)

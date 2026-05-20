@@ -199,7 +199,7 @@ class IclockController extends Controller
         return $this->plainResponse('OK');
     }
 
-    private function handleAttlog(Request $request, ?string $sn): void
+    private function handleAttlog(Request $request, ?string $sn): Response
     {
         $source = BiometricSource::where('serial_number', $sn)
             ->where('status', 'active')
@@ -207,24 +207,21 @@ class IclockController extends Controller
 
         if (!$source) {
             Log::warning('ZKTeco ATTLOG: dispositivo no registrado o inactivo', ['sn' => $sn]);
-            $this->plainResponse('OK: 0');
+            return $this->plainResponse('OK: 0');
         }
 
-        $lines   = $this->splitRecords($request->getContent());
-        $records = [];
-        $now     = now();
+        $lines = $this->splitRecords($request->getContent());
+        $now   = now();
 
-        // Cargar mappings del dispositivo una sola vez
+        // ── Pre-cargar todo antes del loop ───────────────────────────
         $mappings = \App\Models\BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
             ->whereNotNull('factorial_employee_id')
             ->pluck('factorial_employee_id', 'external_employee_code');
 
-        // Obtener factorial_company_id de la conexión vinculada al proveedor
         $factorialCompanyId = \App\Models\FactorialConnection::where('client_id', $source->client_id)
             ->whereNotNull('factorial_company_id')
             ->value('factorial_company_id');
 
-        // Configuración de asistencia del cliente (IDs de status → check_type)
         $attendanceConfig = \App\Models\ClientAttendanceConfig::where('client_id', $source->client_id)->first();
 
         if (!$attendanceConfig) {
@@ -232,12 +229,10 @@ class IclockController extends Controller
                 'client_id' => $source->client_id,
                 'sn'        => $sn,
             ]);
-            $this->plainResponse('OK: 0');
+            return $this->plainResponse('OK: 0');
         }
 
-        // Cache de access_id → employee_id filtrado por empresa Factorial
         $employeeQuery = \App\Models\FactorialEmployee::whereNotNull('access_id');
-
         if ($factorialCompanyId) {
             $employeeQuery->where('company_id', $factorialCompanyId);
         } else {
@@ -245,8 +240,15 @@ class IclockController extends Controller
                 $q->select('id')->from('factorial_connections')->where('client_id', $source->client_id);
             });
         }
-
         $accessIdMap = $employeeQuery->pluck('id', 'access_id');
+
+        // ── Pre-cargar claves únicas ya existentes (evita N+1 de exists()) ──
+        $existingKeys = AttendanceLog::where('biometric_source_id', $source->id)
+            ->pluck(\Illuminate\Support\Facades\DB::raw("CONCAT(employee_code, '|', occurred_at)"))
+            ->flip();
+
+        // ── Parsear líneas ───────────────────────────────────────────
+        $records = [];
 
         foreach ($lines as $line) {
             $parts = explode("\t", $line);
@@ -267,14 +269,9 @@ class IclockController extends Controller
                 continue;
             }
 
-            $exists = AttendanceLog::where('biometric_source_id', $source->id)
-                ->where('employee_code', $pin)
-                ->where('occurred_at', $occurredAt)
-                ->exists();
+            $key = $pin . '|' . $occurredAt->format('Y-m-d H:i:s');
+            if (isset($existingKeys[$key])) continue;
 
-            if ($exists) continue;
-
-            // Resolver employee: 1) tabla de mapeo, 2) access_id directo
             $employeeId = $mappings[$pin] ?? $accessIdMap[$pin] ?? null;
 
             $records[] = [
@@ -284,47 +281,38 @@ class IclockController extends Controller
                 'employee_code'         => $pin,
                 'check_type'            => $attendanceConfig->resolveCheckType($status) ?? 'unknown',
                 'occurred_at'           => $occurredAt,
-                'raw_payload'           => json_encode([
-                    'pin'      => $pin,
-                    'time'     => $timestamp,
-                    'status'   => $status,
-                    'verify'   => $verify,
-                    'workcode' => $workcode,
-                ]),
-                'sync_status' => $employeeId ? 'resolved' : 'pending',
-                'created_at'  => $now,
-                'updated_at'  => $now,
+                'raw_payload'           => json_encode(compact('pin', 'timestamp', 'status', 'verify', 'workcode')),
+                'sync_status'           => $employeeId ? 'resolved' : 'pending',
+                'created_at'            => $now,
+                'updated_at'            => $now,
             ];
         }
 
         if (!empty($records)) {
             AttendanceLog::insert($records);
 
-            // Despachar sync para los registros recién insertados con empleado resuelto.
-            // Usamos employee_code + occurred_at en UTC para evitar problemas de timezone.
-            $resolvedCodes = array_column(
-                array_filter($records, fn($r) => $r['sync_status'] === 'resolved'),
-                'occurred_at'
-            );
+            // ── Despachar jobs con delay escalonado (2s entre cada uno) ──
+            $delay = 0;
+            foreach ($records as $record) {
+                if ($record['sync_status'] !== 'resolved') continue;
 
-            if (!empty($resolvedCodes)) {
-                $inserted = AttendanceLog::where('biometric_source_id', $source->id)
-                    ->where('sync_status', 'resolved')
-                    ->whereIn('occurred_at', array_map(
-                        fn($dt) => $dt instanceof \Carbon\Carbon ? $dt->format('Y-m-d H:i:s') : $dt,
-                        $resolvedCodes
-                    ))
-                    ->get();
+                $log = AttendanceLog::where('biometric_source_id', $source->id)
+                    ->where('employee_code', $record['employee_code'])
+                    ->where('occurred_at', $record['occurred_at'] instanceof \Carbon\Carbon
+                        ? $record['occurred_at']->format('Y-m-d H:i:s')
+                        : $record['occurred_at'])
+                    ->value('id');
 
-                foreach ($inserted as $attendanceLog) {
-                    SyncAttendanceToFactorial::dispatch($attendanceLog->id);
+                if ($log) {
+                    SyncAttendanceToFactorial::dispatch($log)->delay(now()->addSeconds($delay));
+                    $delay += 2;
                 }
             }
         }
 
         Log::info('ZKTeco ATTLOG procesado', ['sn' => $sn, 'count' => count($records)]);
 
-        $this->plainResponse('OK: ' . count($records));
+        return $this->plainResponse('OK: ' . count($records));
     }
 
     // ─── Private: Builders ───────────────────────────────────────────
@@ -381,16 +369,11 @@ class IclockController extends Controller
         ));
     }
 
-    private function plainResponse(string $body, int $status = 200): never
+    private function plainResponse(string $body, int $status = 200): Response
     {
-        ini_set('default_charset', '');
-
-        http_response_code($status);
-        header('Content-Type: text/plain');
-        header('Content-Length: ' . strlen($body));
-        header('Connection: close');
-
-        echo $body;
-        exit;
+        return response($body, $status)
+            ->header('Content-Type', 'text/plain')
+            ->header('Content-Length', strlen($body))
+            ->header('Connection', 'close');
     }
 }

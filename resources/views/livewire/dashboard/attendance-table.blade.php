@@ -155,11 +155,9 @@ new class extends Component {
                         </p>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <p>{{ $log->client?->name ?? '—' }}</p>
+                        <p title="{{ $log->client?->name }}">{{ Str::limit($log->client?->name ?? '—', 12, '…') }}</p>
                         @if($log->biometricSource)
-                            <p class="text-xs text-gray-400 font-mono" title="{{ $log->biometricSource->name }}">
-                                {{ Str::limit($log->biometricSource->name, 12, '…') }}
-                            </p>
+                            <p class="text-xs text-gray-400 font-mono">{{ $log->biometricSource->name }}</p>
                         @endif
                     </td>
                     <td class="px-6 py-4 max-w-xs">

@@ -224,7 +224,17 @@ new class extends Component {
             return;
         }
 
-        $this->validate(['csvFile' => 'required|file|mimes:csv,txt|max:2048']);
+        try {
+            $this->validate(['csvFile' => 'required|file|max:2048']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->importError = collect($e->errors())->flatten()->first() ?? 'Archivo inválido.';
+            return;
+        }
+
+        if (!in_array(strtolower($this->csvFile->getClientOriginalExtension()), ['csv', 'txt'])) {
+            $this->importError = 'Solo se aceptan archivos .csv o .txt';
+            return;
+        }
 
         $path = $this->csvFile->getRealPath();
         $rows = [];

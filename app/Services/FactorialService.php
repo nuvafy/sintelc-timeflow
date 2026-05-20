@@ -3,8 +3,12 @@
 namespace App\Services;
 
 use App\Models\FactorialConnection;
+use Carbon\Carbon;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class FactorialService
@@ -29,13 +33,25 @@ class FactorialService
 
     protected function request(string $method, string $uri, array $options = []): Response
     {
-        $url = $this->baseUrl() . '/' . ltrim($uri, '/');
+        $url      = $this->baseUrl() . '/' . ltrim($uri, '/');
+        $response = $this->doRequest($method, $url, $options, $this->accessToken());
 
-        $request = Http::withToken($this->accessToken())
+        // Si la respuesta es 401, intentar refrescar el token y reintentar una vez
+        if ($response->status() === 401) {
+            $this->refreshAccessToken();
+            $response = $this->doRequest($method, $url, $options, $this->accessToken());
+        }
+
+        return $response->throw();
+    }
+
+    private function doRequest(string $method, string $url, array $options, string $token): Response
+    {
+        $request = Http::withToken($token)
             ->acceptJson()
             ->timeout(30);
 
-        $response = match (strtolower($method)) {
+        return match (strtolower($method)) {
             'get'    => $request->get($url, $options['query'] ?? []),
             'post'   => $request->post($url, $options['json'] ?? []),
             'put'    => $request->put($url, $options['json'] ?? []),
@@ -43,9 +59,79 @@ class FactorialService
             'delete' => $request->delete($url, $options['json'] ?? []),
             default  => throw new RuntimeException("Método HTTP no soportado: {$method}"),
         };
-
-        return $response->throw();
     }
+
+    /**
+     * Refresca el access_token usando el refresh_token.
+     * Usa un Cache lock por conexión para que solo un worker refresque
+     * a la vez — los demás esperan y reutilizan el token nuevo.
+     */
+    protected function refreshAccessToken(): void
+    {
+        $lockKey = "factorial_token_refresh:{$this->connection->id}";
+        $lock    = Cache::lock($lockKey, 30); // máximo 30s esperando
+
+        // Intentar adquirir el lock; si otro worker lo tiene, esperar hasta 25s
+        $lock->block(25);
+
+        try {
+            // Recargar la conexión: puede que otro worker ya refrescó el token
+            $this->connection->refresh();
+
+            if (empty($this->connection->refresh_token)) {
+                throw new RuntimeException(
+                    "La conexión #{$this->connection->id} no tiene refresh_token. Reconecta el OAuth manualmente."
+                );
+            }
+
+            $client = $this->connection->client;
+
+            if (! $client || empty($client->oauth_client_id) || empty($client->oauth_client_secret)) {
+                throw new RuntimeException(
+                    "La conexión #{$this->connection->id} no tiene client_id/secret configurados en el cliente."
+                );
+            }
+
+            $response = Http::asForm()->post(
+                $this->baseUrl() . '/oauth/token',
+                [
+                    'grant_type'    => 'refresh_token',
+                    'refresh_token' => $this->connection->refresh_token,
+                    'client_id'     => $client->oauth_client_id,
+                    'client_secret' => $client->oauth_client_secret,
+                ]
+            );
+
+            if ($response->failed()) {
+                throw new RuntimeException(
+                    "Refresh token fallido para conexión #{$this->connection->id}: " . $response->body()
+                );
+            }
+
+            $data = $response->json();
+
+            $this->connection->update([
+                'access_token'  => $data['access_token'] ?? null,
+                'refresh_token' => $data['refresh_token'] ?? $this->connection->refresh_token,
+                'expires_in'    => $data['expires_in'] ?? null,
+                'expires_at'    => isset($data['expires_in'])
+                    ? Carbon::now()->addSeconds((int) $data['expires_in'])
+                    : null,
+            ]);
+
+            // Recargar para que accessToken() devuelva el nuevo valor
+            $this->connection->refresh();
+
+            Log::info('FactorialService: token refrescado', [
+                'connection_id' => $this->connection->id,
+            ]);
+
+        } finally {
+            $lock->release();
+        }
+    }
+
+    // ── Métodos públicos ──────────────────────────────────────────────
 
     public function getEmployees(array $query = []): array
     {

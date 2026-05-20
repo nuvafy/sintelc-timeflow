@@ -254,7 +254,11 @@ new class extends Component {
             $pin  = trim($row['pin'] ?? '');
             $name = trim($row['nombre'] ?? $row['name'] ?? '');
             if ($pin === '') continue;
-            $rows[] = ['pin' => $pin, 'name' => $name];
+            // Asegurar UTF-8 para json_encode
+            $rows[] = [
+                'pin'  => mb_convert_encoding($pin, 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
+                'name' => mb_convert_encoding($name, 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
+            ];
         }
         fclose($handle);
 

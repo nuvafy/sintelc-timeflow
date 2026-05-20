@@ -75,7 +75,7 @@ new class extends Component {
 
         <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {{-- Empresa --}}
-            <select wire:model.live="clientFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <select wire:model.live="clientFilter" class="block w-full rounded-md border-gray-300 shadow-sm text-sm uppercase focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todas las empresas</option>
                 @foreach($clients as $client)
                     <option value="{{ $client->id }}">{{ $client->name }}</option>

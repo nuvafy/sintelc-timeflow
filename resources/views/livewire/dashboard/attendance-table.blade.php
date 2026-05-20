@@ -165,14 +165,14 @@ new class extends Component {
                             $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'resolved' => 'bg-indigo-100 text-indigo-700', 'synced' => 'bg-green-100 text-green-800', 'incomplete' => 'bg-gray-100 text-gray-600', 'failed' => 'bg-red-100 text-red-800'];
                             $statusLabels = ['pending' => 'Pendiente', 'resolved' => 'Resuelto', 'synced' => 'Sincronizado', 'incomplete' => 'Incompleto', 'failed' => 'Fallido'];
                         @endphp
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusColors[$log->sync_status] ?? 'bg-gray-100 text-gray-800' }}">
+                        <span
+                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full cursor-default {{ $statusColors[$log->sync_status] ?? 'bg-gray-100 text-gray-800' }}"
+                            @if($log->sync_error) title="{{ $log->sync_error }}"
+                            @elseif($log->sync_note) title="{{ $log->sync_note }}"
+                            @endif
+                        >
                             {{ $statusLabels[$log->sync_status] ?? $log->sync_status }}
                         </span>
-                        @if($log->sync_error)
-                            <p class="text-xs text-red-500 mt-1 break-all">{{ $log->sync_error }}</p>
-                        @elseif($log->sync_note)
-                            <p class="text-xs text-gray-400 mt-1">{{ $log->sync_note }}</p>
-                        @endif
                     </td>
                 </tr>
                 @empty

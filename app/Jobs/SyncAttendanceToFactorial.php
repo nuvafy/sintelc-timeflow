@@ -56,12 +56,12 @@ class SyncAttendanceToFactorial implements ShouldQueue
         }
 
         $service = new FactorialService($connection);
-        $this->syncWithFallback($log, $employee, $service);
+        $this->sync($log, $employee, $service);
     }
 
-    // ── Flujo principal con fallback ───────────────────────────────
+    // ── Flujo principal ────────────────────────────────────────────
 
-    private function syncWithFallback(AttendanceLog $log, FactorialEmployee $employee, FactorialService $service): void
+    private function sync(AttendanceLog $log, FactorialEmployee $employee, FactorialService $service): void
     {
         $workplaceId = $log->biometricSource?->factorial_location_id;
 
@@ -76,7 +76,6 @@ class SyncAttendanceToFactorial implements ShouldQueue
         }
 
         try {
-            // Método principal: clock_in / clock_out
             $response = match ($log->check_type) {
                 'check_in', 'break_out' => $service->clockIn($payload),
                 'check_out', 'break_in' => $service->clockOut($payload),
@@ -88,88 +87,127 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            // Guardar shift_id si viene en la respuesta
-            $shiftId = $response['id'] ?? null;
-
-            $log->update([
-                'factorial_shift_id' => $shiftId,
-                'sync_status'        => 'synced',
-                'processed_at'       => now(),
-                'sync_error'         => null,
-                'sync_note'          => 'clock_in/clock_out directo',
-            ]);
-
-            Log::info('SyncAttendanceToFactorial: OK (método principal)', [
-                'attendance_log_id'  => $log->id,
-                'check_type'         => $log->check_type,
-                'factorial_shift_id' => $shiftId,
-            ]);
+            $this->markSynced($log, $response['id'] ?? null, 'directo');
 
         } catch (RequestException $e) {
-            $status  = $e->response->status();
             $body    = $e->response->json() ?? [];
             $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
 
-            Log::warning('SyncAttendanceToFactorial: método principal falló, intentando toggle', [
+            Log::warning('SyncAttendanceToFactorial: método directo falló, intentando overwrite', [
                 'attendance_log_id' => $log->id,
-                'status'            => $status,
+                'http_status'       => $e->response->status(),
                 'error'             => $message,
             ]);
 
-            $this->tryToggle($log, $employee, $service, $message);
+            $this->tryOverwrite($log, $employee, $service, $message);
+
         } catch (\Throwable $e) {
             $this->fail($log, $e->getMessage());
             throw $e;
         }
     }
 
-    // ── Fallback: toggle ───────────────────────────────────────────
+    // ── Fallback: sobreescribir turno existente ────────────────────
+    //
+    // La API tiene mayor jerarquía que la plataforma web/móvil.
+    // Si hay un turno abierto (sea cual sea su in_source), lo sobreescribimos
+    // con el timestamp del biométrico.
 
-    private function tryToggle(AttendanceLog $log, FactorialEmployee $employee, FactorialService $service, string $primaryError): void
+    private function tryOverwrite(AttendanceLog $log, FactorialEmployee $employee, FactorialService $service, string $primaryError): void
     {
-        $workplaceId = $log->biometricSource?->factorial_location_id;
-
-        $payload = [
-            'employee_id' => $employee->factorial_id,
-            'clock_time'  => $log->occurred_at->format('Y-m-d\TH:i:s'),
-        ];
-
-        if ($workplaceId) {
-            $payload['workplace_id']  = $workplaceId;
-            $payload['location_type'] = 'office';
-        }
-
         try {
-            $response = $service->toggleClock($payload);
-            $shiftId  = $response['id'] ?? null;
+            // Buscar turno abierto del empleado en la fecha del registro
+            // También revisamos el día anterior por si el turno cruzó medianoche
+            $openShift = $this->findOpenShift($service, $employee->factorial_id, $log->occurred_at);
 
-            $log->update([
-                'factorial_shift_id' => $shiftId,
-                'sync_status'        => 'synced',
-                'processed_at'       => now(),
-                'sync_error'         => null,
-                'sync_note'          => 'toggle fallback',
-            ]);
+            if (!$openShift) {
+                $this->fail($log, "Sin turno abierto para sobreescribir. Error original: {$primaryError}");
+                return;
+            }
 
-            Log::info('SyncAttendanceToFactorial: OK (toggle fallback)', [
+            $time = $log->occurred_at->format('H:i:s');
+
+            $updatePayload = match ($log->check_type) {
+                'check_in', 'break_out' => ['clock_in'  => $time],
+                'check_out', 'break_in' => ['clock_out' => $time],
+                default                 => null,
+            };
+
+            if ($updatePayload === null) {
+                $this->fail($log, "check_type no soportado: {$log->check_type}");
+                return;
+            }
+
+            $service->updateShift($openShift['id'], $updatePayload);
+
+            $inSource = $openShift['in_source'] ?? 'api';
+
+            $this->markSynced($log, $openShift['id'], "overwrite ({$inSource})");
+
+            Log::info('SyncAttendanceToFactorial: OK (overwrite)', [
                 'attendance_log_id'  => $log->id,
                 'check_type'         => $log->check_type,
-                'factorial_shift_id' => $shiftId,
+                'factorial_shift_id' => $openShift['id'],
+                'in_source'          => $inSource,
             ]);
 
         } catch (RequestException $e) {
             $body    = $e->response->json() ?? [];
             $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
 
-            $this->fail($log, "Principal: {$primaryError} | Toggle: {$message}");
+            $this->fail($log, "Directo: {$primaryError} | Overwrite: {$message}");
             throw $e;
+
         } catch (\Throwable $e) {
-            $this->fail($log, "Principal: {$primaryError} | Toggle: {$e->getMessage()}");
+            $this->fail($log, "Directo: {$primaryError} | Overwrite: {$e->getMessage()}");
             throw $e;
         }
     }
 
     // ── Helpers ────────────────────────────────────────────────────
+
+    /**
+     * Busca un turno sin clock_out en la fecha del log.
+     * Revisa también el día anterior para cubrir turnos que cruzan medianoche.
+     */
+    private function findOpenShift(FactorialService $service, int $factorialEmployeeId, \Carbon\Carbon $date): ?array
+    {
+        $dates = [
+            $date->format('Y-m-d'),
+            $date->copy()->subDay()->format('Y-m-d'),
+        ];
+
+        foreach ($dates as $checkDate) {
+            $shifts = $service->getShifts([
+                'employee_id' => $factorialEmployeeId,
+                'date'        => $checkDate,
+            ]);
+
+            $open = collect($shifts)->first(fn($s) => $s['clock_out'] === null);
+
+            if ($open) return $open;
+        }
+
+        return null;
+    }
+
+    private function markSynced(AttendanceLog $log, ?int $shiftId, string $note): void
+    {
+        $log->update([
+            'factorial_shift_id' => $shiftId,
+            'sync_status'        => 'synced',
+            'processed_at'       => now(),
+            'sync_error'         => null,
+            'sync_note'          => $note,
+        ]);
+
+        Log::info('SyncAttendanceToFactorial: OK', [
+            'attendance_log_id'  => $log->id,
+            'check_type'         => $log->check_type,
+            'factorial_shift_id' => $shiftId,
+            'note'               => $note,
+        ]);
+    }
 
     private function fail(AttendanceLog $log, string $error): void
     {

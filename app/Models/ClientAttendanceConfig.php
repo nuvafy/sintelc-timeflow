@@ -34,4 +34,19 @@ class ClientAttendanceConfig extends Model
             default            => null,
         };
     }
+
+    /**
+     * Mapeo estándar ZKTeco cuando no hay ClientAttendanceConfig configurado.
+     * 0/4 = entrada, 1/5 = salida, 2 = inicio descanso, 3 = fin descanso.
+     */
+    public static function defaultCheckType(?string $status): string
+    {
+        return match ($status) {
+            '0', '4' => 'check_in',
+            '1', '5' => 'check_out',
+            '2'      => 'break_in',
+            '3'      => 'break_out',
+            default  => 'unknown',
+        };
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use App\Models\BiometricUserSync;
+use App\Models\ClientAttendanceConfig;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use Carbon\Carbon;
@@ -69,6 +70,8 @@ class ImportAttlogDat extends Command
         }
 
         $accessIdMap = $employeeQuery->pluck('id', 'access_id');
+
+        $attendanceConfig = ClientAttendanceConfig::where('client_id', $source->client_id)->first();
 
         $this->info("Mappings cargados: {$mappings->count()} por código | {$accessIdMap->count()} por access_id");
 
@@ -142,7 +145,9 @@ class ImportAttlogDat extends Command
                 }
             }
 
-            $checkType  = $this->resolveCheckType($status);
+            $checkType = $attendanceConfig
+                ? ($attendanceConfig->resolveCheckType($status) ?? 'unknown')
+                : ClientAttendanceConfig::defaultCheckType($status);
             $employeeId = $mappings[$pin] ?? $accessIdMap[$pin] ?? null;
 
             $records[] = [
@@ -219,16 +224,4 @@ class ImportAttlogDat extends Command
         return self::SUCCESS;
     }
 
-    private function resolveCheckType(?string $status): string
-    {
-        return match ($status) {
-            '0'     => 'check_in',
-            '1'     => 'check_out',
-            '2'     => 'break_in',  // Descanso = cierra turno
-            '3'     => 'break_out', // Fin Descanso = abre turno
-            '4'     => 'check_in',  // overtime in
-            '5'     => 'check_out', // overtime out
-            default => 'unknown',
-        };
-    }
 }

@@ -35,70 +35,93 @@ class SyncFactorialEmployees extends Command
 
         try {
             $service = new FactorialService($connection);
-            $response = $service->getEmployees();
 
-            $employees = $response['data'] ?? [];
-            $meta = $response['meta'] ?? [];
+            // ── Paginación: sigue hasta que la página venga incompleta ──
+            $allEmployees = [];
+            $offset       = 0;
+            $limit        = 100;
 
-            $created = 0;
-            $updated = 0;
+            do {
+                $response = $service->getEmployees(['offset' => $offset, 'limit' => $limit]);
+                $page     = $response['data'] ?? [];
+                $allEmployees = array_merge($allEmployees, $page);
+                $offset  += $limit;
+            } while (count($page) === $limit);
+
+            $this->info("Total empleados obtenidos de Factorial: " . count($allEmployees));
+
+            // ── Pre-cargar IDs existentes para contar creados vs actualizados ──
+            $existingFactorialIds = FactorialEmployee::where('factorial_connection_id', $connection->id)
+                ->pluck('factorial_id')
+                ->flip();
+
+            $now     = now()->toDateTimeString();
+            $rows    = [];
             $skipped = 0;
 
-            foreach ($employees as $employee) {
+            foreach ($allEmployees as $employee) {
                 if (empty($employee['id'])) {
                     $this->warn('Se omitió un empleado porque no contiene id.');
                     $skipped++;
                     continue;
                 }
 
-                $model = FactorialEmployee::updateOrCreate(
+                $rows[] = [
+                    'factorial_connection_id' => $connection->id,
+                    'factorial_id'            => (int) $employee['id'],
+                    'client_id'               => $connection->client_id,
+                    'access_id'               => isset($employee['access_id']) ? (int) $employee['access_id'] : null,
+                    'first_name'              => $employee['first_name'] ?? null,
+                    'last_name'               => $employee['last_name'] ?? null,
+                    'full_name'               => $employee['full_name'] ?? null,
+                    'email'                   => $employee['email'] ?? null,
+                    'login_email'             => $employee['login_email'] ?? null,
+                    'company_id'              => isset($employee['company_id']) ? (int) $employee['company_id'] : null,
+                    'company_identifier'      => $employee['company_identifier'] ?? null,
+                    'location_id'             => isset($employee['location_id']) ? (int) $employee['location_id'] : null,
+                    'active'                  => (bool) ($employee['active'] ?? false),
+                    'attendable'              => (bool) ($employee['attendable'] ?? false),
+                    'is_terminating'          => (bool) ($employee['is_terminating'] ?? false),
+                    'terminated_on'           => $this->parseDate($employee['terminated_on'] ?? null)?->toDateTimeString(),
+                    'factorial_created_at'    => $this->parseDate($employee['created_at'] ?? null)?->toDateTimeString(),
+                    'factorial_updated_at'    => $this->parseDate($employee['updated_at'] ?? null)?->toDateTimeString(),
+                    'raw_payload'             => json_encode($employee),
+                    'created_at'              => $now,
+                    'updated_at'              => $now,
+                ];
+            }
+
+            if (! empty($rows)) {
+                // Batch upsert: 1 query en lugar de N updateOrCreate
+                FactorialEmployee::upsert(
+                    $rows,
+                    ['factorial_connection_id', 'factorial_id'],
                     [
-                        'factorial_connection_id' => $connection->id,
-                        'factorial_id' => (int) $employee['id'],
-                    ],
-                    [
-                        'client_id' => $connection->client_id,
-                        'access_id' => isset($employee['access_id']) ? (int) $employee['access_id'] : null,
-                        'first_name' => $employee['first_name'] ?? null,
-                        'last_name' => $employee['last_name'] ?? null,
-                        'full_name' => $employee['full_name'] ?? null,
-                        'email' => $employee['email'] ?? null,
-                        'login_email' => $employee['login_email'] ?? null,
-                        'company_id' => isset($employee['company_id']) ? (int) $employee['company_id'] : null,
-                        'company_identifier' => $employee['company_identifier'] ?? null,
-                        'location_id' => isset($employee['location_id']) ? (int) $employee['location_id'] : null,
-                        'active' => (bool) ($employee['active'] ?? false),
-                        'attendable' => (bool) ($employee['attendable'] ?? false),
-                        'is_terminating' => (bool) ($employee['is_terminating'] ?? false),
-                        'terminated_on' => $this->parseDate($employee['terminated_on'] ?? null),
-                        'factorial_created_at' => $this->parseDate($employee['created_at'] ?? null),
-                        'factorial_updated_at' => $this->parseDate($employee['updated_at'] ?? null),
-                        'raw_payload' => $employee,
+                        'client_id', 'access_id', 'first_name', 'last_name', 'full_name',
+                        'email', 'login_email', 'company_id', 'company_identifier',
+                        'location_id', 'active', 'attendable', 'is_terminating',
+                        'terminated_on', 'factorial_created_at', 'factorial_updated_at',
+                        'raw_payload', 'updated_at',
                     ]
                 );
-
-                if ($model->wasRecentlyCreated) {
-                    $created++;
-                } else {
-                    $updated++;
-                }
             }
 
-            $this->info('Empleados procesados: ' . count($employees));
-            $this->info("Creados: {$created}");
+            $created = collect($rows)
+                ->filter(fn($r) => ! isset($existingFactorialIds[$r['factorial_id']]))
+                ->count();
+            $updated = count($rows) - $created;
+
+            $this->info("Creados:     {$created}");
             $this->info("Actualizados: {$updated}");
-            $this->info("Omitidos: {$skipped}");
-
-            if (! empty($meta)) {
-                $this->line('Meta: ' . json_encode($meta, JSON_UNESCAPED_UNICODE));
-            }
+            $this->info("Omitidos:    {$skipped}");
 
             return self::SUCCESS;
+
         } catch (\Throwable $e) {
             Log::error('Error al sincronizar empleados de Factorial', [
                 'connection_id' => $connectionId,
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'message'       => $e->getMessage(),
+                'trace'         => $e->getTraceAsString(),
             ]);
 
             $this->error('Error al sincronizar empleados: ' . $e->getMessage());

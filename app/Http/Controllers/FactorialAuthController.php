@@ -8,25 +8,32 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Vinkla\Hashids\Facades\Hashids;
 
 class FactorialAuthController extends Controller
 {
     public function redirect(Request $request)
     {
-        $connectionId = $request->query('connection_id');
+        $hashedId = $request->query('connection_id');
 
-        if (! $connectionId) {
+        if (! $hashedId) {
             return response()->json(['ok' => false, 'message' => 'connection_id es requerido'], 400);
         }
 
-        $connection = FactorialConnection::with('client')->findOrFail($connectionId);
+        $decoded = Hashids::decode($hashedId);
+
+        if (empty($decoded)) {
+            return response()->json(['ok' => false, 'message' => 'connection_id inválido'], 400);
+        }
+
+        $connection = FactorialConnection::with('client')->findOrFail($decoded[0]);
 
         $query = http_build_query([
             'client_id'           => $connection->client->oauth_client_id,
             'redirect_uri'        => config('services.factorial.redirect'),
             'response_type'       => 'code',
             'resource_owner_type' => $connection->resource_owner_type ?? 'company',
-            'state'               => $connection->id,
+            'state'               => Hashids::encode($connection->id),
         ]);
 
         return redirect(config('services.factorial.base_url') . '/oauth/authorize?' . $query);
@@ -53,13 +60,19 @@ class FactorialAuthController extends Controller
             ], 400);
         }
 
-        $connectionId = $request->input('state');
+        $hashedState = $request->input('state');
 
-        if (! $connectionId) {
+        if (! $hashedState) {
             return response()->json(['ok' => false, 'message' => 'state (connection_id) ausente en el callback'], 400);
         }
 
-        $connection = FactorialConnection::with('client')->findOrFail($connectionId);
+        $decoded = Hashids::decode($hashedState);
+
+        if (empty($decoded)) {
+            return response()->json(['ok' => false, 'message' => 'state inválido en el callback'], 400);
+        }
+
+        $connection = FactorialConnection::with('client')->findOrFail($decoded[0]);
 
         $response = Http::asForm()->post(
             config('services.factorial.base_url') . '/oauth/token',

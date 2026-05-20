@@ -22,8 +22,10 @@ class FactorialConnection extends Model
     ];
 
     protected $casts = [
-        'expires_at'   => 'datetime',
-        'raw_response' => 'array',
+        'expires_at'    => 'datetime',
+        'raw_response'  => 'array',
+        'access_token'  => 'encrypted',
+        'refresh_token' => 'encrypted',
     ];
 
     public function client(): BelongsTo

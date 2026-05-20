@@ -8,6 +8,7 @@ use App\Services\FactorialService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
+use Vinkla\Hashids\Facades\Hashids;
 
 new class extends Component {
     public bool $showModal = false;
@@ -92,7 +93,7 @@ new class extends Component {
             $connection      = FactorialConnection::create(array_merge($data, [
                 'resource_owner_type' => 'company',
             ]));
-            $this->oauthUrl  = route('oauth.factorial.redirect', ['connection_id' => $connection->id]);
+            $this->oauthUrl  = route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($connection->id)]);
         }
     }
 
@@ -230,7 +231,7 @@ new class extends Component {
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $status['color'] }}">
                             {{ $status['label'] }}
                         </span>
-                        <a href="{{ route('oauth.factorial.redirect', ['connection_id' => $conn->id]) }}"
+                        <a href="{{ route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($conn->id)]) }}"
                            title="{{ $conn->access_token ? 'Reconectar' : 'Conectar' }}"
                            class="text-gray-400 hover:text-indigo-600 transition">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -281,7 +282,7 @@ new class extends Component {
                     Sincronizar
                 </button>
                 @else
-                <a href="{{ route('oauth.factorial.redirect', ['connection_id' => $conn->id]) }}"
+                <a href="{{ route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($conn->id)]) }}"
                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
                     <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>

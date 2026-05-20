@@ -145,9 +145,6 @@ new class extends Component {
                         </span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
-                        @if($log->biometricSource)
-                            <p class="text-xs text-gray-400 font-mono mb-1">{{ $log->biometricSource->name }}</p>
-                        @endif
                         <p class="flex items-center gap-1">
                             <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             {{ $log->occurred_at->format('d/m/Y') }}
@@ -158,7 +155,12 @@ new class extends Component {
                         </p>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {{ $log->client?->name ?? '—' }}
+                        <p>{{ $log->client?->name ?? '—' }}</p>
+                        @if($log->biometricSource)
+                            <p class="text-xs text-gray-400 font-mono" title="{{ $log->biometricSource->name }}">
+                                {{ Str::limit($log->biometricSource->name, 12, '…') }}
+                            </p>
+                        @endif
                     </td>
                     <td class="px-6 py-4 max-w-xs">
                         @php

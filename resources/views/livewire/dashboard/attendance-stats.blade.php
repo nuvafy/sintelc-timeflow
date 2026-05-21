@@ -9,7 +9,6 @@ new class extends Component {
     public int $pendingSync = 0;
     public int $failedSync = 0;
     public int $syncedToday = 0;
-    public bool $retrying = false;
 
     public function mount(): void
     {
@@ -53,71 +52,97 @@ new class extends Component {
     }
 }; ?>
 
-<div class="space-y-3">
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="bg-white overflow-hidden shadow rounded-lg p-5">
-            <div class="flex items-center">
-                <div class="flex-shrink-0 bg-indigo-500 rounded-md p-3">
-                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                    </svg>
-                </div>
-                <div class="ml-5">
-                    <p class="text-sm font-medium text-gray-500">Registros hoy</p>
-                    <p class="mt-1 text-3xl font-semibold text-gray-900">{{ $todayTotal }}</p>
-                </div>
-            </div>
+@php
+    $r             = 54;
+    $circumference = 2 * M_PI * $r;
+    $startOffset   = $circumference / 4;
+    $donutTotal    = $syncedToday + $pendingSync + $failedSync;
+
+    if ($donutTotal > 0) {
+        $syncedLen  = ($syncedToday / $donutTotal) * $circumference;
+        $pendingLen = ($pendingSync / $donutTotal) * $circumference;
+        $failedLen  = ($failedSync  / $donutTotal) * $circumference;
+    } else {
+        $syncedLen = $pendingLen = $failedLen = 0;
+    }
+
+    $offset1 = $startOffset;
+    $offset2 = $startOffset - $syncedLen;
+    $offset3 = $startOffset - $syncedLen - $pendingLen;
+@endphp
+
+<div class="bg-white shadow rounded-lg p-5">
+    <div class="flex items-center gap-8">
+
+        {{-- Dona SVG --}}
+        <div class="flex-shrink-0">
+            <svg width="130" height="130" viewBox="0 0 120 120">
+                @if($donutTotal === 0)
+                    <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#e5e7eb" stroke-width="14"/>
+                @else
+                    <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#f3f4f6" stroke-width="14"/>
+
+                    @if($syncedLen > 0)
+                    <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#22c55e" stroke-width="14"
+                        stroke-dasharray="{{ number_format($syncedLen, 2) }} {{ number_format($circumference, 2) }}"
+                        stroke-dashoffset="{{ number_format($offset1, 2) }}"
+                        stroke-linecap="butt"/>
+                    @endif
+
+                    @if($pendingLen > 0)
+                    <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#eab308" stroke-width="14"
+                        stroke-dasharray="{{ number_format($pendingLen, 2) }} {{ number_format($circumference, 2) }}"
+                        stroke-dashoffset="{{ number_format($offset2, 2) }}"
+                        stroke-linecap="butt"/>
+                    @endif
+
+                    @if($failedLen > 0)
+                    <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#ef4444" stroke-width="14"
+                        stroke-dasharray="{{ number_format($failedLen, 2) }} {{ number_format($circumference, 2) }}"
+                        stroke-dashoffset="{{ number_format($offset3, 2) }}"
+                        stroke-linecap="butt"/>
+                    @endif
+                @endif
+
+                <text x="60" y="56" text-anchor="middle" font-size="22" font-weight="bold" fill="#111827">{{ $todayTotal }}</text>
+                <text x="60" y="71" text-anchor="middle" font-size="9" fill="#6b7280">registros hoy</text>
+            </svg>
         </div>
 
-        <div class="bg-white overflow-hidden shadow rounded-lg p-5">
-            <div class="flex items-center">
-                <div class="flex-shrink-0 bg-green-500 rounded-md p-3">
-                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    </svg>
+        {{-- Leyenda --}}
+        <div class="flex-1 space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-green-500 flex-shrink-0"></span>
+                    <span class="text-sm text-gray-600">Sincronizados hoy</span>
                 </div>
-                <div class="ml-5">
-                    <p class="text-sm font-medium text-gray-500">Sincronizados hoy</p>
-                    <p class="mt-1 text-3xl font-semibold text-gray-900">{{ $syncedToday }}</p>
-                </div>
+                <span class="text-sm font-semibold text-gray-900">{{ $syncedToday }}</span>
             </div>
-        </div>
 
-        <div class="bg-white overflow-hidden shadow rounded-lg p-5">
-            <div class="flex items-center">
-                <div class="flex-shrink-0 bg-yellow-500 rounded-md p-3">
-                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-yellow-400 flex-shrink-0"></span>
+                    <span class="text-sm text-gray-600">Pendientes de sync</span>
                 </div>
-                <div class="ml-5">
-                    <p class="text-sm font-medium text-gray-500">Pendientes de sync</p>
-                    <p class="mt-1 text-3xl font-semibold text-gray-900">{{ $pendingSync }}</p>
-                </div>
+                <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>
             </div>
-        </div>
 
-        <div class="bg-white overflow-hidden shadow rounded-lg p-5">
-            <div class="flex items-center">
-                <div class="flex-shrink-0 bg-red-500 rounded-md p-3">
-                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-red-500 flex-shrink-0"></span>
+                    <span class="text-sm text-gray-600">Errores de sync</span>
                 </div>
-                <div class="ml-5 flex-1 flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-500">Errores de sync</p>
-                        <p class="mt-1 text-3xl font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</p>
-                    </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
                     @if($failedSync > 0)
-                    <div class="ml-3 flex flex-col gap-1">
+                    <div class="flex gap-1">
                         <button wire:click="retryFailed" wire:loading.attr="disabled"
-                            class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 transition">
+                            class="px-2 py-0.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 transition">
                             <span wire:loading.remove wire:target="retryFailed">Reintentar</span>
                             <span wire:loading wire:target="retryFailed">...</span>
                         </button>
                         <button wire:click="dismissFailed" wire:confirm="¿Descartar los {{ $failedSync }} errores?" wire:loading.attr="disabled"
-                            class="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 transition">
+                            class="px-2 py-0.5 text-xs font-medium text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 transition">
                             Descartar
                         </button>
                     </div>
@@ -125,5 +150,6 @@ new class extends Component {
                 </div>
             </div>
         </div>
+
     </div>
 </div>

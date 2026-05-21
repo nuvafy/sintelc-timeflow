@@ -180,10 +180,13 @@ class FactorialService
         foreach ($query as $key => $value) {
             if (is_array($value)) {
                 foreach ($value as $item) {
-                    $parts[] = urlencode($key . '[]') . '=' . urlencode($item);
+                    // Usamos corchetes literales — Guzzle los codifica a %5B%5D en el wire.
+                    // Si pre-codificamos con urlencode(), Guzzle double-encodea a %255B%255D
+                    // y la API no reconoce el parámetro.
+                    $parts[] = rawurlencode($key) . '[]=' . rawurlencode((string) $item);
                 }
             } else {
-                $parts[] = urlencode($key) . '=' . urlencode($value);
+                $parts[] = rawurlencode($key) . '=' . rawurlencode((string) $value);
             }
         }
 

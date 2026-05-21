@@ -26,9 +26,7 @@ new class extends Component {
 
     public function dismissFailed(): void
     {
-        AttendanceLog::where('sync_status', 'failed')
-            ->update(['sync_status' => 'incomplete', 'sync_error' => null]);
-
+        AttendanceLog::where('sync_status', 'failed')->delete();
         $this->loadStats();
     }
 

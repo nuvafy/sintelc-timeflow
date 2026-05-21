@@ -1,17 +1,20 @@
 <?php
 
+use App\Models\AttendanceLog;
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
+use App\Models\BiometricUserSync;
 use App\Models\Client;
 use App\Models\DeviceCommand;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new class extends Component {
-    use WithPagination;
+    use WithPagination, WithFileUploads;
 
     public bool $showModal = false;
     public bool $editing = false;
@@ -32,10 +35,12 @@ new class extends Component {
     public ?int $assign_provider_id = null;
     public ?int $assign_location_id = null;
 
-    // Modal confirmación de envío de usuarios
-    public bool $showPushModal = false;
-    public ?int $pushSourceId = null;
-    public int $pushCount = 0;
+    // Modal CSV import
+    public bool   $showCsvModal = false;
+    public ?int   $csvSourceId  = null;
+    public $csvFile             = null;
+    public string $importError  = '';
+    public ?array $csvResult    = null;
 
     public function rules(): array
     {
@@ -157,56 +162,126 @@ new class extends Component {
         $this->assigningSourceId = null;
     }
 
-    // ── Enviar usuarios al dispositivo ────────────────────────────
+    // ── CSV Import ────────────────────────────────────────────────
 
-    public function openPush(int $id): void
+    public function openCsvModal(int $id): void
     {
-        $source = BiometricSource::findOrFail($id);
-        $this->pushSourceId = $source->id;
-        $this->pushCount    = FactorialEmployee::where('client_id', $source->client_id)
-            ->whereNotNull('access_id')
-            ->where('active', true)
-            ->count();
-        $this->showPushModal = true;
+        $this->csvSourceId  = $id;
+        $this->csvFile      = null;
+        $this->importError  = '';
+        $this->csvResult    = null;
+        $this->showCsvModal = true;
     }
 
-    public function confirmPush(): void
+    public function closeCsvModal(): void
     {
-        $source = BiometricSource::findOrFail($this->pushSourceId);
+        $this->showCsvModal = false;
+        $this->csvSourceId  = null;
+        $this->csvFile      = null;
+        $this->importError  = '';
+        $this->csvResult    = null;
+    }
 
-        $employees = FactorialEmployee::where('client_id', $source->client_id)
-            ->whereNotNull('access_id')
-            ->where('active', true)
-            ->get();
+    public function uploadCsv(): void
+    {
+        $this->importError = '';
+        $this->csvResult   = null;
 
-        $maxSeq = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
+        $source = $this->csvSourceId ? BiometricSource::find($this->csvSourceId) : null;
+        if (!$source) { $this->importError = 'Dispositivo no encontrado.'; return; }
 
-        $now     = now();
-        $inserts = [];
+        try {
+            $this->validate(['csvFile' => 'required|file|max:2048']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->importError = collect($e->errors())->flatten()->first() ?? 'Archivo inválido.';
+            return;
+        }
 
-        foreach ($employees as $i => $employee) {
-            $seq      = $maxSeq + $i + 1;
-            $pin      = $employee->access_id;
-            $name     = mb_substr($employee->full_name, 0, 24); // ZKTeco max 24 chars
-            $payload  = "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tCard=\tRole=0";
+        if (!in_array(strtolower($this->csvFile->getClientOriginalExtension()), ['csv', 'txt'])) {
+            $this->importError = 'Solo se aceptan archivos .csv o .txt';
+            return;
+        }
 
-            $inserts[] = [
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $seq,
-                'command_type'        => 'set_user',
-                'payload'             => $payload,
-                'status'              => 'pending',
-                'created_at'          => $now,
-                'updated_at'          => $now,
+        $path = $this->csvFile->getRealPath();
+        $rows = [];
+
+        if (($handle = fopen($path, 'r')) === false) {
+            $this->importError = 'No se pudo leer el archivo.';
+            return;
+        }
+
+        $header = null;
+        while (($line = fgetcsv($handle, 1000, ',')) !== false) {
+            if (!$header) {
+                $header = array_map('strtolower', array_map('trim', $line));
+                continue;
+            }
+            if (count($line) < count($header)) continue;
+            $row  = array_combine($header, array_slice($line, 0, count($header)));
+            $pin  = trim($row['pin'] ?? '');
+            $name = trim($row['nombre'] ?? $row['name'] ?? '');
+            if ($pin === '') continue;
+            $rows[] = [
+                'pin'  => mb_convert_encoding($pin,  'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
+                'name' => mb_convert_encoding($name, 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
             ];
         }
+        fclose($handle);
 
-        if (!empty($inserts)) {
-            DeviceCommand::insert($inserts);
+        if (empty($rows)) {
+            $this->importError = 'Sin registros válidos. Columnas requeridas: pin, nombre.';
+            return;
         }
 
-        $this->showPushModal = false;
-        $this->pushSourceId  = null;
+        // Guardar device_users en este dispositivo
+        $source->update([
+            'device_users' => array_map(
+                fn($r) => ['pin' => $r['pin'], 'name' => $r['name'], 'card' => '', 'role' => '0'],
+                $rows
+            ),
+        ]);
+
+        // Auto-match 100% contra empleados Factorial
+        $employees       = FactorialEmployee::where('client_id', $source->client_id)->get();
+        $existingMappings = BiometricUserSync::where('client_id', $source->client_id)
+            ->whereNotNull('factorial_employee_id')
+            ->pluck('factorial_employee_id', 'external_employee_code');
+        $provider = BiometricProvider::where('client_id', $source->client_id)->first();
+        $now      = now();
+        $autoMapped = 0;
+        $pending    = 0;
+
+        foreach ($rows as $row) {
+            if (isset($existingMappings[$row['pin']])) continue;
+
+            $bestScore = 0; $bestEmpId = null;
+            foreach ($employees as $emp) {
+                similar_text(mb_strtolower($row['name']), mb_strtolower($emp->full_name), $pct);
+                if ($pct > $bestScore) { $bestScore = $pct; $bestEmpId = $emp->id; }
+            }
+
+            if ($bestScore >= 100 && $bestEmpId && $provider) {
+                BiometricUserSync::updateOrCreate(
+                    ['biometric_provider_id' => $provider->id, 'factorial_employee_id' => $bestEmpId],
+                    ['client_id' => $source->client_id, 'external_employee_code' => $row['pin'], 'sync_status' => 'pending', 'last_attempt_at' => $now]
+                );
+                AttendanceLog::where('client_id', $source->client_id)
+                    ->where('employee_code', $row['pin'])
+                    ->whereNull('factorial_employee_id')
+                    ->update(['factorial_employee_id' => $bestEmpId, 'sync_status' => 'resolved']);
+                $autoMapped++;
+            } else {
+                $pending++;
+            }
+        }
+
+        $this->csvResult = [
+            'total'      => count($rows),
+            'autoMapped' => $autoMapped,
+            'pending'    => $pending,
+            'existing'   => count($rows) - $autoMapped - $pending,
+        ];
+        $this->csvFile = null;
     }
 
     private function resetForm(): void
@@ -309,8 +384,8 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
-                            {{-- Enviar usuarios --}}
-                            <button wire:click="openPush({{ $device->id }})" title="Enviar usuarios de Factorial al dispositivo"
+                            {{-- Importar CSV --}}
+                            <button wire:click="openCsvModal({{ $device->id }})" title="Importar empleados desde CSV"
                                 class="text-emerald-500 hover:text-emerald-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
@@ -484,42 +559,60 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Modal: Confirmar envío de usuarios ───────────────────────── --}}
-    @if($showPushModal)
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    {{-- ── Modal: Importar CSV ──────────────────────────────────────── --}}
+    @if($showCsvModal)
+    @php $csvSource = $csvSourceId ? \App\Models\BiometricSource::find($csvSourceId) : null; @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeCsvModal">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div class="px-6 py-5 border-b border-gray-200 flex items-center gap-3">
-                <div class="w-9 h-9 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                    </svg>
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Importar empleados desde CSV</h3>
+                    @if($csvSource)
+                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $csvSource->name }} · {{ $csvSource->serial_number }}</p>
+                    @endif
                 </div>
-                <h3 class="text-base font-semibold text-gray-900">Enviar usuarios al dispositivo</h3>
+                <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
 
-            <div class="px-6 py-4">
-                @if($pushCount > 0)
-                    <p class="text-sm text-gray-600">
-                        Se encolarán <span class="font-semibold text-gray-900">{{ $pushCount }}</span> empleados activos con PIN registrado.
-                        El equipo los recibirá en su próxima sincronización.
-                    </p>
+            <div class="px-6 py-5 space-y-4">
+                @if($csvResult)
+                    {{-- Resultado --}}
+                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 space-y-1">
+                        <p class="text-sm font-semibold text-emerald-800">Importación completada</p>
+                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios importados al dispositivo</p>
+                        <div class="flex gap-4 mt-2 text-xs">
+                            <span class="text-green-700 font-medium">✓ {{ $csvResult['autoMapped'] }} auto-mapeados</span>
+                            @if($csvResult['existing'] > 0)
+                                <span class="text-gray-500">{{ $csvResult['existing'] }} ya existían</span>
+                            @endif
+                            @if($csvResult['pending'] > 0)
+                                <span class="text-amber-600 font-medium">⚠ {{ $csvResult['pending'] }} pendientes de mapeo</span>
+                            @endif
+                        </div>
+                    </div>
+                    @if($csvResult['pending'] > 0)
+                        <p class="text-xs text-gray-500">Completa el mapeo en <strong>Empleados → Mapping</strong>.</p>
+                    @endif
                 @else
-                    <p class="text-sm text-gray-600 mb-3">
-                        No hay empleados activos con <code class="bg-gray-100 px-1 rounded text-xs">access_id</code> para este cliente.
-                    </p>
-                    <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
-                        Sincroniza primero los empleados desde Factorial con <code class="text-xs">php artisan factorial:sync-employees</code>.
-                    </p>
+                    <input wire:model="csvFile" type="file" accept=".csv,.txt"
+                        class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"/>
+                    @if($importError)
+                        <p class="text-xs text-red-600">{{ $importError }}</p>
+                    @endif
+                    <p class="text-xs text-gray-400">Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code></p>
                 @endif
             </div>
 
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button wire:click="$set('showPushModal', false)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                    Cancelar
+                <button wire:click="closeCsvModal"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    {{ $csvResult ? 'Cerrar' : 'Cancelar' }}
                 </button>
-                @if($pushCount > 0)
-                <button wire:click="confirmPush" class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700">
-                    Confirmar envío
+                @if(!$csvResult)
+                <button wire:click="uploadCsv" wire:loading.attr="disabled"
+                    class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50">
+                    <span wire:loading.remove wire:target="uploadCsv">Importar y mapear</span>
+                    <span wire:loading wire:target="uploadCsv">Procesando…</span>
                 </button>
                 @endif
             </div>

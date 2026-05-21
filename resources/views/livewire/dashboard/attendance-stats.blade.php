@@ -199,7 +199,7 @@ new class extends Component {
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full flex-shrink-0"
                             style="background-color:{{ $clientColors[$i % count($clientColors)] }};"></span>
-                        <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($c['name'])), 0, 28) }}</span>
+                        <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($c['name'])), 0, 24) }}</span>
                     </div>
                     <span class="text-sm font-semibold text-gray-900">{{ $c['total'] }}</span>
                 </div>
@@ -246,7 +246,7 @@ new class extends Component {
                 <div class="flex items-center gap-2">
                     <span class="w-3 h-3 rounded-full flex-shrink-0"
                         style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
-                    <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($conn['name'])), 0, 28) }}</span>
+                    <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($conn['name'])), 0, 24) }}</span>
                 </div>
                 @endforeach
             </div>

@@ -24,6 +24,14 @@ new class extends Component {
         $this->syncedToday = AttendanceLog::whereDate('processed_at', today())->where('sync_status', 'synced')->count();
     }
 
+    public function dismissFailed(): void
+    {
+        AttendanceLog::where('sync_status', 'failed')
+            ->update(['sync_status' => 'incomplete', 'sync_error' => null]);
+
+        $this->loadStats();
+    }
+
     public function retryFailed(): void
     {
         $delay = 0;
@@ -104,11 +112,17 @@ new class extends Component {
                         <p class="mt-1 text-3xl font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</p>
                     </div>
                     @if($failedSync > 0)
-                    <button wire:click="retryFailed" wire:loading.attr="disabled"
-                        class="ml-3 px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 transition">
-                        <span wire:loading.remove wire:target="retryFailed">Reintentar</span>
-                        <span wire:loading wire:target="retryFailed">...</span>
-                    </button>
+                    <div class="ml-3 flex flex-col gap-1">
+                        <button wire:click="retryFailed" wire:loading.attr="disabled"
+                            class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 transition">
+                            <span wire:loading.remove wire:target="retryFailed">Reintentar</span>
+                            <span wire:loading wire:target="retryFailed">...</span>
+                        </button>
+                        <button wire:click="dismissFailed" wire:confirm="¿Descartar los {{ $failedSync }} errores?" wire:loading.attr="disabled"
+                            class="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 transition">
+                            Descartar
+                        </button>
+                    </div>
                     @endif
                 </div>
             </div>

@@ -121,7 +121,7 @@ new class extends Component {
 
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full bg-yellow-400 flex-shrink-0"></span>
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
                     <span class="text-sm text-gray-600">Pendientes de sync</span>
                 </div>
                 <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>

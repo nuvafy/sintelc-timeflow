@@ -239,4 +239,14 @@ class FactorialService
             ['json' => $payload]
         )->json();
     }
+
+    public function deleteShift(int $shiftId): bool
+    {
+        $this->request(
+            'delete',
+            "/api/2026-04-01/resources/attendance/shifts/{$shiftId}"
+        );
+
+        return true;
+    }
 }

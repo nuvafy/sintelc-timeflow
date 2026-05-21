@@ -237,7 +237,7 @@ new class extends Component {
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:{{ $seg['color'] }};"></span>
-                        <span class="text-sm text-gray-600 truncate max-w-[140px]">{{ $seg['name'] }}</span>
+                        <span class="text-sm text-gray-600">{{ strtoupper(mb_substr($seg['name'], 0, 12)) }}</span>
                     </div>
                     <span class="text-sm font-semibold text-gray-900">{{ $seg['total'] }}</span>
                 </div>
@@ -255,6 +255,9 @@ new class extends Component {
                 <svg width="130" height="130" viewBox="0 0 120 120">
                     @if($connTotal === 0)
                         <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#e5e7eb" stroke-width="14"/>
+                    @elseif($inactiveConnections === 0)
+                        {{-- Todas activas: círculo completo verde sin gaps --}}
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#22c55e" stroke-width="14"/>
                     @else
                         <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#f3f4f6" stroke-width="14"/>
 
@@ -284,7 +287,7 @@ new class extends Component {
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full flex-shrink-0"
                             style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
-                        <span class="text-sm text-gray-600 truncate max-w-[140px]">{{ $conn['name'] }}</span>
+                        <span class="text-sm text-gray-600">{{ strtoupper(mb_substr($conn['name'], 0, 12)) }}</span>
                     </div>
                     <span class="text-xs {{ $conn['active'] ? 'text-green-600' : 'text-gray-400' }}">
                         {{ $conn['active'] ? 'Activa' : 'Inactiva' }}

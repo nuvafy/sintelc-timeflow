@@ -3,6 +3,7 @@
 use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use App\Models\Client;
+use App\Models\FactorialConnection;
 use App\Jobs\SyncAttendanceToFactorial;
 use Livewire\Volt\Component;
 
@@ -12,6 +13,9 @@ new class extends Component {
     public int $failedSync = 0;
     public int $syncedToday = 0;
     public array $byClient = [];
+    public array $connections = [];
+    public int $activeConnections = 0;
+    public int $inactiveConnections = 0;
 
     public function mount(): void
     {
@@ -35,6 +39,15 @@ new class extends Component {
         $this->byClient = $counts->map(fn($total, $clientId) => [
             'name'  => $clients[$clientId] ?? 'Sin cliente',
             'total' => $total,
+        ])->values()->toArray();
+
+        $allConnections = FactorialConnection::with('client')->get();
+        $this->activeConnections   = $allConnections->whereNotNull('access_token')->count();
+        $this->inactiveConnections = $allConnections->whereNull('access_token')->count();
+
+        $this->connections = $allConnections->map(fn($c) => [
+            'name'   => $c->client?->name ?? $c->name,
+            'active' => !is_null($c->access_token),
         ])->values()->toArray();
     }
 
@@ -86,6 +99,13 @@ new class extends Component {
     $offset2 = $startOffset - $syncedLen;
     $offset3 = $startOffset - $syncedLen - $pendingLen;
 
+    // ── Dona 3: conexiones ───────────────────────────────────────
+    $connTotal    = $activeConnections + $inactiveConnections;
+    $activeLen    = $connTotal > 0 ? ($activeConnections   / $connTotal) * $circumference : 0;
+    $inactiveLen  = $connTotal > 0 ? ($inactiveConnections / $connTotal) * $circumference : 0;
+    $connOffset1  = $startOffset;
+    $connOffset2  = $startOffset - $activeLen;
+
     // ── Dona 2: por empresa ───────────────────────────────────────
     $clientColors = ['#6366f1','#0ea5e9','#f59e0b','#10b981','#ec4899','#8b5cf6','#14b8a6'];
     $clientTotal  = array_sum(array_column($byClient, 'total'));
@@ -105,7 +125,7 @@ new class extends Component {
     }
 @endphp
 
-<div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
 
     {{-- Dona 1: estado de sync --}}
     <div class="bg-white shadow rounded-lg p-5">
@@ -222,8 +242,55 @@ new class extends Component {
                     <span class="text-sm font-semibold text-gray-900">{{ $seg['total'] }}</span>
                 </div>
                 @empty
-                <p class="text-sm text-gray-400">Sin registros hoy</p>
+                <p class="text-sm text-gray-400">Sin dispositivos</p>
                 @endforelse
+            </div>
+        </div>
+    </div>
+
+    {{-- Dona 3: conexiones Factorial --}}
+    <div class="bg-white shadow rounded-lg p-5">
+        <div class="flex items-center gap-8">
+            <div class="flex-shrink-0">
+                <svg width="130" height="130" viewBox="0 0 120 120">
+                    @if($connTotal === 0)
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#e5e7eb" stroke-width="14"/>
+                    @else
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#f3f4f6" stroke-width="14"/>
+
+                        @if($activeLen > 0)
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#22c55e" stroke-width="14"
+                            stroke-dasharray="{{ number_format($activeLen, 2) }} {{ number_format($circumference, 2) }}"
+                            stroke-dashoffset="{{ number_format($connOffset1, 2) }}"
+                            stroke-linecap="butt"/>
+                        @endif
+
+                        @if($inactiveLen > 0)
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#d1d5db" stroke-width="14"
+                            stroke-dasharray="{{ number_format($inactiveLen, 2) }} {{ number_format($circumference, 2) }}"
+                            stroke-dashoffset="{{ number_format($connOffset2, 2) }}"
+                            stroke-linecap="butt"/>
+                        @endif
+                    @endif
+
+                    <text x="60" y="56" text-anchor="middle" font-size="22" font-weight="bold" fill="#111827">{{ $activeConnections }}</text>
+                    <text x="60" y="71" text-anchor="middle" font-size="9" fill="#6b7280">de {{ $connTotal }} activas</text>
+                </svg>
+            </div>
+
+            <div class="flex-1 space-y-3" style="padding-left:6px;">
+                @foreach($connections as $conn)
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0"
+                            style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
+                        <span class="text-sm text-gray-600 truncate max-w-[140px]">{{ $conn['name'] }}</span>
+                    </div>
+                    <span class="text-xs {{ $conn['active'] ? 'text-green-600' : 'text-gray-400' }}">
+                        {{ $conn['active'] ? 'Activa' : 'Inactiva' }}
+                    </span>
+                </div>
+                @endforeach
             </div>
         </div>
     </div>

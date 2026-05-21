@@ -88,34 +88,15 @@ new class extends Component {
 
 <div class="grid grid-cols-2 gap-5">
 
-    {{-- Dona 1: estado de sync --}}
+    {{-- Card 1: resumen del día --}}
     <div class="bg-white shadow rounded-lg p-5">
         <div class="flex items-center gap-8">
-            <div class="relative flex-shrink-0 w-[120px] h-[120px]">
-                <canvas
-                    x-data
-                    x-init="
-                        new Chart($el, {
-                            type: 'doughnut',
-                            data: {
-                                datasets: [{
-                                    data: [{{ $syncedToday }}, {{ $pendingSync }}, {{ $failedSync }}],
-                                    backgroundColor: ['#22c55e', '#eab308', '#ef4444'],
-                                    borderWidth: 0,
-                                    hoverOffset: 4,
-                                }]
-                            },
-                            options: {
-                                cutout: '72%',
-                                plugins: { legend: { display: false }, tooltip: { enabled: true } },
-                                animation: { duration: 600 },
-                            }
-                        })
-                    "
-                ></canvas>
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-xl font-bold text-gray-900 leading-none">{{ $todayTotal }}</span>
-                    <span class="text-[9px] text-gray-500 mt-0.5">registros hoy</span>
+            <div class="relative flex-shrink-0 w-[120px] h-[120px] flex items-center justify-center">
+                @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
+                <div class="text-center">
+                    <p class="text-3xl font-bold text-gray-900 leading-none">{{ $todayTotal }}</p>
+                    <p class="text-[9px] text-gray-500 mt-1">registros hoy</p>
+                    <p class="text-[9px] text-green-500 mt-0.5">{{ $pct }}% sync</p>
                 </div>
             </div>
 
@@ -123,24 +104,22 @@ new class extends Component {
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#22c55e;"></span>
-                        <span class="text-sm text-gray-600">Sincronizados hoy</span>
+                        <span class="text-sm text-gray-600">Sincronizados</span>
                     </div>
                     <span class="text-sm font-semibold text-gray-900">{{ $syncedToday }}</span>
                 </div>
-
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
-                        <span class="text-sm text-gray-600">Pendientes de sync</span>
+                        <span class="text-sm text-gray-600">Pendientes</span>
                     </div>
                     <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>
                 </div>
-
                 <div>
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#ef4444;"></span>
-                            <span class="text-sm text-gray-600">Errores de sync</span>
+                            <span class="text-sm text-gray-600">Errores</span>
                         </div>
                         <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
                     </div>
@@ -253,44 +232,5 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- Ficha 4: resumen del día --}}
-    <div class="bg-white shadow rounded-lg p-5">
-        <div class="flex items-center gap-8">
-            {{-- Número central --}}
-            <div class="relative flex-shrink-0 w-[120px] h-[120px] flex items-center justify-center">
-                @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
-                <div class="text-center">
-                    <p class="text-3xl font-bold text-gray-900 leading-none">{{ $todayTotal }}</p>
-                    <p class="text-[9px] text-gray-500 mt-1">registros hoy</p>
-                    <p class="text-[9px] text-green-500 mt-0.5">{{ $pct }}% sync</p>
-                </div>
-            </div>
-
-            {{-- Contadores --}}
-            <div class="flex-1 space-y-4" style="padding-left:6px;">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#22c55e;"></span>
-                        <span class="text-sm text-gray-600">Sincronizados</span>
-                    </div>
-                    <span class="text-sm font-semibold text-gray-900">{{ $syncedToday }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
-                        <span class="text-sm text-gray-600">Pendientes</span>
-                    </div>
-                    <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#ef4444;"></span>
-                        <span class="text-sm text-gray-600">Errores</span>
-                    </div>
-                    <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
 
 </div>

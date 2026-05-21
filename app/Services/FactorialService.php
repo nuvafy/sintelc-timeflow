@@ -173,16 +173,14 @@ class FactorialService
 
     public function getShifts(array $query = []): array
     {
-        // Construimos el query string manualmente porque http_build_query añade
-        // índices numéricos (employee_ids[0]=X) y Factorial espera employee_ids[]=X
+        // Construimos el query string como string y lo pasamos como opción 'query' a Guzzle.
+        // Guzzle, al recibir un string, lo procesa con withQuery() que codifica [] a %5B%5D.
+        // Si pasamos la URL ya construida, Guzzle puede double-encodear los %5B%5D a %255B%255D.
         $parts = [];
 
         foreach ($query as $key => $value) {
             if (is_array($value)) {
                 foreach ($value as $item) {
-                    // Usamos corchetes literales — Guzzle los codifica a %5B%5D en el wire.
-                    // Si pre-codificamos con urlencode(), Guzzle double-encodea a %255B%255D
-                    // y la API no reconoce el parámetro.
                     $parts[] = rawurlencode($key) . '[]=' . rawurlencode((string) $item);
                 }
             } else {
@@ -190,10 +188,11 @@ class FactorialService
             }
         }
 
-        $uri = '/api/2026-04-01/resources/attendance/shifts'
-             . ($parts ? '?' . implode('&', $parts) : '');
-
-        $response = $this->request('get', $uri)->json();
+        $response = $this->request(
+            'get',
+            '/api/2026-04-01/resources/attendance/shifts',
+            ['query' => implode('&', $parts)]
+        )->json();
 
         return $response['data'] ?? $response;
     }

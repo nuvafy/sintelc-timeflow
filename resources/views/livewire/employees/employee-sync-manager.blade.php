@@ -277,36 +277,23 @@ new class extends Component {
             ->whereNotNull('factorial_employee_id')
             ->pluck('factorial_employee_id', 'external_employee_code');
 
-        $this->preview = array_map(function ($row) use ($employees, $existingMappings) {
-            // Si ya tiene mapeo, marcarlo
+        $allRows = array_map(function ($row) use ($employees, $existingMappings) {
             if (isset($existingMappings[$row['pin']])) {
                 $emp = $employees->find($existingMappings[$row['pin']]);
                 return [
-                    'pin'           => $row['pin'],
-                    'name'          => $row['name'],
-                    'employee_id'   => $emp?->id,
-                    'employee_name' => $emp?->full_name ?? '—',
-                    'confidence'    => 100,
-                    'already_mapped'=> true,
+                    'pin'            => $row['pin'],
+                    'name'           => $row['name'],
+                    'employee_id'    => $emp?->id,
+                    'employee_name'  => $emp?->full_name ?? '—',
+                    'confidence'     => 100,
+                    'already_mapped' => true,
                 ];
             }
 
-            // Auto-match por nombre
-            $best      = null;
-            $bestScore = 0;
-            $bestName  = '';
-
+            $best = null; $bestScore = 0; $bestName = '';
             foreach ($employees as $emp) {
-                similar_text(
-                    mb_strtolower($row['name']),
-                    mb_strtolower($emp->full_name),
-                    $pct
-                );
-                if ($pct > $bestScore) {
-                    $bestScore = $pct;
-                    $best      = $emp->id;
-                    $bestName  = $emp->full_name;
-                }
+                similar_text(mb_strtolower($row['name']), mb_strtolower($emp->full_name), $pct);
+                if ($pct > $bestScore) { $bestScore = $pct; $best = $emp->id; $bestName = $emp->full_name; }
             }
 
             return [
@@ -319,7 +306,30 @@ new class extends Component {
             ];
         }, $rows);
 
-        $this->tab = 'mapping';
+        // Auto-confirmar los 100% que no estaban ya mapeados
+        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
+        $now = now();
+        $toReview = [];
+
+        foreach ($allRows as $row) {
+            if ($row['already_mapped']) continue;
+
+            if ($row['confidence'] >= 100 && $row['employee_id'] && $provider) {
+                BiometricUserSync::updateOrCreate(
+                    ['biometric_provider_id' => $provider->id, 'factorial_employee_id' => $row['employee_id']],
+                    ['client_id' => $this->client_id, 'external_employee_code' => $row['pin'], 'sync_status' => 'pending', 'last_attempt_at' => $now]
+                );
+                AttendanceLog::where('client_id', $this->client_id)
+                    ->where('employee_code', $row['pin'])
+                    ->whereNull('factorial_employee_id')
+                    ->update(['factorial_employee_id' => $row['employee_id'], 'sync_status' => 'resolved']);
+            } else {
+                $toReview[] = $row;
+            }
+        }
+
+        $this->preview = $toReview;
+        $this->tab = empty($toReview) ? 'biometric' : 'mapping';
         $this->csvFile = null;
     }
 
@@ -328,52 +338,28 @@ new class extends Component {
         if (!isset($this->preview[$index])) return;
 
         $employeeId = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
+        $pin = $this->preview[$index]['pin'];
 
-        $employees = FactorialEmployee::where('client_id', $this->client_id)->get();
-        $emp = $employees->find($employeeId);
+        $emp = $employeeId ? FactorialEmployee::find($employeeId) : null;
 
         $this->preview[$index]['employee_id']   = $employeeId;
-        $this->preview[$index]['employee_name']  = $emp?->full_name ?? '';
-        $this->preview[$index]['confidence']     = $employeeId ? 100 : 0;
-    }
+        $this->preview[$index]['employee_name'] = $emp?->full_name ?? '';
+        $this->preview[$index]['confidence']    = $employeeId ? 100 : 0;
 
-    public function confirmMappings(): void
-    {
-        if (!$this->client_id || empty($this->preview)) return;
+        if (!$employeeId || !$emp) return;
 
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         if (!$provider) return;
 
-        $now = now();
+        BiometricUserSync::updateOrCreate(
+            ['biometric_provider_id' => $provider->id, 'factorial_employee_id' => $employeeId],
+            ['client_id' => $this->client_id, 'external_employee_code' => $pin, 'sync_status' => 'pending', 'last_attempt_at' => now()]
+        );
 
-        foreach ($this->preview as $row) {
-            if (!$row['employee_id'] || $row['already_mapped']) continue;
-
-            BiometricUserSync::updateOrCreate(
-                [
-                    'biometric_provider_id' => $provider->id,
-                    'factorial_employee_id' => $row['employee_id'],
-                ],
-                [
-                    'client_id'              => $this->client_id,
-                    'external_employee_code' => $row['pin'],
-                    'sync_status'            => 'pending',
-                    'last_attempt_at'        => $now,
-                ]
-            );
-
-            // Resolver attendance logs pendientes
-            AttendanceLog::where('client_id', $this->client_id)
-                ->where('employee_code', $row['pin'])
-                ->whereNull('factorial_employee_id')
-                ->update([
-                    'factorial_employee_id' => $row['employee_id'],
-                    'sync_status'           => 'resolved',
-                ]);
-        }
-
-        $this->preview = [];
-        $this->tab = 'biometric';
+        AttendanceLog::where('client_id', $this->client_id)
+            ->where('employee_code', $pin)
+            ->whereNull('factorial_employee_id')
+            ->update(['factorial_employee_id' => $employeeId, 'sync_status' => 'resolved']);
     }
 
     public function downloadTemplate(): \Symfony\Component\HttpFoundation\StreamedResponse
@@ -581,8 +567,8 @@ new class extends Component {
         <div x-data="{ filter: 'all' }">
         <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4 flex-wrap">
             <div>
-                <p class="text-sm font-medium text-gray-700">{{ count($preview) }} registros importados</p>
-                <p class="text-xs text-gray-500 mt-0.5">Revisa las sugerencias y confirma el mapeo.</p>
+                <p class="text-sm font-medium text-gray-700">{{ count($preview) }} pendientes de mapear</p>
+                <p class="text-xs text-gray-500 mt-0.5">Los cambios en el dropdown se guardan al instante.</p>
             </div>
             {{-- Filtro --}}
             <div class="flex rounded-md shadow-sm border border-gray-300 overflow-hidden text-xs font-medium">
@@ -592,23 +578,18 @@ new class extends Component {
                 <button @click="filter = 'review'"
                     :class="filter === 'review' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
                     class="px-3 py-1.5 border-l border-gray-300 transition">
-                    Revisar ({{ collect($preview)->filter(fn($r) => !$r['already_mapped'] && $r['confidence'] < 80)->count() }})
+                    Con sugerencia ({{ collect($preview)->filter(fn($r) => $r['confidence'] >= 50)->count() }})
                 </button>
                 <button @click="filter = 'none'"
                     :class="filter === 'none' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
                     class="px-3 py-1.5 border-l border-gray-300 transition">
-                    Sin sugerencia ({{ collect($preview)->filter(fn($r) => !$r['already_mapped'] && $r['confidence'] < 50)->count() }})
+                    Sin sugerencia ({{ collect($preview)->filter(fn($r) => $r['confidence'] < 50)->count() }})
                 </button>
             </div>
-            <div class="flex gap-3">
-                <button wire:click="$set('preview', [])" class="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
-                    Cancelar
-                </button>
-                <button wire:click="confirmMappings"
-                    class="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
-                    Confirmar mapeo
-                </button>
-            </div>
+            <button wire:click="$set('preview', []); $set('tab', 'biometric')"
+                class="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+                Cerrar
+            </button>
         </div>
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">

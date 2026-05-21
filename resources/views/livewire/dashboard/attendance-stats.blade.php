@@ -136,27 +136,27 @@ new class extends Component {
                     <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>
                 </div>
 
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#ef4444;"></span>
-                        <span class="text-sm text-gray-600">Errores de sync</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
-                        @if($failedSync > 0)
-                        <div class="flex flex-col items-end gap-0.5">
-                            <button wire:click="retryFailed" wire:loading.attr="disabled"
-                                class="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition leading-none">
-                                <span wire:loading.remove wire:target="retryFailed">Reintentar</span>
-                                <span wire:loading wire:target="retryFailed">...</span>
-                            </button>
-                            <button wire:click="dismissFailed" wire:confirm="¿Descartar los {{ $failedSync }} errores?" wire:loading.attr="disabled"
-                                class="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition leading-none">
-                                Descartar
-                            </button>
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#ef4444;"></span>
+                            <span class="text-sm text-gray-600">Errores de sync</span>
                         </div>
-                        @endif
+                        <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
                     </div>
+                    @if($failedSync > 0)
+                    <div class="flex items-center gap-3 mt-1 pl-5">
+                        <button wire:click="retryFailed" wire:loading.attr="disabled"
+                            class="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition">
+                            <span wire:loading.remove wire:target="retryFailed">Reintentar</span>
+                            <span wire:loading wire:target="retryFailed">...</span>
+                        </button>
+                        <button wire:click="dismissFailed" wire:confirm="¿Descartar los {{ $failedSync }} errores?" wire:loading.attr="disabled"
+                            class="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition">
+                            Descartar
+                        </button>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>

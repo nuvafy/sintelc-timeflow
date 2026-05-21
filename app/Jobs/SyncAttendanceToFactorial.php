@@ -168,14 +168,20 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
     /**
      * Busca un turno sin clock_out en la fecha del log.
-     * Revisa también el día anterior para cubrir turnos que cruzan medianoche.
+     *
+     * Regla: NO se permite sobreescribir turnos de días anteriores.
+     * Solo se revisa el día anterior si el log ocurrió dentro de las
+     * primeras 4 horas del día (único caso legítimo: turno que cruzó medianoche).
+     * Un check_in/check_out de las 08:00+ nunca debe cerrar el turno de ayer.
      */
     private function findOpenShift(FactorialService $service, int $factorialEmployeeId, \Carbon\Carbon $date): ?array
     {
-        $dates = [
-            $date->format('Y-m-d'),
-            $date->copy()->subDay()->format('Y-m-d'),
-        ];
+        $dates = [$date->format('Y-m-d')];
+
+        // Solo revisar día anterior si el log es de madrugada (turno cruzó medianoche)
+        if ($date->hour < 4) {
+            $dates[] = $date->copy()->subDay()->format('Y-m-d');
+        }
 
         foreach ($dates as $checkDate) {
             $shifts = $service->getShifts([

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AttendanceLog;
+use App\Models\BiometricSource;
 use App\Models\Client;
 use App\Jobs\SyncAttendanceToFactorial;
 use Livewire\Volt\Component;
@@ -24,8 +25,8 @@ new class extends Component {
         $this->failedSync  = AttendanceLog::where('sync_status', 'failed')->count();
         $this->syncedToday = AttendanceLog::whereDate('processed_at', today())->where('sync_status', 'synced')->count();
 
-        $counts = AttendanceLog::selectRaw('client_id, count(*) as total')
-            ->whereDate('occurred_at', today())
+        $counts = BiometricSource::selectRaw('client_id, count(*) as total')
+            ->whereNotNull('client_id')
             ->groupBy('client_id')
             ->pluck('total', 'client_id');
 
@@ -207,7 +208,7 @@ new class extends Component {
                     @endif
 
                     <text x="60" y="56" text-anchor="middle" font-size="22" font-weight="bold" fill="#111827">{{ $clientTotal }}</text>
-                    <text x="60" y="71" text-anchor="middle" font-size="9" fill="#6b7280">por empresa</text>
+                    <text x="60" y="71" text-anchor="middle" font-size="9" fill="#6b7280">dispositivos</text>
                 </svg>
             </div>
 

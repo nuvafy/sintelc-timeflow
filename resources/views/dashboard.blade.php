@@ -11,7 +11,7 @@
                 </div>
 
                 {{-- Derecha: 2×2 donuts --}}
-                <div class="flex-1 grid grid-cols-2 gap-5">
+                <div class="flex-1">
                     <livewire:dashboard.attendance-stats />
                 </div>
 

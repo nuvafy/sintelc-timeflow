@@ -86,7 +86,7 @@ new class extends Component {
     $connTotal    = $activeConnections + $inactiveConnections;
 @endphp
 
-<div class="contents">
+<div class="grid grid-cols-2 gap-5">
 
     {{-- Dona 1: estado de sync --}}
     <div class="bg-white shadow rounded-lg p-5">

@@ -90,7 +90,16 @@ new class extends Component {
     if ($donutTotal > 0) {
         $syncedLen  = ($syncedToday / $donutTotal) * $circumference;
         $pendingLen = ($pendingSync / $donutTotal) * $circumference;
-        $failedLen  = ($failedSync  / $donutTotal) * $circumference;
+        // Last visible segment fills exact remainder to avoid floating-point gap
+        if ($failedSync > 0) {
+            $failedLen = $circumference - $syncedLen - $pendingLen;
+        } elseif ($pendingSync > 0) {
+            $pendingLen = $circumference - $syncedLen;
+            $failedLen  = 0;
+        } else {
+            $syncedLen = $circumference;
+            $pendingLen = $failedLen = 0;
+        }
     } else {
         $syncedLen = $pendingLen = $failedLen = 0;
     }
@@ -100,20 +109,33 @@ new class extends Component {
     $offset3 = $startOffset - $syncedLen - $pendingLen;
 
     // ── Dona 3: conexiones ───────────────────────────────────────
-    $connTotal    = $activeConnections + $inactiveConnections;
-    $activeLen    = $connTotal > 0 ? ($activeConnections   / $connTotal) * $circumference : 0;
-    $inactiveLen  = $connTotal > 0 ? ($inactiveConnections / $connTotal) * $circumference : 0;
-    $connOffset1  = $startOffset;
-    $connOffset2  = $startOffset - $activeLen;
+    $connTotal   = $activeConnections + $inactiveConnections;
+    if ($connTotal > 0) {
+        $activeLen   = ($activeConnections / $connTotal) * $circumference;
+        // Last segment fills exact remainder
+        $inactiveLen = $inactiveConnections > 0 ? $circumference - $activeLen : 0;
+    } else {
+        $activeLen = $inactiveLen = 0;
+    }
+    $connOffset1 = $startOffset;
+    $connOffset2 = $startOffset - $activeLen;
 
     // ── Dona 2: por empresa ───────────────────────────────────────
     $clientColors = ['#6366f1','#0ea5e9','#f59e0b','#10b981','#ec4899','#8b5cf6','#14b8a6'];
     $clientTotal  = array_sum(array_column($byClient, 'total'));
     $clientOffset = $startOffset;
+    $clientRemain = $circumference;
 
     $clientSegments = [];
+    $lastClientIdx  = count($byClient) - 1;
     foreach ($byClient as $i => $c) {
-        $len = $clientTotal > 0 ? ($c['total'] / $clientTotal) * $circumference : 0;
+        if ($i === $lastClientIdx) {
+            // Last segment fills exact remainder to avoid floating-point gap
+            $len = $clientRemain;
+        } else {
+            $len = $clientTotal > 0 ? ($c['total'] / $clientTotal) * $circumference : 0;
+            $clientRemain -= $len;
+        }
         $clientSegments[] = [
             'name'   => $c['name'],
             'total'  => $c['total'],
@@ -134,6 +156,9 @@ new class extends Component {
                 <svg width="130" height="130" viewBox="0 0 120 120">
                     @if($donutTotal === 0)
                         <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#e5e7eb" stroke-width="14"/>
+                    @elseif($pendingSync === 0 && $failedSync === 0)
+                        {{-- Todos sincronizados: círculo completo verde --}}
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#22c55e" stroke-width="14"/>
                     @else
                         <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#f3f4f6" stroke-width="14"/>
 
@@ -214,6 +239,9 @@ new class extends Component {
                 <svg width="130" height="130" viewBox="0 0 120 120">
                     @if($clientTotal === 0)
                         <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#e5e7eb" stroke-width="14"/>
+                    @elseif(count($clientSegments) === 1)
+                        {{-- Un solo cliente: círculo completo con su color --}}
+                        <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="{{ $clientSegments[0]['color'] }}" stroke-width="14"/>
                     @else
                         <circle cx="60" cy="60" r="{{ $r }}" fill="none" stroke="#f3f4f6" stroke-width="14"/>
                         @foreach($clientSegments as $seg)

@@ -323,9 +323,11 @@ new class extends Component {
         $this->csvFile = null;
     }
 
-    public function updateMappingRow(int $index, ?int $employeeId): void
+    public function updateMappingRow(int $index, mixed $employeeId): void
     {
         if (!isset($this->preview[$index])) return;
+
+        $employeeId = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
 
         $employees = FactorialEmployee::where('client_id', $this->client_id)->get();
         $emp = $employees->find($employeeId);

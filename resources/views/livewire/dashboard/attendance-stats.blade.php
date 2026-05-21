@@ -86,7 +86,7 @@ new class extends Component {
     $connTotal    = $activeConnections + $inactiveConnections;
 @endphp
 
-<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+<div class="contents">
 
     {{-- Dona 1: estado de sync --}}
     <div class="bg-white shadow rounded-lg p-5">
@@ -254,6 +254,36 @@ new class extends Component {
                     </span>
                 </div>
                 @endforeach
+            </div>
+        </div>
+    </div>
+
+    {{-- Ficha 4: resumen del día --}}
+    <div class="bg-white shadow rounded-lg p-5 flex flex-col justify-between">
+        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Resumen del día</h3>
+        <div class="mt-4 space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-600">Total registros</span>
+                <span class="text-2xl font-bold text-gray-900">{{ $todayTotal }}</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
+                <div class="bg-green-500 h-1.5 rounded-full" style="width: {{ $pct }}%"></div>
+            </div>
+            <p class="text-xs text-gray-400">{{ $pct }}% sincronizados</p>
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div class="bg-green-50 rounded-lg py-2">
+                <p class="text-lg font-bold text-green-700">{{ $syncedToday }}</p>
+                <p class="text-[10px] text-green-600">Sync</p>
+            </div>
+            <div class="bg-yellow-50 rounded-lg py-2">
+                <p class="text-lg font-bold text-yellow-700">{{ $pendingSync }}</p>
+                <p class="text-[10px] text-yellow-600">Pend.</p>
+            </div>
+            <div class="bg-red-50 rounded-lg py-2">
+                <p class="text-lg font-bold text-red-700">{{ $failedSync }}</p>
+                <p class="text-[10px] text-red-600">Error</p>
             </div>
         </div>
     </div>

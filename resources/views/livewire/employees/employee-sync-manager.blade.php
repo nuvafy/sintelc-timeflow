@@ -109,9 +109,21 @@ new class extends Component {
                 ->distinct('employee_code')
                 ->count('employee_code');
 
+            // Paginación manual sobre la colección in-memory
+            $perPage   = 20;
+            $page      = $this->getPage();
+            $allUsers  = $biometricUsers->values();
+            $biometricUsers = new \Illuminate\Pagination\LengthAwarePaginator(
+                $allUsers->slice(($page - 1) * $perPage, $perPage)->values(),
+                $allUsers->count(),
+                $perPage,
+                $page,
+                ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()]
+            );
+
             return [
                 'unmappedUsers'    => collect(),
-                'biometricUsers'   => $biometricUsers->values(),
+                'biometricUsers'   => $biometricUsers,
                 'biometricSources' => $biometricSources,
                 'employees'        => collect(),
                 'unresolved'       => collect(),
@@ -366,6 +378,11 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
+        @if($client_id && $biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator && $biometricUsers->hasPages())
+        <div class="px-6 py-4 border-t border-gray-200">
+            {{ $biometricUsers->links() }}
+        </div>
+        @endif
         @endif
     </div>
     @endif

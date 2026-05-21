@@ -420,9 +420,18 @@ new class extends Component {
             </div>
 
             {{-- Footer --}}
-            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-                <button wire:click="openEdit({{ $client->id }})" class="text-sm text-indigo-600 hover:text-indigo-900">Editar</button>
-                <button wire:click="delete({{ $client->id }})" wire:confirm="¿Eliminar esta empresa? Se desvinculará de conexiones y dispositivos." class="text-sm text-red-600 hover:text-red-900">Eliminar</button>
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+                <a href="{{ route('clients.records', $client) }}" wire:navigate
+                    class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-indigo-700 transition">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    Registros
+                </a>
+                <div class="flex gap-3">
+                    <button wire:click="openEdit({{ $client->id }})" class="text-sm text-indigo-600 hover:text-indigo-900">Editar</button>
+                    <button wire:click="delete({{ $client->id }})" wire:confirm="¿Eliminar esta empresa? Se desvinculará de conexiones y dispositivos." class="text-sm text-red-600 hover:text-red-900">Eliminar</button>
+                </div>
             </div>
         </div>
         @empty

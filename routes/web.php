@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FactorialAuthController;
 use App\Http\Controllers\IclockController;
+use App\Models\Client;
 
 Route::redirect('/', '/login');
 
@@ -25,6 +26,10 @@ Route::view('connections', 'connections')
 Route::view('clients', 'clients')
     ->middleware(['auth'])
     ->name('clients');
+
+Route::get('clients/{client}/records', fn(Client $client) => view('clients.records', compact('client')))
+    ->middleware(['auth', 'verified'])
+    ->name('clients.records');
 
 Route::view('employees', 'employees')
     ->middleware(['auth'])

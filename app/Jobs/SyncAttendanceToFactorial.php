@@ -178,15 +178,28 @@ class SyncAttendanceToFactorial implements ShouldQueue
     /**
      * Busca un turno sin clock_out en la fecha exacta del log.
      * Solo se revisa el día del registro — nunca días anteriores.
+     *
+     * NOTA: la API de Factorial ignora los query params employee_id y date,
+     * devuelve todos los turnos de la empresa. Filtramos en PHP para garantizar
+     * que solo tocamos turnos del empleado correcto en la fecha correcta.
      */
     private function findOpenShift(FactorialService $service, int $factorialEmployeeId, \Carbon\Carbon $date): ?array
     {
+        $targetDate = $date->format('Y-m-d');
+
         $shifts = $service->getShifts([
-            'employee_id' => $factorialEmployeeId,
-            'date'        => $date->format('Y-m-d'),
+            'employee_ids' => [$factorialEmployeeId],
+            'start_on'     => $targetDate,
+            'end_on'       => $targetDate,
         ]);
 
-        return collect($shifts)->first(fn($s) => $s['clock_out'] === null);
+        // Filtro defensivo: aunque la API devuelva más registros de los esperados,
+        // solo aceptamos turnos del empleado correcto en la fecha exacta.
+        return collect($shifts)->first(
+            fn($s) => $s['clock_out'] === null
+                   && (int) $s['employee_id'] === $factorialEmployeeId
+                   && $s['date'] === $targetDate
+        );
     }
 
     private function markSynced(AttendanceLog $log, ?int $shiftId, string $note): void

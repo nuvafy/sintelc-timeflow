@@ -173,11 +173,24 @@ class FactorialService
 
     public function getShifts(array $query = []): array
     {
-        $response = $this->request(
-            'get',
-            '/api/2026-04-01/resources/attendance/shifts',
-            ['query' => $query]
-        )->json();
+        // Construimos el query string manualmente porque http_build_query añade
+        // índices numéricos (employee_ids[0]=X) y Factorial espera employee_ids[]=X
+        $parts = [];
+
+        foreach ($query as $key => $value) {
+            if (is_array($value)) {
+                foreach ($value as $item) {
+                    $parts[] = urlencode($key . '[]') . '=' . urlencode($item);
+                }
+            } else {
+                $parts[] = urlencode($key) . '=' . urlencode($value);
+            }
+        }
+
+        $uri = '/api/2026-04-01/resources/attendance/shifts'
+             . ($parts ? '?' . implode('&', $parts) : '');
+
+        $response = $this->request('get', $uri)->json();
 
         return $response['data'] ?? $response;
     }

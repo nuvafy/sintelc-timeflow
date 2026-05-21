@@ -254,31 +254,41 @@ new class extends Component {
     </div>
 
     {{-- Ficha 4: resumen del día --}}
-    <div class="bg-white shadow rounded-lg p-5 flex flex-col justify-between">
-        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Resumen del día</h3>
-        <div class="mt-4 space-y-3">
-            <div class="flex items-center justify-between">
-                <span class="text-sm text-gray-600">Total registros</span>
-                <span class="text-2xl font-bold text-gray-900">{{ $todayTotal }}</span>
-            </div>
-            <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+    <div class="bg-white shadow rounded-lg p-5">
+        <div class="flex items-center gap-8">
+            {{-- Número central --}}
+            <div class="relative flex-shrink-0 w-[120px] h-[120px] flex items-center justify-center">
                 @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
-                <div class="bg-green-500 h-1.5 rounded-full" style="width: {{ $pct }}%"></div>
+                <div class="text-center">
+                    <p class="text-3xl font-bold text-gray-900 leading-none">{{ $todayTotal }}</p>
+                    <p class="text-[9px] text-gray-500 mt-1">registros hoy</p>
+                    <p class="text-[9px] text-green-500 mt-0.5">{{ $pct }}% sync</p>
+                </div>
             </div>
-            <p class="text-xs text-gray-400">{{ $pct }}% sincronizados</p>
-        </div>
-        <div class="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div class="bg-green-50 rounded-lg py-2">
-                <p class="text-lg font-bold text-green-700">{{ $syncedToday }}</p>
-                <p class="text-[10px] text-green-600">Sync</p>
-            </div>
-            <div class="bg-yellow-50 rounded-lg py-2">
-                <p class="text-lg font-bold text-yellow-700">{{ $pendingSync }}</p>
-                <p class="text-[10px] text-yellow-600">Pend.</p>
-            </div>
-            <div class="bg-red-50 rounded-lg py-2">
-                <p class="text-lg font-bold text-red-700">{{ $failedSync }}</p>
-                <p class="text-[10px] text-red-600">Error</p>
+
+            {{-- Contadores --}}
+            <div class="flex-1 space-y-4" style="padding-left:6px;">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#22c55e;"></span>
+                        <span class="text-sm text-gray-600">Sincronizados</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900">{{ $syncedToday }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
+                        <span class="text-sm text-gray-600">Pendientes</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#ef4444;"></span>
+                        <span class="text-sm text-gray-600">Errores</span>
+                    </div>
+                    <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
+                </div>
             </div>
         </div>
     </div>

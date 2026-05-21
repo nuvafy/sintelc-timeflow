@@ -144,14 +144,14 @@ new class extends Component {
                     <div class="flex items-center gap-2">
                         <span class="text-sm font-semibold {{ $failedSync > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $failedSync }}</span>
                         @if($failedSync > 0)
-                        <div class="flex gap-1">
+                        <div class="flex flex-col items-end gap-0.5">
                             <button wire:click="retryFailed" wire:loading.attr="disabled"
-                                class="px-2 py-0.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 transition">
+                                class="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition leading-none">
                                 <span wire:loading.remove wire:target="retryFailed">Reintentar</span>
                                 <span wire:loading wire:target="retryFailed">...</span>
                             </button>
                             <button wire:click="dismissFailed" wire:confirm="¿Descartar los {{ $failedSync }} errores?" wire:loading.attr="disabled"
-                                class="px-2 py-0.5 text-xs font-medium text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 transition">
+                                class="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition leading-none">
                                 Descartar
                             </button>
                         </div>

@@ -199,7 +199,7 @@ new class extends Component {
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full flex-shrink-0"
                             style="background-color:{{ $clientColors[$i % count($clientColors)] }};"></span>
-                        <span class="text-sm text-gray-600">{{ strtoupper(mb_substr($c['name'], 0, 12)) }}</span>
+                        <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($c['name'])), 0, 16) }}</span>
                     </div>
                     <span class="text-sm font-semibold text-gray-900">{{ $c['total'] }}</span>
                 </div>
@@ -243,15 +243,10 @@ new class extends Component {
 
             <div class="flex-1 space-y-3" style="padding-left:6px;">
                 @foreach($connections as $conn)
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full flex-shrink-0"
-                            style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
-                        <span class="text-sm text-gray-600">{{ strtoupper(mb_substr($conn['name'], 0, 12)) }}</span>
-                    </div>
-                    <span class="text-xs {{ $conn['active'] ? 'text-green-600' : 'text-gray-400' }}">
-                        {{ $conn['active'] ? 'Activa' : 'Inactiva' }}
-                    </span>
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0"
+                        style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
+                    <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($conn['name'])), 0, 16) }}</span>
                 </div>
                 @endforeach
             </div>

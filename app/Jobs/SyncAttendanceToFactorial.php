@@ -125,6 +125,14 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
+            // Regla: solo sobreescribir turnos creados desde la web de Factorial.
+            // Si el turno viene del biométrico (api) u otra fuente, no tocarlo.
+            $inSource = $openShift['in_source'] ?? 'api';
+            if ($inSource !== 'web') {
+                $this->fail($log, "No se permite sobreescribir turno con in_source='{$inSource}'. Error original: {$primaryError}");
+                return;
+            }
+
             $time = $log->occurred_at->format('H:i:s');
 
             $updatePayload = match ($log->check_type) {
@@ -139,8 +147,6 @@ class SyncAttendanceToFactorial implements ShouldQueue
             }
 
             $service->updateShift($openShift['id'], $updatePayload);
-
-            $inSource = $openShift['in_source'] ?? 'api';
 
             $this->markSynced($log, $openShift['id'], "overwrite ({$inSource})");
 

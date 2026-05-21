@@ -125,11 +125,14 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            // Regla: solo sobreescribir turnos creados desde la web de Factorial.
-            // Si el turno viene del biométrico (api) u otra fuente, no tocarlo.
-            $inSource = $openShift['in_source'] ?? 'api';
-            if ($inSource !== 'web') {
-                $this->fail($log, "No se permite sobreescribir turno con in_source='{$inSource}'. Error original: {$primaryError}");
+            // Regla: no sobreescribir turnos creados vía API/biométrico (in_source = null).
+            // null                → creado vía API/biométrico → NO tocar
+            // desktop             → web de Factorial          → SÍ permitir
+            // mobile              → app móvil Factorial       → SÍ permitir
+            // mobile_geolocation  → app móvil con geoloc.     → SÍ permitir
+            $inSource = $openShift['in_source'] ?? null;
+            if ($inSource === null) {
+                $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico (in_source=null). Error original: {$primaryError}");
                 return;
             }
 
@@ -173,34 +176,17 @@ class SyncAttendanceToFactorial implements ShouldQueue
     // ── Helpers ────────────────────────────────────────────────────
 
     /**
-     * Busca un turno sin clock_out en la fecha del log.
-     *
-     * Regla: NO se permite sobreescribir turnos de días anteriores.
-     * Solo se revisa el día anterior si el log ocurrió dentro de las
-     * primeras 4 horas del día (único caso legítimo: turno que cruzó medianoche).
-     * Un check_in/check_out de las 08:00+ nunca debe cerrar el turno de ayer.
+     * Busca un turno sin clock_out en la fecha exacta del log.
+     * Solo se revisa el día del registro — nunca días anteriores.
      */
     private function findOpenShift(FactorialService $service, int $factorialEmployeeId, \Carbon\Carbon $date): ?array
     {
-        $dates = [$date->format('Y-m-d')];
+        $shifts = $service->getShifts([
+            'employee_id' => $factorialEmployeeId,
+            'date'        => $date->format('Y-m-d'),
+        ]);
 
-        // Solo revisar día anterior si el log es de madrugada (turno cruzó medianoche)
-        if ($date->hour < 4) {
-            $dates[] = $date->copy()->subDay()->format('Y-m-d');
-        }
-
-        foreach ($dates as $checkDate) {
-            $shifts = $service->getShifts([
-                'employee_id' => $factorialEmployeeId,
-                'date'        => $checkDate,
-            ]);
-
-            $open = collect($shifts)->first(fn($s) => $s['clock_out'] === null);
-
-            if ($open) return $open;
-        }
-
-        return null;
+        return collect($shifts)->first(fn($s) => $s['clock_out'] === null);
     }
 
     private function markSynced(AttendanceLog $log, ?int $shiftId, string $note): void

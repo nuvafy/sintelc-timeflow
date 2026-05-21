@@ -19,14 +19,32 @@ new class extends Component {
     public string  $tab       = 'biometric'; // 'biometric' | 'factorial' | 'mapping' | 'unresolved'
 
     // ── CSV Import ────────────────────────────────────────────────
-    public $csvFile         = null;
-    public array $preview   = [];   // rows: [pin, name, employee_id, employee_name, confidence]
-    public bool  $importing = false;
+    public $csvFile          = null;
+    public array $preview    = [];   // rows: [pin, name, employee_id, employee_name, confidence]
+    public bool  $importing  = false;
     public string $importError = '';
+    public ?int  $source_id  = null;   // BiometricSource al que va el CSV
+    public bool  $showModal  = false;
 
     public function updatedSearch(): void   { $this->resetPage(); }
-    public function updatedClientId(): void { $this->resetPage(); $this->preview = []; }
+    public function updatedClientId(): void { $this->resetPage(); $this->preview = []; $this->closeModal(); }
     public function updatedTab(): void      { $this->resetPage(); }
+
+    public function openCsvModal(int $sourceId): void
+    {
+        $this->source_id   = $sourceId;
+        $this->csvFile     = null;
+        $this->importError = '';
+        $this->showModal   = true;
+    }
+
+    public function closeModal(): void
+    {
+        $this->showModal   = false;
+        $this->source_id   = null;
+        $this->csvFile     = null;
+        $this->importError = '';
+    }
 
     public function with(): array
     {
@@ -40,6 +58,7 @@ new class extends Component {
 
             return [
                 'biometricUsers'    => collect(),
+                'biometricSources'  => collect(),
                 'employees'         => $employees,
                 'unresolved'        => collect(),
                 'unresolvedCount'   => 0,
@@ -52,9 +71,14 @@ new class extends Component {
 
         // ── Tab: Empleados en Biométrico ────────────────────────────
         if ($this->tab === 'biometric') {
-            $biometricUsers = collect();
+            $biometricUsers  = collect();
+            $biometricSources = collect();
 
             if ($this->client_id) {
+                $biometricSources = BiometricSource::where('client_id', $this->client_id)
+                    ->orderBy('name')
+                    ->get();
+
                 $mappings = BiometricUserSync::where('client_id', $this->client_id)
                     ->whereNotNull('factorial_employee_id')
                     ->pluck('factorial_employee_id', 'external_employee_code')
@@ -63,23 +87,22 @@ new class extends Component {
                 $employees = FactorialEmployee::where('client_id', $this->client_id)
                     ->pluck('full_name', 'id');
 
-                BiometricSource::where('client_id', $this->client_id)->get()
-                    ->each(function ($source) use (&$biometricUsers, $mappings, $employees) {
-                        foreach ($source->device_users ?? [] as $u) {
-                            $pin = (string) $u['pin'];
-                            if ($this->search && stripos($pin, $this->search) === false && stripos($u['name'] ?? '', $this->search) === false) {
-                                return;
-                            }
-                            $empId   = $mappings[$pin] ?? null;
-                            $biometricUsers[$pin] = [
-                                'pin'           => $pin,
-                                'name'          => $u['name'] ?? null,
-                                'source'        => $source->name,
-                                'mapped'        => $empId !== null,
-                                'employee_name' => $empId ? ($employees[$empId] ?? '—') : null,
-                            ];
+                $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees) {
+                    foreach ($source->device_users ?? [] as $u) {
+                        $pin = (string) $u['pin'];
+                        if ($this->search && stripos($pin, $this->search) === false && stripos($u['name'] ?? '', $this->search) === false) {
+                            continue;
                         }
-                    });
+                        $empId = $mappings[$pin] ?? null;
+                        $biometricUsers[$pin] = [
+                            'pin'           => $pin,
+                            'name'          => $u['name'] ?? null,
+                            'source'        => $source->name,
+                            'mapped'        => $empId !== null,
+                            'employee_name' => $empId ? ($employees[$empId] ?? '—') : null,
+                        ];
+                    }
+                });
             }
 
             $unresolvedCount = AttendanceLog::where('client_id', $this->client_id)
@@ -88,21 +111,22 @@ new class extends Component {
                 ->count('employee_code');
 
             return [
-                'biometricUsers'  => $biometricUsers->values(),
-                'employees'       => collect(),
-                'unresolved'      => collect(),
-                'unresolvedCount' => $unresolvedCount,
-                'clients'         => $clients,
-                'vendorName'      => 'Biométrico',
+                'biometricUsers'   => $biometricUsers->values(),
+                'biometricSources' => $biometricSources,
+                'employees'        => collect(),
+                'unresolved'       => collect(),
+                'unresolvedCount'  => $unresolvedCount,
+                'clients'          => $clients,
+                'vendorName'       => 'Biométrico',
                 'mappedEmployeeIds' => collect(),
-                'biometricIds'    => collect(),
+                'biometricIds'     => collect(),
             ];
         }
 
         // ── Tab: Sin asignar ────────────────────────────────────────
         if ($this->tab === 'unresolved') {
             if (!$this->client_id) {
-                return ['employees' => collect(), 'unresolved' => collect(), 'clients' => $clients, 'unresolvedCount' => 0];
+                return ['biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'clients' => $clients, 'unresolvedCount' => 0];
             }
 
             // Nombres desde device_users del biométrico
@@ -128,20 +152,21 @@ new class extends Component {
             });
 
             return [
-                'biometricUsers'  => collect(),
-                'employees'       => collect(),
-                'unresolved'      => $unresolved,
-                'unresolvedCount' => $unresolved->total(),
-                'clients'         => $clients,
-                'vendorName'      => 'Biométrico',
+                'biometricUsers'   => collect(),
+                'biometricSources' => collect(),
+                'employees'        => collect(),
+                'unresolved'       => $unresolved,
+                'unresolvedCount'  => $unresolved->total(),
+                'clients'          => $clients,
+                'vendorName'       => 'Biométrico',
                 'mappedEmployeeIds' => collect(),
-                'biometricIds'    => collect(),
+                'biometricIds'     => collect(),
             ];
         }
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
+            return ['biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -170,6 +195,7 @@ new class extends Component {
 
         return [
             'biometricUsers'    => collect(),
+            'biometricSources'  => collect(),
             'employees'         => $query->paginate(20),
             'unresolved'        => collect(),
             'unresolvedCount'   => $unresolvedCount,
@@ -224,6 +250,17 @@ new class extends Component {
             return;
         }
 
+        if (!$this->source_id) {
+            $this->importError = 'No hay dispositivo seleccionado.';
+            return;
+        }
+
+        $source = BiometricSource::find($this->source_id);
+        if (!$source || $source->client_id !== $this->client_id) {
+            $this->importError = 'Dispositivo no válido.';
+            return;
+        }
+
         try {
             $this->validate(['csvFile' => 'required|file|max:2048']);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -267,9 +304,9 @@ new class extends Component {
             return;
         }
 
-        // Guardar en device_users de todos los BiometricSources del cliente
+        // Guardar en device_users del dispositivo específico (por su serial)
         $deviceUsers = array_map(fn($r) => ['pin' => $r['pin'], 'name' => $r['name'], 'card' => '', 'role' => '0'], $rows);
-        BiometricSource::where('client_id', $this->client_id)->update(['device_users' => json_encode($deviceUsers)]);
+        $source->update(['device_users' => $deviceUsers]);
 
         // Auto-match contra empleados de Factorial
         $employees = FactorialEmployee::where('client_id', $this->client_id)->get();
@@ -328,9 +365,11 @@ new class extends Component {
             }
         }
 
-        $this->preview = $toReview;
-        $this->tab = empty($toReview) ? 'biometric' : 'mapping';
-        $this->csvFile = null;
+        $this->preview   = $toReview;
+        $this->showModal = false;
+        $this->source_id = null;
+        $this->csvFile   = null;
+        $this->tab       = empty($toReview) ? 'biometric' : 'mapping';
     }
 
     public function updateMappingRow(int $index, mixed $employeeId): void
@@ -479,27 +518,90 @@ new class extends Component {
     {{-- TAB: Empleados en Biométrico --}}
     @if($tab === 'biometric')
 
-    {{-- Upload CSV --}}
+    {{-- Tabla de dispositivos --}}
     @if($client_id)
-    <div class="bg-white shadow rounded-lg p-4 mb-4">
-        <div class="flex items-center justify-between gap-4 flex-wrap">
-            <div class="flex items-center gap-3 flex-1">
+    <div class="bg-white shadow rounded-lg overflow-hidden mb-4">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-700">Dispositivos biométricos</h3>
+            <button wire:click="downloadTemplate" class="text-xs text-indigo-600 hover:underline">↓ Plantilla CSV</button>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios</th>
+                    <th class="px-6 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                @forelse($biometricSources as $source)
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ $source->name }}</td>
+                    <td class="px-6 py-3 text-sm font-mono text-gray-500">{{ $source->serial_number ?? '—' }}</td>
+                    <td class="px-6 py-3">
+                        @if($source->status === 'active')
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Activo</span>
+                        @else
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">{{ $source->status }}</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-500 text-right">
+                        {{ count($source->device_users ?? []) }}
+                    </td>
+                    <td class="px-6 py-3 text-right">
+                        <button wire:click="openCsvModal({{ $source->id }})"
+                            class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                            Subir CSV
+                        </button>
+                    </td>
+                </tr>
+                @empty
+                <tr>
+                    <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-500">
+                        No hay dispositivos registrados para este cliente.
+                    </td>
+                </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+    @endif
+
+    {{-- Modal CSV Upload --}}
+    @if($showModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" wire:click.self="closeModal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                @php $modalSource = $biometricSources->firstWhere('id', $source_id); @endphp
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Importar CSV</h3>
+                    @if($modalSource)
+                        <p class="text-xs text-gray-500 mt-0.5 font-mono">{{ $modalSource->name }} · {{ $modalSource->serial_number }}</p>
+                    @endif
+                </div>
+                <button wire:click="closeModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div class="px-6 py-5 space-y-4">
                 <input wire:model="csvFile" type="file" accept=".csv,.txt"
-                    class="block text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                @if($importError)
+                    <p class="text-xs text-red-600">{{ $importError }}</p>
+                @endif
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button wire:click="closeModal"
+                    class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+                    Cancelar
+                </button>
                 <button wire:click="uploadCsv" wire:loading.attr="disabled"
-                    class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition disabled:opacity-50">
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition disabled:opacity-50">
                     <span wire:loading.remove wire:target="uploadCsv">Importar y pre-mapear</span>
-                    <span wire:loading wire:target="uploadCsv">Procesando...</span>
+                    <span wire:loading wire:target="uploadCsv">Procesando…</span>
                 </button>
             </div>
-            <button wire:click="downloadTemplate"
-                class="text-xs text-indigo-600 hover:underline whitespace-nowrap">
-                ↓ Descargar plantilla CSV
-            </button>
         </div>
-        @if($importError)
-            <p class="mt-2 text-xs text-red-600">{{ $importError }}</p>
-        @endif
     </div>
     @endif
 

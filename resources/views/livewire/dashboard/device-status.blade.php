@@ -28,8 +28,8 @@ new class extends Component {
             <p class="text-xs text-gray-500">
                 {{ $device->location?->name ?? 'Sin ubicación' }} · {{ $device->client?->name ?? 'Sin empresa' }}
             </p>
-            <p class="text-[11px] text-gray-400 pt-1">Agregado {{ $device->created_at->diffForHumans() }}</p>
-            <p class="text-[11px] {{ $device->last_ping_at ? 'text-gray-400' : 'text-gray-300' }}">
+            <p class="text-[10px] text-gray-400 pt-1">Agregado {{ $device->created_at->diffForHumans() }}</p>
+            <p class="text-[10px] {{ $device->last_ping_at ? 'text-gray-400' : 'text-gray-300' }}">
                 Última conexión: {{ $device->last_ping_at?->diffForHumans() ?? 'nunca' }}
             </p>
         </div>

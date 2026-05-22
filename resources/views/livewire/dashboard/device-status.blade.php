@@ -9,7 +9,7 @@ new class extends Component {
         $devices = BiometricSource::with(['client', 'location'])
             ->latest()
             ->limit(5)
-            ->get();
+            ->get(['id', 'name', 'serial_number', 'status', 'client_id', 'location_id', 'created_at', 'last_ping_at']);
 
         return ['devices' => $devices];
     }
@@ -23,23 +23,17 @@ new class extends Component {
 
     <div class="divide-y divide-gray-100">
         @forelse($devices as $device)
-        @php $isActive = $device->status === 'active'; @endphp
-        <div class="px-5 py-4 flex items-start gap-3">
-            {{-- Icono dispositivo --}}
-            <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center mt-0.5">
-                <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
-                </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                    <p class="text-sm font-medium text-gray-900 truncate">{{ $device->name ?? $device->serial_number }}</p>
-                    <span class="h-2 w-2 rounded-full flex-shrink-0 {{ $isActive ? 'bg-green-400' : 'bg-gray-300' }}"></span>
-                </div>
+        <div class="px-5 py-4 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">{{ $device->name ?? $device->serial_number }}</p>
                 <p class="text-xs text-gray-500 truncate mt-0.5">{{ $device->client?->name ?? 'Sin empresa' }}</p>
                 <p class="text-xs text-gray-400 truncate">{{ $device->location?->name ?? 'Sin ubicación' }}</p>
-                <p class="text-xs text-gray-300 font-mono mt-1">{{ $device->created_at->diffForHumans() }}</p>
+            </div>
+            <div class="flex-shrink-0 text-right">
+                <p class="text-[10px] text-gray-400 font-mono">Agregado {{ $device->created_at->diffForHumans() }}</p>
+                <p class="text-[10px] font-mono mt-0.5 {{ $device->last_ping_at ? 'text-gray-400' : 'text-gray-300' }}">
+                    Conexión {{ $device->last_ping_at?->diffForHumans() ?? 'nunca' }}
+                </p>
             </div>
         </div>
         @empty

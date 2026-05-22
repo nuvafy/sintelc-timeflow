@@ -377,10 +377,27 @@ new class extends Component {
                         {{ $device->last_ping_at?->diffForHumans() ?? '—' }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <button wire:click="toggleStatus({{ $device->id }})"
-                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer {{ $device->status === 'active' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
-                            {{ $device->status === 'active' ? 'Activo' : 'Inactivo' }}
-                        </button>
+                        @if($device->status !== 'active')
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500">
+                                Deshabilitado
+                            </span>
+                        @elseif(!$device->last_ping_at)
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-400">
+                                Sin señal
+                            </span>
+                        @elseif($device->last_ping_at->gt(now()->subHours(24)))
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-700">
+                                En línea
+                            </span>
+                        @elseif($device->last_ping_at->gt(now()->subDays(7)))
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-700">
+                                Reciente
+                            </span>
+                        @else
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-600">
+                                Sin señal
+                            </span>
+                        @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">

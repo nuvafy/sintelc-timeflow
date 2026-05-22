@@ -23,7 +23,7 @@ new class extends Component {
 
     <div class="divide-y divide-gray-100">
         @forelse($devices as $device)
-        <div class="px-5 py-4 space-y-0.5">
+        <div class="px-5 py-4 space-y-0.5 font-sans">
             <p class="text-sm font-semibold text-gray-900">{{ $device->name ?? $device->serial_number }}</p>
             <p class="text-xs text-gray-500">
                 {{ $device->location?->name ?? 'Sin ubicación' }} · {{ $device->client?->name ?? 'Sin empresa' }}

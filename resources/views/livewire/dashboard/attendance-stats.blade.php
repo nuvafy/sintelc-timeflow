@@ -151,6 +151,7 @@ new class extends Component {
                         new Chart($el, {
                             type: 'doughnut',
                             data: {
+                                labels: {{ Js::from(array_column($byClient, 'name')) }},
                                 datasets: [{
                                     data: {{ Js::from(array_column($byClient, 'total')) }},
                                     backgroundColor: {{ Js::from(array_slice($clientColors, 0, count($byClient))) }},
@@ -199,6 +200,7 @@ new class extends Component {
                         new Chart($el, {
                             type: 'doughnut',
                             data: {
+                                labels: ['Activas', 'Inactivas'],
                                 datasets: [{
                                     data: [{{ $activeConnections }}, {{ $inactiveConnections }}],
                                     backgroundColor: ['#22c55e', '#d1d5db'],

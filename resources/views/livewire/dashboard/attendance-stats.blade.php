@@ -90,6 +90,7 @@ new class extends Component {
 
     {{-- Card 1: resumen del día --}}
     <div class="bg-white shadow rounded-lg p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Sincronización</p>
         <div class="flex items-center gap-8">
             <div class="relative flex-shrink-0 w-[120px] h-[120px] flex items-center justify-center">
                 @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
@@ -143,6 +144,7 @@ new class extends Component {
 
     {{-- Dona 2: por empresa --}}
     <div class="bg-white shadow rounded-lg p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Dispositivos por empresa</p>
         <div class="flex items-center gap-8">
             <div class="relative flex-shrink-0 w-[120px] h-[120px]">
                 <canvas
@@ -192,6 +194,7 @@ new class extends Component {
 
     {{-- Dona 3: conexiones Factorial --}}
     <div class="bg-white shadow rounded-lg p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Conexiones Factorial</p>
         <div class="flex items-center gap-8">
             <div class="relative flex-shrink-0 w-[120px] h-[120px]">
                 <canvas

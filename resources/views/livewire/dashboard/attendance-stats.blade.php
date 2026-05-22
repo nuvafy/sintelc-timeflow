@@ -221,7 +221,7 @@ new class extends Component {
                 ></canvas>
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span class="text-xl font-bold text-gray-900 leading-none">{{ $activeConnections }}</span>
-                    <span class="text-[9px] text-gray-500 mt-0.5">de {{ $connTotal }} activas</span>
+                    <span class="text-[9px] text-gray-500 mt-0.5">activas</span>
                 </div>
             </div>
 

@@ -161,7 +161,7 @@ new class extends Component {
                             },
                             options: {
                                 cutout: '72%',
-                                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                                plugins: { legend: { display: false }, tooltip: { enabled: false } },
                                 animation: { duration: 600 },
                             }
                         })
@@ -210,7 +210,7 @@ new class extends Component {
                             },
                             options: {
                                 cutout: '72%',
-                                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                                plugins: { legend: { display: false }, tooltip: { enabled: false } },
                                 animation: { duration: 600 },
                             }
                         })

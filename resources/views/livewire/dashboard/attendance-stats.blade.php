@@ -161,7 +161,7 @@ new class extends Component {
                             },
                             options: {
                                 cutout: '72%',
-                                plugins: { legend: { display: false }, tooltip: { enabled: true, displayColors: false, callbacks: { title: () => '', label: (ctx) => ctx.label } } },
+                                plugins: { legend: { display: false }, tooltip: { enabled: true, displayColors: false, callbacks: { label: () => '' } } },
                                 animation: { duration: 600 },
                             }
                         })
@@ -210,7 +210,7 @@ new class extends Component {
                             },
                             options: {
                                 cutout: '72%',
-                                plugins: { legend: { display: false }, tooltip: { enabled: true, displayColors: false, callbacks: { title: () => '', label: (ctx) => ctx.label } } },
+                                plugins: { legend: { display: false }, tooltip: { enabled: true, displayColors: false, callbacks: { label: () => '' } } },
                                 animation: { duration: 600 },
                             }
                         })

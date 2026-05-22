@@ -318,8 +318,6 @@ new class extends Component {
                     @endforelse
                 </div>
 
-                </div>
-
             </div>
 
             {{-- Footer --}}

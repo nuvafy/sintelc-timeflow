@@ -416,8 +416,8 @@ new class extends Component {
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Client Secret</label>
-                            <input wire:model="oauth_client_secret" type="password" autocomplete="new-password"
-                                placeholder="••••••••••••••••"
+                            <input wire:model="oauth_client_secret" type="text" autocomplete="off"
+                                placeholder="Client secret..."
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                             @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                         </div>

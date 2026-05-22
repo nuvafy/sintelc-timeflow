@@ -257,19 +257,19 @@ new class extends Component {
 
 <div>
     {{-- Header --}}
-    <div class="flex items-center justify-between mb-6 gap-4">
-        <h2 class="text-xl font-semibold text-gray-800 flex-shrink-0">Empresas</h2>
-        <div class="flex-1 max-w-xs">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold text-gray-800">Empresas</h2>
+        <div class="flex items-center gap-3">
             <input wire:model.live.debounce.300ms="search" type="text"
                 placeholder="Buscar empresa..."
-                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                class="block w-56 rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+            <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Nueva empresa
+            </button>
         </div>
-        <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition flex-shrink-0">
-            <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Nueva empresa
-        </button>
     </div>
 
     {{-- Cards --}}

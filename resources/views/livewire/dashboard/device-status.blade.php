@@ -9,7 +9,7 @@ new class extends Component {
         $devices = BiometricSource::with(['client', 'location'])
             ->latest()
             ->limit(5)
-            ->get(['id', 'name', 'serial_number', 'status', 'client_id', 'location_id', 'created_at', 'last_ping_at']);
+            ->get();
 
         return ['devices' => $devices];
     }

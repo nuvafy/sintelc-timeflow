@@ -30,7 +30,7 @@ new class extends Component {
             </p>
             <p class="text-[11px] text-gray-400 pt-1">Agregado {{ $device->created_at->diffForHumans() }}</p>
             <p class="text-[11px] {{ $device->last_ping_at ? 'text-gray-400' : 'text-gray-300' }}">
-                Conexión {{ $device->last_ping_at?->diffForHumans() ?? 'nunca' }}
+                Última conexión: {{ $device->last_ping_at?->diffForHumans() ?? 'nunca' }}
             </p>
         </div>
         @empty

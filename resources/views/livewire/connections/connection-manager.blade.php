@@ -113,12 +113,20 @@ new class extends Component {
         try {
             $service = new FactorialService($connection);
 
-            // Sync employees
-            $response  = $service->getEmployees();
-            $employees = $response['data'] ?? [];
+            // Sync employees (con paginación)
+            $allEmployees = [];
+            $offset       = 0;
+            $limit        = 100;
+
+            do {
+                $page = ($service->getEmployees(['offset' => $offset, 'limit' => $limit]))['data'] ?? [];
+                $allEmployees = array_merge($allEmployees, $page);
+                $offset += $limit;
+            } while (count($page) === $limit);
+
             $empCount  = 0;
 
-            foreach ($employees as $employee) {
+            foreach ($allEmployees as $employee) {
                 if (empty($employee['id'])) continue;
 
                 FactorialEmployee::updateOrCreate(
@@ -146,31 +154,42 @@ new class extends Component {
                 $empCount++;
             }
 
-            // Sync locations
-            $locResponse = $service->getLocations();
-            $locations   = $locResponse['data'] ?? $locResponse;
-            $locCount    = 0;
+            // Sync locations (opcional — puede fallar por permisos sin romper el sync de empleados)
+            $locCount  = 0;
+            $locError  = null;
 
-            if (is_array($locations)) {
-                foreach ($locations as $location) {
-                    if (empty($location['id'])) continue;
+            try {
+                $locResponse = $service->getLocations();
+                $locations   = $locResponse['data'] ?? $locResponse;
 
-                    FactorialLocation::updateOrCreate(
-                        ['factorial_connection_id' => $connection->id, 'factorial_location_id' => (int) $location['id']],
-                        [
-                            'client_id'            => $connection->client_id,
-                            'factorial_company_id' => isset($location['company_id']) ? (int) $location['company_id'] : null,
-                            'name'                 => $location['name'] ?? "Ubicación {$location['id']}",
-                        ]
-                    );
-                    $locCount++;
+                if (is_array($locations)) {
+                    foreach ($locations as $location) {
+                        if (empty($location['id'])) continue;
+
+                        FactorialLocation::updateOrCreate(
+                            ['factorial_connection_id' => $connection->id, 'factorial_location_id' => (int) $location['id']],
+                            [
+                                'client_id'            => $connection->client_id,
+                                'factorial_company_id' => isset($location['company_id']) ? (int) $location['company_id'] : null,
+                                'name'                 => $location['name'] ?? "Ubicación {$location['id']}",
+                            ]
+                        );
+                        $locCount++;
+                    }
                 }
+            } catch (\Throwable $le) {
+                $locError = $le->getMessage();
+                Log::warning('Factorial sync: no se pudieron obtener ubicaciones', [
+                    'connection_id' => $id,
+                    'message'       => $locError,
+                ]);
             }
 
             $this->syncResults[$id] = [
                 'ok'        => true,
                 'employees' => $empCount,
                 'locations' => $locCount,
+                'loc_error' => $locError,
             ];
         } catch (\Throwable $e) {
             Log::error('Error al sincronizar conexión Factorial', [
@@ -255,7 +274,12 @@ new class extends Component {
             @php $r = $syncResults[$conn->id]; @endphp
             @if($r['ok'])
             <div class="px-5 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between">
-                <p class="text-xs text-emerald-700">✓ {{ $r['employees'] }} empleados · {{ $r['locations'] }} ubicaciones</p>
+                <div>
+                    <p class="text-xs text-emerald-700">✓ {{ $r['employees'] }} empleados · {{ $r['locations'] }} ubicaciones</p>
+                    @if(!empty($r['loc_error']))
+                    <p class="text-xs text-amber-600 mt-0.5">⚠ Ubicaciones no disponibles (sin permisos)</p>
+                    @endif
+                </div>
                 <a href="{{ route('employees') }}" wire:navigate class="text-xs font-medium text-emerald-700 underline hover:text-emerald-900">
                     Ver empleados →
                 </a>

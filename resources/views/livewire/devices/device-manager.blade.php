@@ -262,14 +262,9 @@ new class extends Component {
             ),
         ]);
 
-        // Despachar auto-match en background para evitar timeout
-        \App\Jobs\ProcessCsvAutoMatch::dispatch($source->id);
-
         $this->csvResult = [
-            'total'      => count($rows),
-            'autoMapped' => null, // se procesa en background
-            'pending'    => null,
-            'existing'   => null,
+            'total'   => count($rows),
+            'message' => 'Usuarios cargados. Ve a Mapeo de empleados para asignarlos.',
         ];
         $this->csvFile = null;
     }
@@ -606,7 +601,7 @@ new class extends Component {
                     <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 space-y-1">
                         <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
                         <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios guardados en el dispositivo.</p>
-                        <p class="text-xs text-emerald-600 mt-1">El mapeo automático contra Factorial se está procesando en segundo plano.</p>
+                        <p class="text-xs text-emerald-600 mt-1">{{ $csvResult['message'] }}</p>
                     </div>
                 @else
                     <input wire:model="csvFile" type="file" accept=".csv,.txt"
@@ -626,8 +621,8 @@ new class extends Component {
                 @if(!$csvResult)
                 <button wire:click="uploadCsv" wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50">
-                    <span wire:loading.remove wire:target="uploadCsv">Importar y mapear</span>
-                    <span wire:loading wire:target="uploadCsv">Procesando…</span>
+                    <span wire:loading.remove wire:target="uploadCsv">Importar usuarios</span>
+                    <span wire:loading wire:target="uploadCsv">Importando…</span>
                 </button>
                 @endif
             </div>

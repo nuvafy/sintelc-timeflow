@@ -8,5 +8,4 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Resolver attendance logs pendientes cada 15 minutos
-Schedule::command('attendance:resolve-pending')->everyFifteenMinutes();
+// El mapeo de empleados es ahora manual desde la UI — sin scheduler automático

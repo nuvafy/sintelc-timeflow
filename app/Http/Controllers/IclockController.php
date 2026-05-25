@@ -22,7 +22,7 @@ class IclockController extends Controller
         if ($sn) {
             BiometricSource::updateOrCreate(
                 ['serial_number' => $sn],
-                ['last_ping_at' => now(), 'vendor' => 'ZKTeco']
+                ['last_ping_at' => now()]
             );
         }
 
@@ -41,7 +41,7 @@ class IclockController extends Controller
 
         $source = BiometricSource::updateOrCreate(
             ['serial_number' => $sn],
-            ['last_ping_at' => now(), 'vendor' => 'ZKTeco']
+            ['last_ping_at' => now()]
         );
 
         if (!$source->client_id) {

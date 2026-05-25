@@ -14,7 +14,6 @@ class BiometricSource extends Model
         'biometric_provider_id',
         'factorial_location_id',
         'name',
-        'vendor',
         'device_code',
         'serial_number',
         'site_name',

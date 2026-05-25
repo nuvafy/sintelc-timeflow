@@ -98,7 +98,7 @@ new class extends Component {
         if ($this->editing) {
             BiometricSource::findOrFail($this->editingId)->update($data);
         } else {
-            BiometricSource::create(array_merge($data, ['vendor' => 'ZKTeco']));
+            BiometricSource::create($data);
         }
 
         $this->showModal = false;
@@ -367,7 +367,7 @@ new class extends Component {
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
-                        <div class="text-xs text-gray-400">{{ $device->vendor }}</div>
+                        <div class="text-xs text-gray-400">{{ $device->provider?->vendor ?? 'ZKTeco' }}</div>
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->client?->name ?? '—' }}</td>

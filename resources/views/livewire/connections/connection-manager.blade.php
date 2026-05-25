@@ -1,11 +1,9 @@
 <?php
 
+use App\Jobs\SyncFactorialConnection;
 use App\Models\FactorialConnection;
-use App\Models\FactorialEmployee;
-use App\Models\FactorialLocation;
 use App\Models\Client;
-use App\Services\FactorialService;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 use Vinkla\Hashids\Facades\Hashids;
@@ -16,7 +14,8 @@ new class extends Component {
     public ?int $editingId = null;
     public ?string $oauthUrl = null;
 
-    public array $syncResults = [];
+    public array $syncResults  = [];
+    public array $syncPending  = [];   // connection IDs en proceso
 
     public string $name      = '';
     public ?int   $client_id = null;
@@ -104,100 +103,27 @@ new class extends Component {
 
     public function sync(int $id): void
     {
-        $connection = FactorialConnection::with('client')->findOrFail($id);
+        $connection = FactorialConnection::findOrFail($id);
 
         if (empty($connection->access_token)) {
             return;
         }
 
-        try {
-            $service = new FactorialService($connection);
+        // Limpiar resultado anterior y marcar como en proceso
+        Cache::forget("factorial_sync_result:{$id}");
+        $this->syncPending[$id]  = true;
+        unset($this->syncResults[$id]);
 
-            // Sync employees (con paginación)
-            $allEmployees = [];
-            $offset       = 0;
-            $limit        = 100;
+        SyncFactorialConnection::dispatch($id);
+    }
 
-            do {
-                $page = ($service->getEmployees(['offset' => $offset, 'limit' => $limit]))['data'] ?? [];
-                $allEmployees = array_merge($allEmployees, $page);
-                $offset += $limit;
-            } while (count($page) === $limit);
+    public function checkSync(int $id): void
+    {
+        $result = Cache::get("factorial_sync_result:{$id}");
 
-            $empCount  = 0;
-
-            foreach ($allEmployees as $employee) {
-                if (empty($employee['id'])) continue;
-
-                FactorialEmployee::updateOrCreate(
-                    ['factorial_connection_id' => $connection->id, 'factorial_id' => (int) $employee['id']],
-                    [
-                        'client_id'              => $connection->client_id,
-                        'access_id'              => isset($employee['access_id']) ? (int) $employee['access_id'] : null,
-                        'first_name'             => $employee['first_name'] ?? null,
-                        'last_name'              => $employee['last_name'] ?? null,
-                        'full_name'              => $employee['full_name'] ?? null,
-                        'email'                  => $employee['email'] ?? null,
-                        'login_email'            => $employee['login_email'] ?? null,
-                        'company_id'             => isset($employee['company_id']) ? (int) $employee['company_id'] : null,
-                        'company_identifier'     => $employee['company_identifier'] ?? null,
-                        'location_id'            => isset($employee['location_id']) ? (int) $employee['location_id'] : null,
-                        'active'                 => (bool) ($employee['active'] ?? false),
-                        'attendable'             => (bool) ($employee['attendable'] ?? false),
-                        'is_terminating'         => (bool) ($employee['is_terminating'] ?? false),
-                        'terminated_on'          => isset($employee['terminated_on']) ? Carbon::parse($employee['terminated_on']) : null,
-                        'factorial_created_at'   => isset($employee['created_at']) ? Carbon::parse($employee['created_at']) : null,
-                        'factorial_updated_at'   => isset($employee['updated_at']) ? Carbon::parse($employee['updated_at']) : null,
-                        'raw_payload'            => $employee,
-                    ]
-                );
-                $empCount++;
-            }
-
-            // Sync locations (opcional — puede fallar por permisos sin romper el sync de empleados)
-            $locCount  = 0;
-            $locError  = null;
-
-            try {
-                $locResponse = $service->getLocations();
-                $locations   = $locResponse['data'] ?? $locResponse;
-
-                if (is_array($locations)) {
-                    foreach ($locations as $location) {
-                        if (empty($location['id'])) continue;
-
-                        FactorialLocation::updateOrCreate(
-                            ['factorial_connection_id' => $connection->id, 'factorial_location_id' => (int) $location['id']],
-                            [
-                                'client_id'            => $connection->client_id,
-                                'factorial_company_id' => isset($location['company_id']) ? (int) $location['company_id'] : null,
-                                'name'                 => $location['name'] ?? "Ubicación {$location['id']}",
-                            ]
-                        );
-                        $locCount++;
-                    }
-                }
-            } catch (\Throwable $le) {
-                $locError = $le->getMessage();
-                Log::warning('Factorial sync: no se pudieron obtener ubicaciones', [
-                    'connection_id' => $id,
-                    'message'       => $locError,
-                ]);
-            }
-
-            $this->syncResults[$id] = [
-                'ok'        => true,
-                'employees' => $empCount,
-                'locations' => $locCount,
-                'loc_error' => $locError,
-            ];
-        } catch (\Throwable $e) {
-            Log::error('Error al sincronizar conexión Factorial', [
-                'connection_id' => $id,
-                'message'       => $e->getMessage(),
-            ]);
-
-            $this->syncResults[$id] = ['ok' => false, 'error' => $e->getMessage()];
+        if ($result !== null) {
+            $this->syncResults[$id] = $result;
+            unset($this->syncPending[$id]);
         }
     }
 
@@ -269,8 +195,17 @@ new class extends Component {
                 @endif
             </div>
 
-            {{-- Sync result banner --}}
-            @if(isset($syncResults[$conn->id]))
+            {{-- Sync result / pending banner --}}
+            @if(isset($syncPending[$conn->id]))
+            <div class="px-5 py-2 bg-indigo-50 border-t border-indigo-100 flex items-center gap-2"
+                 wire:poll.3s="checkSync({{ $conn->id }})">
+                <svg class="animate-spin w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                <p class="text-xs text-indigo-600">Sincronizando en segundo plano…</p>
+            </div>
+            @elseif(isset($syncResults[$conn->id]))
             @php $r = $syncResults[$conn->id]; @endphp
             @if($r['ok'])
             <div class="px-5 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between">
@@ -294,13 +229,10 @@ new class extends Component {
             {{-- Footer --}}
             <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
                 @if($conn->access_token)
-                <button wire:click="sync({{ $conn->id }})" wire:loading.attr="disabled" wire:target="sync({{ $conn->id }})"
+                <button wire:click="sync({{ $conn->id }})"
+                    @if(isset($syncPending[$conn->id])) disabled @endif
                     class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition disabled:opacity-50">
-                    <svg wire:loading wire:target="sync({{ $conn->id }})" class="animate-spin w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                    <svg wire:loading.remove wire:target="sync({{ $conn->id }})" class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
                     Sincronizar

@@ -12,7 +12,6 @@ class BiometricProvider extends Model
         'client_id',
         'factorial_connection_id',
         'vendor',
-        'name',
         'status',
     ];
 

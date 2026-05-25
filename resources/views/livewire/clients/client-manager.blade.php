@@ -33,7 +33,6 @@ new class extends Component {
     // ── Proveedor biométrico ───────────────────────────────────────
     public bool $showProviderModal  = false;
     public ?int $providerClientId   = null;
-    public string $provider_name    = '';
     public string $provider_vendor  = 'zkteco';
     public ?int $provider_conn_id   = null;
 
@@ -178,7 +177,6 @@ new class extends Component {
     {
         $client                  = Client::findOrFail($clientId);
         $this->providerClientId  = $clientId;
-        $this->provider_name     = 'ZKTeco ' . $client->name;
         $this->provider_vendor   = 'zkteco';
         $this->provider_conn_id  = $client->factorialConnections()->first()?->id;
         $this->showProviderModal = true;
@@ -187,7 +185,6 @@ new class extends Component {
     public function saveProvider(): void
     {
         $this->validate([
-            'provider_name'    => 'required|string|max:255',
             'provider_vendor'  => 'required|string',
             'provider_conn_id' => 'nullable|exists:factorial_connections,id',
         ]);
@@ -196,7 +193,6 @@ new class extends Component {
             'client_id'               => $this->providerClientId,
             'factorial_connection_id' => $this->provider_conn_id,
             'vendor'                  => $this->provider_vendor,
-            'name'                    => $this->provider_name,
             'status'                  => 'active',
         ]);
 
@@ -503,11 +499,6 @@ new class extends Component {
                 </button>
             </div>
             <div class="px-6 py-4 space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Nombre del proveedor</label>
-                    <input wire:model="provider_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('provider_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Marca del equipo</label>
                     <select wire:model="provider_vendor" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">

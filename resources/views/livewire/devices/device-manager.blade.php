@@ -66,8 +66,22 @@ new class extends Component {
                 ->get(),
             'clients'            => Client::orderBy('name')->get(),
             'locations'          => FactorialLocation::orderBy('name')->get(),
-            'providers'          => BiometricProvider::orderBy('name')->get(),
+            'providers'          => $this->client_id
+                ? BiometricProvider::where('client_id', $this->client_id)->orderBy('vendor')->get()
+                : collect(),
         ];
+    }
+
+    public function updatedClientId(): void
+    {
+        $this->biometric_provider_id = null;
+
+        if ($this->client_id) {
+            $provider = BiometricProvider::where('client_id', $this->client_id)->first();
+            if ($provider) {
+                $this->biometric_provider_id = $provider->id;
+            }
+        }
     }
 
     public function openCreate(): void
@@ -146,7 +160,6 @@ new class extends Component {
             [
                 'factorial_connection_id' => $connection?->id,
                 'vendor'                  => 'zkteco',
-                'name'                    => 'ZKTeco ' . $client->name,
                 'status'                  => 'active',
             ]
         );
@@ -367,7 +380,8 @@ new class extends Component {
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
-                        <div class="text-xs text-gray-400">{{ $device->provider?->vendor ?? 'ZKTeco' }}</div>
+                        @php $vendorLabels = ['zkteco'=>'ZKTeco','hikvision'=>'Hikvision','suprema'=>'Suprema','other'=>'Otro']; @endphp
+                        <div class="text-xs text-gray-400">{{ $vendorLabels[$device->provider?->vendor] ?? ($device->provider?->vendor ?? 'ZKTeco') }}</div>
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->client?->name ?? '—' }}</td>
@@ -498,7 +512,8 @@ new class extends Component {
                     <select wire:model="biometric_provider_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Sin asignar</option>
                         @foreach($providers as $provider)
-                            <option value="{{ $provider->id }}">{{ $provider->name }}</option>
+                            @php $vendorLabels = ['zkteco'=>'ZKTeco','hikvision'=>'Hikvision','suprema'=>'Suprema','other'=>'Otro']; @endphp
+                            <option value="{{ $provider->id }}">{{ $vendorLabels[$provider->vendor] ?? ucfirst($provider->vendor) }}</option>
                         @endforeach
                     </select>
                 </div>

@@ -21,6 +21,7 @@ new class extends Component {
     public ?int $editingId = null;
 
     public string $statusFilter = '';
+    public string $clientFilter = '';
 
     public string $name = '';
     public string $serial_number = '';
@@ -66,6 +67,7 @@ new class extends Component {
                 ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subDays(7), now()->subHours(24)]))
                 ->when($this->statusFilter === 'offline',  fn($q) => $q->where('status', 'active')->where(fn($q2) => $q2->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subDays(7))))
                 ->when($this->statusFilter === 'inactive', fn($q) => $q->where('status', 'inactive'))
+                ->when($this->clientFilter,                fn($q) => $q->where('client_id', $this->clientFilter))
                 ->paginate(10),
             'unassigned'         => BiometricSource::whereNull('client_id')
                 ->orderByDesc('last_ping_at')
@@ -360,6 +362,13 @@ new class extends Component {
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-semibold text-gray-800">Dispositivos biométricos</h2>
         <div class="flex items-center gap-3">
+            <select wire:model.live="clientFilter"
+                class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Todas las empresas</option>
+                @foreach($clients as $c)
+                    <option value="{{ $c->id }}">{{ mb_substr(ucwords(mb_strtolower($c->name)), 0, 30) }}</option>
+                @endforeach
+            </select>
             <select wire:model.live="statusFilter"
                 class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todos los estados</option>

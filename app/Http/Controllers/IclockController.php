@@ -305,8 +305,15 @@ class IclockController extends Controller
                     ->value('id');
 
                 if ($log) {
-                    SyncAttendanceToFactorial::dispatch($log)->delay(now()->addSeconds($delay));
-                    $delay += 2;
+                    // Solo despachar si no hay ya un job pendiente para este log
+                    $alreadyQueued = \Illuminate\Support\Facades\DB::table('jobs')
+                        ->where('payload', 'like', "%\"attendanceLogId\":{$log}%")
+                        ->exists();
+
+                    if (!$alreadyQueued) {
+                        SyncAttendanceToFactorial::dispatch($log)->delay(now()->addSeconds($delay));
+                        $delay += 2;
+                    }
                 }
             }
         }

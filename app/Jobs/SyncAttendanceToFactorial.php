@@ -15,8 +15,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries  = 3;
-    public int $backoff = 10;
+    public int $tries  = 1;
 
     public function __construct(
         public readonly int $attendanceLogId

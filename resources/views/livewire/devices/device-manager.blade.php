@@ -262,45 +262,14 @@ new class extends Component {
             ),
         ]);
 
-        // Auto-match 100% contra empleados Factorial
-        $employees       = FactorialEmployee::where('client_id', $source->client_id)->get();
-        $existingMappings = BiometricUserSync::where('client_id', $source->client_id)
-            ->whereNotNull('factorial_employee_id')
-            ->pluck('factorial_employee_id', 'external_employee_code');
-        $provider = BiometricProvider::where('client_id', $source->client_id)->first();
-        $now      = now();
-        $autoMapped = 0;
-        $pending    = 0;
-
-        foreach ($rows as $row) {
-            if (isset($existingMappings[$row['pin']])) continue;
-
-            $bestScore = 0; $bestEmpId = null;
-            foreach ($employees as $emp) {
-                similar_text(mb_strtolower($row['name']), mb_strtolower($emp->full_name), $pct);
-                if ($pct > $bestScore) { $bestScore = $pct; $bestEmpId = $emp->id; }
-            }
-
-            if ($bestScore >= 100 && $bestEmpId && $provider) {
-                BiometricUserSync::updateOrCreate(
-                    ['biometric_provider_id' => $provider->id, 'factorial_employee_id' => $bestEmpId],
-                    ['client_id' => $source->client_id, 'external_employee_code' => $row['pin'], 'sync_status' => 'pending', 'last_attempt_at' => $now]
-                );
-                AttendanceLog::where('client_id', $source->client_id)
-                    ->where('employee_code', $row['pin'])
-                    ->whereNull('factorial_employee_id')
-                    ->update(['factorial_employee_id' => $bestEmpId, 'sync_status' => 'resolved']);
-                $autoMapped++;
-            } else {
-                $pending++;
-            }
-        }
+        // Despachar auto-match en background para evitar timeout
+        \App\Jobs\ProcessCsvAutoMatch::dispatch($source->id);
 
         $this->csvResult = [
             'total'      => count($rows),
-            'autoMapped' => $autoMapped,
-            'pending'    => $pending,
-            'existing'   => count($rows) - $autoMapped - $pending,
+            'autoMapped' => null, // se procesa en background
+            'pending'    => null,
+            'existing'   => null,
         ];
         $this->csvFile = null;
     }
@@ -635,21 +604,10 @@ new class extends Component {
                 @if($csvResult)
                     {{-- Resultado --}}
                     <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 space-y-1">
-                        <p class="text-sm font-semibold text-emerald-800">Importación completada</p>
-                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios importados al dispositivo</p>
-                        <div class="flex gap-4 mt-2 text-xs">
-                            <span class="text-green-700 font-medium">✓ {{ $csvResult['autoMapped'] }} auto-mapeados</span>
-                            @if($csvResult['existing'] > 0)
-                                <span class="text-gray-500">{{ $csvResult['existing'] }} ya existían</span>
-                            @endif
-                            @if($csvResult['pending'] > 0)
-                                <span class="text-amber-600 font-medium">⚠ {{ $csvResult['pending'] }} pendientes de mapeo</span>
-                            @endif
-                        </div>
+                        <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
+                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios guardados en el dispositivo.</p>
+                        <p class="text-xs text-emerald-600 mt-1">El mapeo automático contra Factorial se está procesando en segundo plano.</p>
                     </div>
-                    @if($csvResult['pending'] > 0)
-                        <p class="text-xs text-gray-500">Completa el mapeo en <strong>Empleados → Mapping</strong>.</p>
-                    @endif
                 @else
                     <input wire:model="csvFile" type="file" accept=".csv,.txt"
                         class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"/>

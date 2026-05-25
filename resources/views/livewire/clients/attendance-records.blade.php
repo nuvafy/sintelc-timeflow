@@ -114,7 +114,7 @@ new class extends Component {
         <div class="mt-3 flex items-center justify-between">
             {{-- Tipo de registro --}}
             <div class="flex gap-2">
-                @foreach([''=>'Todos', 'check_in'=>'Entrada', 'check_out'=>'Salida', 'break_in'=>'Inicio pausa', 'break_out'=>'Fin pausa'] as $val => $label)
+                @foreach([''=>'Todos', 'check_in'=>'Entrada', 'check_out'=>'Salida', 'break_in'=>'Inicio descanso', 'break_out'=>'Fin descanso'] as $val => $label)
                 <button wire:click="$set('checkTypeFilter', '{{ $val }}')"
                     class="px-3 py-1 text-xs rounded-full border transition
                         {{ $checkTypeFilter === $val
@@ -166,7 +166,7 @@ new class extends Component {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             @php
-                                $typeLabels = ['check_in'=>'Entrada','check_out'=>'Salida','break_in'=>'Inicio pausa','break_out'=>'Fin pausa'];
+                                $typeLabels = ['check_in'=>'Entrada','check_out'=>'Salida','break_in'=>'Inicio descanso','break_out'=>'Fin descanso'];
                                 $typeColors = ['check_in'=>'bg-green-100 text-green-800','check_out'=>'bg-blue-100 text-blue-800','break_in'=>'bg-yellow-100 text-yellow-800','break_out'=>'bg-purple-100 text-purple-800'];
                             @endphp
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $typeColors[$log->check_type] ?? 'bg-gray-100 text-gray-800' }}">

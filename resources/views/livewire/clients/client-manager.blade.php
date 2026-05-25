@@ -458,13 +458,13 @@ new class extends Component {
                     @if($has_breaks)
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">ID Inicio pausa</label>
+                            <label class="block text-sm font-medium text-gray-700">ID Inicio descanso</label>
                             <input wire:model="breakin_id" type="text" placeholder="2"
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                             @error('breakin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">ID Fin pausa</label>
+                            <label class="block text-sm font-medium text-gray-700">ID Fin descanso</label>
                             <input wire:model="breakout_id" type="text" placeholder="3"
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                             @error('breakout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror

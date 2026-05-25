@@ -17,6 +17,12 @@ new class extends Component {
     public int $activeConnections = 0;
     public int $inactiveConnections = 0;
 
+    // Estatus biométricos
+    public int $devOnline   = 0;
+    public int $devRecent   = 0;
+    public int $devOffline  = 0;
+    public int $devInactive = 0;
+
     public function mount(): void
     {
         $this->loadStats();
@@ -49,6 +55,12 @@ new class extends Component {
             'name'   => $c->client?->name ?? $c->name,
             'active' => !is_null($c->access_token),
         ])->values()->toArray();
+
+        // Estatus biométricos
+        $this->devOnline   = BiometricSource::where('status', 'active')->where('last_ping_at', '>=', now()->subHours(24))->count();
+        $this->devRecent   = BiometricSource::where('status', 'active')->whereBetween('last_ping_at', [now()->subDays(7), now()->subHours(24)])->count();
+        $this->devOffline  = BiometricSource::where('status', 'active')->where(fn($q) => $q->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subDays(7)))->count();
+        $this->devInactive = BiometricSource::where('status', 'inactive')->count();
     }
 
     public function dismissFailed(): void
@@ -84,11 +96,12 @@ new class extends Component {
     $clientColors = ['#6366f1','#0ea5e9','#f59e0b','#10b981','#ec4899','#8b5cf6','#14b8a6'];
     $clientTotal  = array_sum(array_column($byClient, 'total'));
     $connTotal    = $activeConnections + $inactiveConnections;
+    $devTotal     = $devOnline + $devRecent + $devOffline + $devInactive;
 @endphp
 
 <div class="grid grid-cols-2 gap-5">
 
-    {{-- Card 1: resumen del día --}}
+    {{-- Card 1: Sincronización --}}
     <div class="bg-white shadow rounded-lg p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Sincronización</p>
         <div class="flex items-center gap-8">
@@ -164,7 +177,52 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- Dona 2: por empresa --}}
+    {{-- Card 2: Conexiones Factorial --}}
+    <div class="bg-white shadow rounded-lg p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Conexiones Factorial</p>
+        <div class="flex items-center gap-8">
+            <div class="relative flex-shrink-0 w-[120px] h-[120px]">
+                <canvas
+                    x-data
+                    x-init="
+                        new Chart($el, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Activas', 'Inactivas'],
+                                datasets: [{
+                                    data: [{{ $activeConnections }}, {{ $inactiveConnections }}],
+                                    backgroundColor: ['#22c55e', '#d1d5db'],
+                                    borderWidth: 0,
+                                    hoverOffset: 4,
+                                }]
+                            },
+                            options: {
+                                cutout: '72%',
+                                plugins: { legend: { display: false }, tooltip: { enabled: true, displayColors: false, callbacks: { label: () => '' } } },
+                                animation: { duration: 600 },
+                            }
+                        })
+                    "
+                ></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-xl font-bold text-gray-900 leading-none">{{ $activeConnections }}</span>
+                    <span class="text-[9px] text-gray-500 mt-0.5">activas</span>
+                </div>
+            </div>
+
+            <div class="flex-1 space-y-3" style="padding-left:6px;">
+                @foreach($connections as $conn)
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0"
+                        style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
+                    <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($conn['name'])), 0, 24) }}</span>
+                </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+
+    {{-- Card 3: Dispositivos por empresa --}}
     <div class="bg-white shadow rounded-lg p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Dispositivos por empresa</p>
         <div class="flex items-center gap-8">
@@ -214,9 +272,9 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- Dona 3: conexiones Factorial --}}
+    {{-- Card 4: Estatus de los biométricos --}}
     <div class="bg-white shadow rounded-lg p-5">
-        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Conexiones Factorial</p>
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Estatus biométricos</p>
         <div class="flex items-center gap-8">
             <div class="relative flex-shrink-0 w-[120px] h-[120px]">
                 <canvas
@@ -225,10 +283,10 @@ new class extends Component {
                         new Chart($el, {
                             type: 'doughnut',
                             data: {
-                                labels: ['Activas', 'Inactivas'],
+                                labels: ['En línea', 'Reciente', 'Sin señal', 'Deshabilitado'],
                                 datasets: [{
-                                    data: [{{ $activeConnections }}, {{ $inactiveConnections }}],
-                                    backgroundColor: ['#22c55e', '#d1d5db'],
+                                    data: [{{ $devOnline }}, {{ $devRecent }}, {{ $devOffline }}, {{ $devInactive }}],
+                                    backgroundColor: ['#22c55e', '#eab308', '#ef4444', '#d1d5db'],
                                     borderWidth: 0,
                                     hoverOffset: 4,
                                 }]
@@ -242,22 +300,42 @@ new class extends Component {
                     "
                 ></canvas>
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-xl font-bold text-gray-900 leading-none">{{ $activeConnections }}</span>
-                    <span class="text-[9px] text-gray-500 mt-0.5">activas</span>
+                    <span class="text-xl font-bold text-gray-900 leading-none">{{ $devTotal }}</span>
+                    <span class="text-[9px] text-gray-500 mt-0.5">dispositivos</span>
                 </div>
             </div>
 
             <div class="flex-1 space-y-3" style="padding-left:6px;">
-                @foreach($connections as $conn)
-                <div class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full flex-shrink-0"
-                        style="background-color:{{ $conn['active'] ? '#22c55e' : '#d1d5db' }};"></span>
-                    <span class="text-sm text-gray-600">{{ mb_substr(ucwords(mb_strtolower($conn['name'])), 0, 24) }}</span>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#22c55e;"></span>
+                        <span class="text-sm text-gray-600">En línea</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900">{{ $devOnline }}</span>
                 </div>
-                @endforeach
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
+                        <span class="text-sm text-gray-600">Reciente</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900">{{ $devRecent }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#ef4444;"></span>
+                        <span class="text-sm text-gray-600">Sin señal</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900">{{ $devOffline }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#d1d5db;"></span>
+                        <span class="text-sm text-gray-600">Deshabilitado</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900">{{ $devInactive }}</span>
+                </div>
             </div>
         </div>
     </div>
-
 
 </div>

@@ -20,6 +20,8 @@ new class extends Component {
     public bool $editing = false;
     public ?int $editingId = null;
 
+    public string $statusFilter = '';
+
     public string $name = '';
     public string $serial_number = '';
     public string $status = 'active';
@@ -60,6 +62,10 @@ new class extends Component {
             'devices'            => BiometricSource::with(['client', 'location'])
                 ->whereNotNull('client_id')
                 ->withCount('attendanceLogs')
+                ->when($this->statusFilter === 'online',   fn($q) => $q->where('status', 'active')->where('last_ping_at', '>=', now()->subHours(24)))
+                ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subDays(7), now()->subHours(24)]))
+                ->when($this->statusFilter === 'offline',  fn($q) => $q->where('status', 'active')->where(fn($q2) => $q2->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subDays(7))))
+                ->when($this->statusFilter === 'inactive', fn($q) => $q->where('status', 'inactive'))
                 ->paginate(10),
             'unassigned'         => BiometricSource::whereNull('client_id')
                 ->orderByDesc('last_ping_at')
@@ -353,12 +359,22 @@ new class extends Component {
     {{-- ── Header equipos registrados ───────────────────────────────── --}}
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-semibold text-gray-800">Dispositivos biométricos</h2>
-        <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
-            <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Nuevo dispositivo
-        </button>
+        <div class="flex items-center gap-3">
+            <select wire:model.live="statusFilter"
+                class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Todos los estados</option>
+                <option value="online">En línea</option>
+                <option value="recent">Reciente</option>
+                <option value="offline">Sin señal</option>
+                <option value="inactive">Deshabilitado</option>
+            </select>
+            <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Nuevo dispositivo
+            </button>
+        </div>
     </div>
 
     {{-- ── Tabla dispositivos registrados ───────────────────────────── --}}

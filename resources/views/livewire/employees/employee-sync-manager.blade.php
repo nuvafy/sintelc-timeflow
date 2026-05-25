@@ -465,7 +465,6 @@ new class extends Component {
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">PIN</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre en dispositivo</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dispositivo</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sugerido</th>
                     <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-16">Match</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asignar a</th>
                 </tr>
@@ -482,7 +481,6 @@ new class extends Component {
                     <td class="px-4 py-3 font-mono font-semibold text-gray-900">{{ $row['pin'] }}</td>
                     <td class="px-4 py-3 text-gray-800">{{ $row['name'] ?: '—' }}</td>
                     <td class="px-4 py-3 text-gray-400 text-xs">{{ $row['source'] }}</td>
-                    <td class="px-4 py-3 text-gray-600">{{ $row['suggested_name'] ?? '—' }}</td>
                     <td class="px-4 py-3 text-center">
                         <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold {{ $scoreColor }}">
                             {{ $score }}%

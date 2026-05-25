@@ -92,12 +92,34 @@ new class extends Component {
     <div class="bg-white shadow rounded-lg p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Sincronización</p>
         <div class="flex items-center gap-8">
-            <div class="relative flex-shrink-0 w-[120px] h-[120px] flex items-center justify-center">
-                @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
-                <div class="text-center">
-                    <p class="text-3xl font-bold text-gray-900 leading-none">{{ $todayTotal }}</p>
-                    <p class="text-[9px] text-gray-500 mt-1">registros hoy</p>
-                    <p class="text-[9px] text-green-500 mt-0.5">{{ $pct }}% sync</p>
+            @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp
+            <div class="relative flex-shrink-0 w-[120px] h-[120px]">
+                <canvas
+                    x-data
+                    x-init="
+                        new Chart($el, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Sincronizados', 'Pendientes', 'Errores'],
+                                datasets: [{
+                                    data: [{{ $syncedToday }}, {{ $pendingSync }}, {{ $failedSync }}],
+                                    backgroundColor: ['#22c55e', '#eab308', '#ef4444'],
+                                    borderWidth: 0,
+                                    hoverOffset: 4,
+                                }]
+                            },
+                            options: {
+                                cutout: '72%',
+                                plugins: { legend: { display: false }, tooltip: { enabled: true, displayColors: false, callbacks: { label: () => '' } } },
+                                animation: { duration: 600 },
+                            }
+                        })
+                    "
+                ></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-xl font-bold text-gray-900 leading-none">{{ $todayTotal }}</span>
+                    <span class="text-[9px] text-gray-500 mt-0.5">registros hoy</span>
+                    <span class="text-[9px] text-green-500 mt-0.5">{{ $pct }}% sync</span>
                 </div>
             </div>
 

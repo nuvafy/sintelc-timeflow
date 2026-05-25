@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\SyncAttendanceToFactorial;
 use App\Models\AttendanceLog;
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
@@ -38,20 +39,58 @@ new class extends Component {
                     ->map(fn($c) => (string) $c)
                     ->flip();
 
+                // Normalizador
+                $normalize = fn($s) => preg_replace('/\s+/', ' ', trim(str_replace(
+                    ['„','ê','û','î','â','ô','Ñ','ñ','Á','á','É','é','Í','í','Ó','ó','Ú','ú','Ü','ü'],
+                    ['n','e','u','i','a','o','n','n','a','a','e','e','i','i','o','o','u','u','u','u'],
+                    mb_strtolower($s)
+                )));
+
+                $normalizedEmployees = $employees->map(fn($e) => [
+                    'id'   => $e->id,
+                    'name' => $e->full_name,
+                    'norm' => $normalize($e->full_name),
+                ])->all();
+
                 BiometricSource::where('client_id', $this->client_id)->get()
-                    ->each(function ($source) use (&$unmappedUsers, $mappedPins) {
+                    ->each(function ($source) use (&$unmappedUsers, $mappedPins, $normalize, $normalizedEmployees) {
                         foreach ($source->device_users ?? [] as $u) {
-                            $pin = (string) ($u['pin'] ?? '');
+                            $pin  = (string) ($u['pin'] ?? '');
+                            $name = $u['name'] ?? '';
                             if ($pin === '' || $mappedPins->has($pin)) continue;
                             if ($this->search && stripos($pin, $this->search) === false
-                                && stripos($u['name'] ?? '', $this->search) === false) continue;
+                                && stripos($name, $this->search) === false) continue;
+
+                            // Mejor match por similitud
+                            $bestScore = 0;
+                            $bestId    = null;
+                            $bestName  = null;
+                            $normName  = $normalize($name);
+
+                            foreach ($normalizedEmployees as $emp) {
+                                similar_text($normName, $emp['norm'], $pct);
+                                if ($pct > $bestScore) {
+                                    $bestScore = $pct;
+                                    $bestId    = $emp['id'];
+                                    $bestName  = $emp['name'];
+                                }
+                            }
+
                             $unmappedUsers[$pin] = [
-                                'pin'    => $pin,
-                                'name'   => $u['name'] ?? '',
-                                'source' => $source->name,
+                                'pin'            => $pin,
+                                'name'           => $name,
+                                'source'         => $source->serial_number,
+                                'source_id'      => $source->id,
+                                'provider_id'    => $source->biometric_provider_id,
+                                'suggested_id'   => $bestId,
+                                'suggested_name' => $bestName,
+                                'score'          => round($bestScore, 1),
                             ];
                         }
                     });
+
+                // Ordenar por score descendente
+                $unmappedUsers = $unmappedUsers->sortByDesc('score');
             }
 
             return [
@@ -253,7 +292,7 @@ new class extends Component {
             ]);
     }
 
-    public function mapUser(string $pin, mixed $employeeId): void
+    public function mapUser(string $pin, mixed $employeeId, ?int $providerId = null): void
     {
         $employeeId = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
         if (!$employeeId || !$this->client_id) return;
@@ -261,18 +300,33 @@ new class extends Component {
         $emp = FactorialEmployee::find($employeeId);
         if (!$emp) return;
 
-        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
+        $provider = $providerId
+            ? BiometricProvider::find($providerId)
+            : BiometricProvider::where('client_id', $this->client_id)->first();
         if (!$provider) return;
 
         BiometricUserSync::updateOrCreate(
-            ['biometric_provider_id' => $provider->id, 'factorial_employee_id' => $employeeId],
-            ['client_id' => $this->client_id, 'external_employee_code' => $pin, 'sync_status' => 'pending', 'last_attempt_at' => now()]
+            ['biometric_provider_id' => $provider->id, 'external_employee_code' => $pin],
+            ['client_id' => $this->client_id, 'factorial_employee_id' => $employeeId, 'sync_status' => 'pending', 'last_attempt_at' => now()]
         );
 
-        AttendanceLog::where('client_id', $this->client_id)
+        $logIds = AttendanceLog::where('client_id', $this->client_id)
             ->where('employee_code', $pin)
             ->whereNull('factorial_employee_id')
-            ->update(['factorial_employee_id' => $employeeId, 'sync_status' => 'resolved']);
+            ->pluck('id');
+
+        if ($logIds->isNotEmpty()) {
+            AttendanceLog::whereIn('id', $logIds)->update([
+                'factorial_employee_id' => $employeeId,
+                'sync_status'           => 'resolved',
+            ]);
+
+            $delay = 0;
+            foreach ($logIds as $logId) {
+                SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
+                $delay += 2;
+            }
+        }
     }
 
 }; ?>
@@ -393,37 +447,56 @@ new class extends Component {
         @if(!$client_id)
             <p class="px-6 py-10 text-center text-sm text-gray-500">Selecciona una empresa para ver el mapping.</p>
         @elseif($unmappedUsers->isEmpty())
-            <div class="px-6 py-10 text-center text-sm text-gray-500">
-                <p class="text-green-600 font-medium">✓ Todos los usuarios del biométrico están mapeados.</p>
-                <p class="mt-1 text-xs text-gray-400">Importa empleados desde <strong>Dispositivos</strong> si necesitas agregar más.</p>
+            <div class="px-6 py-10 text-center">
+                <svg class="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-sm text-green-600 font-medium">✓ Todos los usuarios del biométrico están mapeados.</p>
+                <p class="mt-1 text-xs text-gray-400">Importa el CSV desde <strong>Dispositivos</strong> si hay usuarios nuevos.</p>
             </div>
         @else
-        <div class="px-6 py-4 border-b border-gray-200">
-            <p class="text-sm font-medium text-gray-700">{{ $unmappedUsers->count() }} sin mapear</p>
-            <p class="text-xs text-gray-500 mt-0.5">El dropdown se guarda al instante.</p>
+        <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+            <p class="text-sm text-gray-500">{{ $unmappedUsers->count() }} usuario(s) sin mapear · sugerencia por similitud de nombre</p>
         </div>
-        <table class="min-w-full divide-y divide-gray-200">
+        <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PIN</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre biométrico</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empleado Factorial</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">PIN</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre en dispositivo</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dispositivo</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sugerido</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-16">Match</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asignar a</th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
+            <tbody class="bg-white divide-y divide-gray-100">
                 @foreach($unmappedUsers as $row)
+                @php
+                    $score = $row['score'] ?? 0;
+                    $scoreColor = $score >= 90 ? 'bg-emerald-100 text-emerald-700'
+                                : ($score >= 70 ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-600');
+                @endphp
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-3 font-mono text-sm font-semibold text-gray-900">{{ $row['pin'] }}</td>
-                    <td class="px-6 py-3 text-sm text-gray-700">{{ $row['name'] ?: '—' }}</td>
-                    <td class="px-6 py-3 text-sm text-gray-400">{{ $row['source'] }}</td>
-                    <td class="px-6 py-3">
+                    <td class="px-4 py-3 font-mono font-semibold text-gray-900">{{ $row['pin'] }}</td>
+                    <td class="px-4 py-3 text-gray-800">{{ $row['name'] ?: '—' }}</td>
+                    <td class="px-4 py-3 text-gray-400 text-xs">{{ $row['source'] }}</td>
+                    <td class="px-4 py-3 text-gray-600">{{ $row['suggested_name'] ?? '—' }}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold {{ $scoreColor }}">
+                            {{ $score }}%
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
                         <select
-                            wire:change="mapUser('{{ $row['pin'] }}', $event.target.value)"
-                            class="block w-full rounded border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            <option value="">— Sin asignar —</option>
+                            wire:change="mapUser('{{ $row['pin'] }}', $event.target.value, {{ $row['provider_id'] ?? 'null' }})"
+                            class="block w-full rounded border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 py-1">
+                            <option value="">— {{ $row['suggested_name'] ?? 'Sin sugerencia' }} —</option>
                             @foreach($employees as $emp)
-                                <option value="{{ $emp->id }}">{{ $emp->full_name }}</option>
+                                <option value="{{ $emp->id }}" @selected($emp->id == ($row['suggested_id'] ?? null))>
+                                    {{ $emp->full_name }}
+                                </option>
                             @endforeach
                         </select>
                     </td>
@@ -431,6 +504,7 @@ new class extends Component {
                 @endforeach
             </tbody>
         </table>
+        </div>
         @endif
     </div>
     @endif

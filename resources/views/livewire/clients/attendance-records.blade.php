@@ -97,29 +97,30 @@ new class extends Component {
                     class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
             </div>
 
-            {{-- Estado --}}
+            {{-- Tipo --}}
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Estado</label>
-                <select wire:model.live="statusFilter"
+                <label class="block text-xs text-gray-500 mb-1">Tipo</label>
+                <select wire:model.live="checkTypeFilter"
                     class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">Todos</option>
-                    <option value="pending">Pendiente</option>
-                    <option value="synced">Sincronizado</option>
-                    <option value="failed">Fallido</option>
-                    <option value="incomplete">Incompleto</option>
+                    <option value="check_in">Entrada</option>
+                    <option value="check_out">Salida</option>
+                    <option value="break_in">Inicio descanso</option>
+                    <option value="break_out">Fin descanso</option>
                 </select>
             </div>
         </div>
 
         <div class="mt-3 flex items-center justify-between">
-            {{-- Tipo de registro --}}
-            <div class="flex gap-2">
-                @foreach([''=>'Todos', 'check_in'=>'Entrada', 'check_out'=>'Salida', 'break_in'=>'Inicio descanso', 'break_out'=>'Fin descanso'] as $val => $label)
-                <button wire:click="$set('checkTypeFilter', '{{ $val }}')"
-                    class="px-3 py-1 text-xs rounded-full border transition
-                        {{ $checkTypeFilter === $val
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+            {{-- Estado pills --}}
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 mr-1">Estado:</span>
+                @foreach(['' => 'Todos', 'synced' => 'Sincronizado', 'pending' => 'Pendiente', 'failed' => 'Fallido', 'resolved' => 'Resuelto'] as $val => $label)
+                <button wire:click="$set('statusFilter', '{{ $val }}')"
+                    class="px-3 py-1 rounded-full text-xs font-medium transition-colors
+                        {{ $statusFilter === $val
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
                     {{ $label }}
                 </button>
                 @endforeach

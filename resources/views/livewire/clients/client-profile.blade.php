@@ -103,30 +103,28 @@ new class extends Component {
 <div class="space-y-6">
 
     {{-- ── Información de la empresa ──────────────────────────────── --}}
-    <div class="bg-white shadow rounded-lg overflow-hidden">
-
-        {{-- Header de sección --}}
-        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 class="text-base font-semibold text-gray-900">Información de la empresa</h3>
-            <div class="flex items-center gap-2">
-                @if($editing)
-                    <button wire:click="cancelEdit"
-                        class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition">
-                        Cancelar
-                    </button>
-                    <button wire:click="save"
-                        class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition">
-                        Guardar cambios
-                    </button>
-                @else
-                    <button wire:click="$set('editing', true)"
-                        class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition">
-                        Editar
-                    </button>
-                @endif
-            </div>
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold text-gray-800">Información de la empresa</h2>
+        <div class="flex items-center gap-2">
+            @if($editing)
+                <button wire:click="cancelEdit"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition">
+                    Cancelar
+                </button>
+                <button wire:click="save"
+                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                    Guardar cambios
+                </button>
+            @else
+                <button wire:click="$set('editing', true)"
+                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                    Editar
+                </button>
+            @endif
         </div>
+    </div>
 
+    <div class="bg-white shadow rounded-lg overflow-hidden">
         {{-- Cuerpo: 2 columnas principales --}}
         <div class="px-6 py-5">
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-0 lg:divide-x lg:divide-gray-100">

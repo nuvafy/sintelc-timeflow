@@ -56,11 +56,22 @@ new class extends Component {
             'active' => !is_null($c->access_token),
         ])->values()->toArray();
 
-        // Estatus biométricos
-        $this->devOnline   = BiometricSource::where('status', 'active')->where('last_ping_at', '>=', now()->subHours(24))->count();
-        $this->devRecent   = BiometricSource::where('status', 'active')->whereBetween('last_ping_at', [now()->subDays(7), now()->subHours(24)])->count();
-        $this->devOffline  = BiometricSource::where('status', 'active')->where(fn($q) => $q->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subDays(7)))->count();
-        $this->devInactive = BiometricSource::where('status', 'inactive')->count();
+        // Estatus biométricos — una sola query con CASE
+        $devStats = BiometricSource::selectRaw("
+            SUM(CASE WHEN status='active' AND last_ping_at >= ? THEN 1 ELSE 0 END) as online,
+            SUM(CASE WHEN status='active' AND last_ping_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as recent,
+            SUM(CASE WHEN status='active' AND (last_ping_at IS NULL OR last_ping_at < ?) THEN 1 ELSE 0 END) as offline,
+            SUM(CASE WHEN status='inactive' THEN 1 ELSE 0 END) as inactive
+        ", [
+            now()->subHours(24),
+            now()->subDays(7), now()->subHours(24),
+            now()->subDays(7),
+        ])->first();
+
+        $this->devOnline   = (int) ($devStats->online   ?? 0);
+        $this->devRecent   = (int) ($devStats->recent   ?? 0);
+        $this->devOffline  = (int) ($devStats->offline  ?? 0);
+        $this->devInactive = (int) ($devStats->inactive ?? 0);
     }
 
     public function dismissFailed(): void

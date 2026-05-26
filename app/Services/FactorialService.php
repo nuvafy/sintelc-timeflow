@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\FactorialConnection;
 use Carbon\Carbon;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;

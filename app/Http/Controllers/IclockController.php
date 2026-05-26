@@ -292,28 +292,23 @@ class IclockController extends Controller
         if (!empty($records)) {
             AttendanceLog::insert($records);
 
-            // ── Despachar jobs con delay escalonado (2s entre cada uno) ──
-            $delay = 0;
-            foreach ($records as $record) {
-                if ($record['sync_status'] !== 'resolved') continue;
+            // ── Despachar jobs para records resueltos ────────────────────
+            $resolvedCodes = array_column(
+                array_filter($records, fn($r) => $r['sync_status'] === 'resolved'),
+                'employee_code'
+            );
 
-                $log = AttendanceLog::where('biometric_source_id', $source->id)
-                    ->where('employee_code', $record['employee_code'])
-                    ->where('occurred_at', $record['occurred_at'] instanceof \Carbon\Carbon
-                        ? $record['occurred_at']->format('Y-m-d H:i:s')
-                        : $record['occurred_at'])
-                    ->value('id');
+            if (!empty($resolvedCodes)) {
+                // Una sola query para recuperar todos los IDs insertados
+                $insertedIds = AttendanceLog::where('biometric_source_id', $source->id)
+                    ->whereIn('employee_code', $resolvedCodes)
+                    ->where('occurred_at', '>=', now()->subMinutes(5))
+                    ->pluck('id');
 
-                if ($log) {
-                    // Solo despachar si no hay ya un job pendiente para este log
-                    $alreadyQueued = \Illuminate\Support\Facades\DB::table('jobs')
-                        ->where('payload', 'like', "%\"attendanceLogId\":{$log}%")
-                        ->exists();
-
-                    if (!$alreadyQueued) {
-                        SyncAttendanceToFactorial::dispatch($log)->delay(now()->addSeconds($delay));
-                        $delay += 2;
-                    }
+                $delay = 0;
+                foreach ($insertedIds as $logId) {
+                    SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
+                    $delay += 2;
                 }
             }
         }

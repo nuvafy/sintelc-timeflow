@@ -89,8 +89,8 @@ new class extends Component {
                         }
                     });
 
-                // Ordenar por score descendente
-                $unmappedUsers = $unmappedUsers->sortByDesc('score');
+                // Ordenar alfabéticamente por nombre del dispositivo
+                $unmappedUsers = $unmappedUsers->sortBy(fn($u) => mb_strtolower($u['name']));
             }
 
             return [
@@ -456,7 +456,8 @@ new class extends Component {
             </div>
         @else
         <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
-            <p class="text-sm text-gray-500">{{ $unmappedUsers->count() }} usuario(s) sin mapear · sugerencia por similitud de nombre</p>
+            <p class="text-sm text-gray-500">{{ $unmappedUsers->count() }} usuario(s) sin mapear · ordenados alfabéticamente</p>
+            <p class="text-xs text-gray-400">{{ $employees->count() }} empleados Factorial disponibles en el selector</p>
         </div>
         <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 text-sm">

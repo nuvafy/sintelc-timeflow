@@ -90,7 +90,7 @@ new class extends Component
                     <x-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
                         Dispositivos
                         @if($unassignedDevices > 0)
-                            <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
+                            <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-indigo-500 rounded-full">
                                 {{ $unassignedDevices }}
                             </span>
                         @endif

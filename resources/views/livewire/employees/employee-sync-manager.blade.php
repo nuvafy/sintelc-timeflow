@@ -289,11 +289,6 @@ new class extends Component {
                 });
             }
 
-            $unresolvedCount = AttendanceLog::where('client_id', $this->client_id)
-                ->whereNull('factorial_employee_id')
-                ->distinct('employee_code')
-                ->count('employee_code');
-
             // Filtro por estado
             if ($this->statusFilter === 'mapped') {
                 $biometricUsers = $biometricUsers->filter(fn($u) => $u['mapped']);
@@ -320,56 +315,12 @@ new class extends Component {
                 'biometricUsers'   => $biometricUsers,
                 'biometricSources' => $biometricSources,
                 'employees'        => collect(),
-                'unresolved'       => collect(),
-                'unresolvedCount'  => $unresolvedCount,
-                'clients'          => $clients,
-                'vendorName'       => 'Biométrico',
+                'unresolved'        => collect(),
+                'unresolvedCount'   => 0,
+                'clients'           => $clients,
+                'vendorName'        => 'Biométrico',
                 'mappedEmployeeIds' => collect(),
-                'biometricIds'     => collect(),
-            ];
-        }
-
-        // ── Tab: Sin asignar ────────────────────────────────────────
-        if ($this->tab === 'unresolved') {
-            if (!$this->client_id) {
-                return ['unmappedUsers' => collect(), 'biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'clients' => $clients, 'unresolvedCount' => 0];
-            }
-
-            // Nombres desde device_users del biométrico
-            $deviceUsers = collect();
-            BiometricSource::where('client_id', $this->client_id)->get()
-                ->each(function ($source) use (&$deviceUsers) {
-                    foreach ($source->device_users ?? [] as $u) {
-                        $deviceUsers[$u['pin']] = $u['name'] ?? null;
-                    }
-                });
-
-            $unresolved = AttendanceLog::where('client_id', $this->client_id)
-                ->whereNull('factorial_employee_id')
-                ->when($this->search, fn($q) => $q->where('employee_code', 'like', "%{$this->search}%"))
-                ->selectRaw('employee_code, COUNT(*) as total, MAX(occurred_at) as last_seen')
-                ->groupBy('employee_code')
-                ->orderByDesc('last_seen')
-                ->paginate(20);
-
-            $unresolved->getCollection()->transform(function ($row) use ($deviceUsers) {
-                $row->device_name = $deviceUsers[$row->employee_code] ?? null;
-                return $row;
-            });
-
-            return [
-                'unmappedUsers'    => collect(),
-                'allSelected'      => false,
-                'totalUnmapped'    => 0,
-                'biometricUsers'   => collect(),
-                'biometricSources' => collect(),
-                'employees'        => collect(),
-                'unresolved'       => $unresolved,
-                'unresolvedCount'  => $unresolved->total(),
-                'clients'          => $clients,
-                'vendorName'       => 'Biométrico',
-                'mappedEmployeeIds' => collect(),
-                'biometricIds'     => collect(),
+                'biometricIds'      => collect(),
             ];
         }
 
@@ -386,12 +337,6 @@ new class extends Component {
                    ->orWhere('access_id', 'like', "%{$this->search}%");
             }))
             ->orderBy('full_name');
-
-        // Contador de sin asignar para badge en tab
-        $unresolvedCount = AttendanceLog::where('client_id', $this->client_id)
-            ->whereNull('factorial_employee_id')
-            ->distinct('employee_code')
-            ->count('employee_code');
 
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         $vendorName = $provider?->vendor ?? 'Biométrico';
@@ -416,7 +361,7 @@ new class extends Component {
             'biometricSources'  => collect(),
             'employees'         => $query->paginate(20),
             'unresolved'        => collect(),
-            'unresolvedCount'   => $unresolvedCount,
+            'unresolvedCount'   => 0,
             'clients'           => $clients,
             'vendorName'        => $vendorName,
             'mappedEmployeeIds' => $mappedEmployeeIds,
@@ -512,16 +457,6 @@ new class extends Component {
                 wire:click="$set('tab', 'mapping')"
                 class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 {{ $tab === 'mapping' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                 Mapping
-            </button>
-            <button
-                wire:click="$set('tab', 'unresolved')"
-                class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 {{ $tab === 'unresolved' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                Pendientes de asignar
-                @if($unresolvedCount > 0)
-                    <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
-                        {{ $unresolvedCount }}
-                    </span>
-                @endif
             </button>
         </nav>
     </div>
@@ -814,60 +749,6 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- TAB: Sin asignar --}}
-    @if($tab === 'unresolved')
-    <div class="bg-white shadow rounded-lg overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-amber-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN biométrico</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última actividad</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                @forelse($unresolved as $row)
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="font-mono text-sm font-semibold text-gray-900">{{ $row->employee_code }}</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        @if($row->device_name)
-                            <span class="text-sm text-gray-800">{{ $row->device_name }}</span>
-                        @else
-                            <span class="text-xs text-gray-400 italic">Sin nombre en dispositivo</span>
-                        @endif
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {{ $row->total }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {{ \Carbon\Carbon::parse($row->last_seen)->format('d/m/Y H:i') }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">
-                            Sin asignar
-                        </span>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
-                        ✓ Todos los PINs están asignados a un empleado de Factorial.
-                    </td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
-        @if($unresolved instanceof \Illuminate\Pagination\LengthAwarePaginator && $unresolved->hasPages())
-        <div class="px-6 py-4 border-t border-gray-200">
-            {{ $unresolved->links() }}
-        </div>
-        @endif
-    </div>
-    @endif
 
     @endif {{-- @else ($client_id) --}}
 </div>

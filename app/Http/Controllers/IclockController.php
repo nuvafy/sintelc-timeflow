@@ -299,10 +299,11 @@ class IclockController extends Controller
             );
 
             if (!empty($resolvedCodes)) {
-                // Una sola query para recuperar todos los IDs insertados
+                // Recuperar los IDs recién insertados filtrando por created_at
+                // (no occurred_at, ya que el dispositivo puede enviar registros acumulados offline)
                 $insertedIds = AttendanceLog::where('biometric_source_id', $source->id)
                     ->whereIn('employee_code', $resolvedCodes)
-                    ->where('occurred_at', '>=', now()->subMinutes(5))
+                    ->where('created_at', '>=', now()->subMinutes(2))
                     ->pluck('id');
 
                 $delay = 0;

@@ -23,9 +23,9 @@ Route::view('clients', 'clients')
     ->middleware(['auth'])
     ->name('clients');
 
-Route::get('clients/{client}/connections', fn(Client $client) => view('clients.connections', compact('client')))
+Route::get('clients/{client}', fn(Client $client) => view('clients.show', compact('client')))
     ->middleware(['auth', 'verified'])
-    ->name('clients.connections');
+    ->name('clients.show');
 
 Route::get('clients/{client}/records', fn(Client $client) => view('clients.records', compact('client')))
     ->middleware(['auth', 'verified'])

@@ -46,31 +46,61 @@ new class extends Component {
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         if (!$provider) return;
 
+        // Construir mapa pin => employeeId filtrando los que no tienen asignación
+        $toMap = [];
         foreach ($this->selected as $pin) {
             $employeeId = $this->assignments[$pin] ?? null;
-            if (!$employeeId) continue;
+            if ($employeeId) {
+                $toMap[(string) $pin] = (int) $employeeId;
+            }
+        }
 
-            BiometricUserSync::updateOrCreate(
-                ['biometric_provider_id' => $provider->id, 'external_employee_code' => $pin],
-                ['client_id' => $this->client_id, 'factorial_employee_id' => $employeeId, 'sync_status' => 'pending', 'last_attempt_at' => now()]
-            );
+        if (empty($toMap)) {
+            $this->selected = [];
+            return;
+        }
 
-            $logIds = AttendanceLog::where('client_id', $this->client_id)
+        $now = now()->toDateTimeString();
+
+        // 1. Bulk upsert BiometricUserSync — 1 sola query
+        $syncRows = [];
+        foreach ($toMap as $pin => $employeeId) {
+            $syncRows[] = [
+                'biometric_provider_id'  => $provider->id,
+                'external_employee_code' => $pin,
+                'client_id'              => $this->client_id,
+                'factorial_employee_id'  => $employeeId,
+                'sync_status'            => 'pending',
+                'last_attempt_at'        => $now,
+                'created_at'             => $now,
+                'updated_at'             => $now,
+            ];
+        }
+        BiometricUserSync::upsert(
+            $syncRows,
+            ['biometric_provider_id', 'external_employee_code'],
+            ['client_id', 'factorial_employee_id', 'sync_status', 'last_attempt_at', 'updated_at']
+        );
+
+        // 2. Actualizar attendance_logs — 1 query por pin (todos simples y rápidos)
+        foreach ($toMap as $pin => $employeeId) {
+            AttendanceLog::where('client_id', $this->client_id)
                 ->where('employee_code', $pin)
                 ->whereNull('factorial_employee_id')
-                ->pluck('id');
+                ->update(['factorial_employee_id' => $employeeId, 'sync_status' => 'resolved']);
+        }
 
-            if ($logIds->isNotEmpty()) {
-                AttendanceLog::whereIn('id', $logIds)->update([
-                    'factorial_employee_id' => $employeeId,
-                    'sync_status'           => 'resolved',
-                ]);
-                $delay = 0;
-                foreach ($logIds as $logId) {
-                    SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
-                    $delay += 2;
-                }
-            }
+        // 3. Despachar jobs de sync — obtener IDs en 1 query y despachar en lote
+        $logIds = AttendanceLog::where('client_id', $this->client_id)
+            ->whereIn('employee_code', array_keys($toMap))
+            ->where('sync_status', 'resolved')
+            ->whereNotNull('factorial_employee_id')
+            ->pluck('id');
+
+        $delay = 0;
+        foreach ($logIds as $logId) {
+            SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
+            $delay += 2;
         }
 
         $this->selected = [];

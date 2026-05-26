@@ -445,8 +445,9 @@ new class extends Component {
 }; ?>
 
 <div>
-    {{-- Filtros --}}
+    {{-- Selector de empresa --}}
     <div class="flex flex-col sm:flex-row gap-3 mb-4">
+        @if($client_id)
         <div class="flex-1">
             <input
                 wire:model.live.debounce.300ms="search"
@@ -455,7 +456,8 @@ new class extends Component {
                 class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
         </div>
-        <div class="sm:w-56">
+        @endif
+        <div class="{{ $client_id ? 'sm:w-56' : 'w-full sm:w-72' }}">
             <select wire:model.live="client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">— Selecciona una empresa —</option>
                 @foreach($clients as $client)
@@ -464,6 +466,19 @@ new class extends Component {
             </select>
         </div>
     </div>
+
+    {{-- Sin empresa seleccionada: prompt --}}
+    @if(!$client_id)
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-16 text-center">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+            </svg>
+            <p class="text-base font-medium text-gray-700">Selecciona una empresa para continuar</p>
+            <p class="mt-1 text-sm text-gray-400">Elige una empresa en el selector de arriba para ver los empleados, mapping y registros pendientes.</p>
+        </div>
+    </div>
+    @else
 
     {{-- Tabs --}}
     <div class="border-b border-gray-200 mb-4">
@@ -500,9 +515,6 @@ new class extends Component {
     @if($tab === 'biometric')
 
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        @if(!$client_id)
-            <p class="px-6 py-10 text-center text-sm text-gray-500">Selecciona una empresa para ver los empleados del biométrico.</p>
-        @else
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
@@ -545,11 +557,10 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
-        @if($client_id && $biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator && $biometricUsers->hasPages())
+        @if($biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator && $biometricUsers->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $biometricUsers->links() }}
         </div>
-        @endif
         @endif
     </div>
     @endif
@@ -557,9 +568,7 @@ new class extends Component {
     {{-- TAB: Mapping --}}
     @if($tab === 'mapping')
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        @if(!$client_id)
-            <p class="px-6 py-10 text-center text-sm text-gray-500">Selecciona una empresa para ver el mapping.</p>
-        @elseif($totalUnmapped === 0)
+        @if($totalUnmapped === 0)
             <div class="px-6 py-10 text-center">
                 <svg class="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -748,17 +757,13 @@ new class extends Component {
                 @empty
                 <tr>
                     <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
-                        @if(!$this->client_id)
-                            Selecciona una empresa para ver sus empleados.
-                        @else
-                            Sin empleados.
-                        @endif
+                        Sin empleados.
                     </td>
                 </tr>
                 @endforelse
             </tbody>
         </table>
-        @if($client_id && $employees instanceof \Illuminate\Pagination\LengthAwarePaginator && $employees->hasPages())
+        @if($employees instanceof \Illuminate\Pagination\LengthAwarePaginator && $employees->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $employees->links() }}
         </div>
@@ -769,9 +774,6 @@ new class extends Component {
     {{-- TAB: Sin asignar --}}
     @if($tab === 'unresolved')
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        @if(!$client_id)
-            <p class="px-6 py-10 text-center text-sm text-gray-500">Selecciona una empresa para ver los PINs sin asignar.</p>
-        @else
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-amber-50">
                 <tr>
@@ -821,7 +823,8 @@ new class extends Component {
             {{ $unresolved->links() }}
         </div>
         @endif
-        @endif
     </div>
     @endif
+
+    @endif {{-- @else ($client_id) --}}
 </div>

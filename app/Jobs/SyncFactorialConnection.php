@@ -42,8 +42,12 @@ class SyncFactorialConnection implements ShouldQueue
             $allEmployees = [];
             $offset       = 0;
             $limit        = 100;
+            $pageNum      = 0;
 
             do {
+                $pageNum++;
+                $this->storeResult(['ok' => null, 'progress' => "Página {$pageNum} · " . count($allEmployees) . " empleados descargados…"]);
+
                 $page = ($service->getEmployees(['offset' => $offset, 'limit' => $limit]))['data'] ?? [];
                 $allEmployees = array_merge($allEmployees, $page);
                 $offset += $limit;

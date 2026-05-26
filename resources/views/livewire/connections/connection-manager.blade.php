@@ -15,7 +15,8 @@ new class extends Component {
     public ?string $oauthUrl = null;
 
     public array $syncResults  = [];
-    public array $syncPending  = [];   // connection IDs en proceso
+    public array $syncPending  = [];
+    public array $syncProgress = [];
 
     public string $name      = '';
     public ?int   $client_id = null;
@@ -121,10 +122,18 @@ new class extends Component {
     {
         $result = Cache::get("factorial_sync_result:{$id}");
 
-        if ($result !== null) {
-            $this->syncResults[$id] = $result;
-            unset($this->syncPending[$id]);
+        if ($result === null) return;
+
+        if (isset($result['progress'])) {
+            // Todavía en progreso — actualizar mensaje
+            $this->syncProgress[$id] = $result['progress'];
+            return;
         }
+
+        // Terminó
+        $this->syncResults[$id] = $result;
+        unset($this->syncPending[$id]);
+        unset($this->syncProgress[$id]);
     }
 
     public function getTokenStatus(FactorialConnection $conn): array
@@ -199,11 +208,13 @@ new class extends Component {
             @if(isset($syncPending[$conn->id]))
             <div class="px-5 py-2 bg-indigo-50 border-t border-indigo-100 flex items-center gap-2"
                  wire:poll.3s="checkSync({{ $conn->id }})">
-                <svg class="animate-spin w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24">
+                <svg class="animate-spin w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                 </svg>
-                <p class="text-xs text-indigo-600">Sincronizando en segundo plano…</p>
+                <p class="text-xs text-indigo-600">
+                    {{ $syncProgress[$conn->id] ?? 'Iniciando sincronización…' }}
+                </p>
             </div>
             @elseif(isset($syncResults[$conn->id]))
             @php $r = $syncResults[$conn->id]; @endphp

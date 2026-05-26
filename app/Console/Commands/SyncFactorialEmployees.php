@@ -61,12 +61,27 @@ class SyncFactorialEmployees extends Command
         $allEmployees = [];
         $offset       = 0;
         $limit        = 100;
+        $pageNum      = 0;
+        $total        = null;
 
         do {
+            $pageNum++;
             $response = $service->getEmployees(['offset' => $offset, 'limit' => $limit]);
             $page     = $response['data'] ?? [];
+            $meta     = $response['meta'] ?? [];
+
+            if ($total === null) {
+                $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? null;
+            }
+
+            if (empty($page)) break;
+
             $allEmployees = array_merge($allEmployees, $page);
-            $offset  += $limit;
+            $offset += $limit;
+
+            if ($total !== null && count($allEmployees) >= (int) $total) break;
+            if ($pageNum >= 50) break;
+
         } while (count($page) === $limit);
 
         $this->line("  Empleados obtenidos de Factorial: " . count($allEmployees));

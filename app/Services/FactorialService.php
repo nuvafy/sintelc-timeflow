@@ -136,7 +136,7 @@ class FactorialService
     public function getEmployees(array $query = []): array
     {
         $defaultQuery = [
-            'only_active'   => 'false',
+            'only_active'   => 'true',
             'only_managers' => 'false',
             'limit'         => 100,
         ];

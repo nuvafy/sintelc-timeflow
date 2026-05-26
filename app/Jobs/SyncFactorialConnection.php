@@ -43,14 +43,32 @@ class SyncFactorialConnection implements ShouldQueue
             $offset       = 0;
             $limit        = 100;
             $pageNum      = 0;
+            $total        = null;
 
             do {
                 $pageNum++;
                 $this->storeResult(['ok' => null, 'progress' => "Página {$pageNum} · " . count($allEmployees) . " empleados descargados…"]);
 
-                $page = ($service->getEmployees(['offset' => $offset, 'limit' => $limit]))['data'] ?? [];
+                $response     = $service->getEmployees(['offset' => $offset, 'limit' => $limit]);
+                $page         = $response['data'] ?? [];
+                $meta         = $response['meta'] ?? [];
+
+                // Obtener total desde meta la primera vez
+                if ($total === null) {
+                    $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? null;
+                }
+
+                if (empty($page)) break;
+
                 $allEmployees = array_merge($allEmployees, $page);
-                $offset += $limit;
+                $offset      += $limit;
+
+                // Parar si ya tenemos todos según meta
+                if ($total !== null && count($allEmployees) >= (int) $total) break;
+
+                // Seguridad: máximo 50 páginas (5000 empleados)
+                if ($pageNum >= 50) break;
+
             } while (count($page) === $limit);
 
             $empCount = 0;

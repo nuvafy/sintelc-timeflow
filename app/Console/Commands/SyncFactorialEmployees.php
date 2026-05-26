@@ -59,37 +59,29 @@ class SyncFactorialEmployees extends Command
 
         // ── Paginación: sigue hasta que la página venga incompleta ──
         $allEmployees = [];
-        $offset       = 0;
         $limit        = 100;
         $pageNum      = 0;
-        $total        = null;
-        $seenIds      = [];
+        $cursor       = null;
 
         do {
             $pageNum++;
-            $response = $service->getEmployees(['offset' => $offset, 'limit' => $limit]);
+            $params   = ['limit' => $limit];
+            if ($cursor) $params['after'] = $cursor;
+
+            $response = $service->getEmployees($params);
             $page     = $response['data'] ?? [];
             $meta     = $response['meta'] ?? [];
 
-            if ($total === null) {
-                $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? $meta['filtered_count'] ?? null;
-            }
-
             if (empty($page)) break;
 
-            // Detectar si la API repite páginas
-            $newIds  = array_column($page, 'id');
-            $overlap = array_intersect($newIds, $seenIds);
-            if (!empty($overlap) && count($overlap) === count($newIds)) break;
-            $seenIds = array_merge($seenIds, $newIds);
-
             $allEmployees = array_merge($allEmployees, $page);
-            $offset += $limit;
 
-            if ($total !== null && count($allEmployees) >= (int) $total) break;
+            $hasNext = $meta['has_next_page'] ?? false;
+            $cursor  = $meta['end_cursor'] ?? null;
+
             if ($pageNum >= 50) break;
 
-        } while (count($page) === $limit);
+        } while ($hasNext && $cursor);
 
         $this->line("  Empleados obtenidos de Factorial: " . count($allEmployees));
 

@@ -63,9 +63,9 @@ new class extends Component {
             SUM(CASE WHEN status='active' AND (last_ping_at IS NULL OR last_ping_at < ?) THEN 1 ELSE 0 END) as offline,
             SUM(CASE WHEN status='inactive' THEN 1 ELSE 0 END) as inactive
         ", [
-            now()->subHours(24),
-            now()->subDays(7), now()->subHours(24),
-            now()->subDays(7),
+            now()->subMinutes(15),
+            now()->subHour(), now()->subMinutes(15),
+            now()->subHour(),
         ])->first();
 
         $this->devOnline   = (int) ($devStats->online   ?? 0);

@@ -1,7 +1,6 @@
 <?php
 
 use App\Livewire\Actions\Logout;
-use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use Livewire\Volt\Component;
 
@@ -13,9 +12,7 @@ new class extends Component
     public function mount(): void
     {
         $this->unassignedDevices   = BiometricSource::whereNull('client_id')->count();
-        $this->unresolvedEmployees = AttendanceLog::whereNull('factorial_employee_id')
-            ->distinct('employee_code')
-            ->count('employee_code');
+        $this->unresolvedEmployees = \App\Models\BiometricUserSync::whereNull('factorial_employee_id')->count();
     }
 
     public function logout(Logout $logout): void

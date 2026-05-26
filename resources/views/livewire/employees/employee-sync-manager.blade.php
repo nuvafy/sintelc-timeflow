@@ -141,11 +141,15 @@ new class extends Component {
             if ($this->client_id) {
                 $employees = FactorialEmployee::where('client_id', $this->client_id)->orderBy('full_name')->get();
 
-                $mappedPins = BiometricUserSync::where('client_id', $this->client_id)
+                $mappedSyncs = BiometricUserSync::where('client_id', $this->client_id)
                     ->whereNotNull('factorial_employee_id')
-                    ->pluck('external_employee_code')
-                    ->map(fn($c) => (string) $c)
-                    ->flip();
+                    ->get(['external_employee_code', 'factorial_employee_id']);
+
+                $mappedPins        = $mappedSyncs->pluck('external_employee_code')->map(fn($c) => (string) $c)->flip();
+                $mappedEmployeeIds = $mappedSyncs->pluck('factorial_employee_id')->flip();
+
+                // Empleados disponibles en el selector = los que no están mapeados aún
+                $employees = $employees->filter(fn($e) => !$mappedEmployeeIds->has($e->id))->values();
 
                 // Normalizador
                 $normalize = fn($s) => preg_replace('/\s+/', ' ', trim(str_replace(
@@ -198,11 +202,7 @@ new class extends Component {
                     });
 
                 // Excluir PINs cuyo empleado sugerido (100%) ya está mapeado a otro PIN
-                $mappedEmployeeIds = BiometricUserSync::where('client_id', $this->client_id)
-                    ->whereNotNull('factorial_employee_id')
-                    ->pluck('factorial_employee_id')
-                    ->flip();
-
+                // Reutilizamos $mappedEmployeeIds obtenido arriba
                 $unmappedUsers = $unmappedUsers->filter(function ($u) use ($mappedEmployeeIds) {
                     if ($u['score'] >= 100 && $u['suggested_id'] && $mappedEmployeeIds->has($u['suggested_id'])) {
                         return false;

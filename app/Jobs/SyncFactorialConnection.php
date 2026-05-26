@@ -52,7 +52,7 @@ class SyncFactorialConnection implements ShouldQueue
 
                 $params = ['limit' => $limit];
                 if ($cursor) {
-                    $params['cursor'] = $cursor;
+                    $params['after_id'] = $cursor;
                 }
 
                 $response = $service->getEmployees($params);

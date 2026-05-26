@@ -66,7 +66,7 @@ class SyncFactorialEmployees extends Command
         do {
             $pageNum++;
             $params   = ['limit' => $limit];
-            if ($cursor) $params['after'] = $cursor;
+            if ($cursor) $params['after_id'] = $cursor;
 
             $response = $service->getEmployees($params);
             $page     = $response['data'] ?? [];

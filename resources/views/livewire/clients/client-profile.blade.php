@@ -125,6 +125,29 @@ new class extends Component {
     </div>
 
     <div class="bg-white shadow rounded-lg overflow-hidden">
+
+        {{-- Header de la card: nombre + estado --}}
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            @if($editing)
+                <input wire:model="name" type="text"
+                    class="block w-64 rounded-md border-gray-300 shadow-sm text-sm font-semibold focus:border-indigo-500 focus:ring-indigo-500"/>
+                @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            @else
+                <h4 class="text-base font-semibold text-gray-900">{{ $client->name }}</h4>
+            @endif
+            @if($editing)
+                <select wire:model="status"
+                    class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="active">Activa</option>
+                    <option value="inactive">Inactiva</option>
+                </select>
+            @else
+                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                    {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
+                </span>
+            @endif
+        </div>
+
         {{-- Cuerpo: 2 columnas principales --}}
         <div class="px-6 py-5">
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-0 lg:divide-x lg:divide-gray-100">
@@ -132,18 +155,8 @@ new class extends Component {
                 {{-- Columna izquierda: datos generales (3/5) --}}
                 <div class="lg:col-span-3 lg:pr-8 space-y-5">
 
-                    {{-- Nombre + Slug --}}
+                    {{-- Slug --}}
                     <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Nombre</p>
-                            @if($editing)
-                                <input wire:model="name" type="text"
-                                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                                @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                            @else
-                                <p class="text-sm font-semibold text-gray-900">{{ $client->name }}</p>
-                            @endif
-                        </div>
                         <div>
                             <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Slug</p>
                             @if($editing)
@@ -156,22 +169,8 @@ new class extends Component {
                         </div>
                     </div>
 
-                    {{-- Estado + Email + Dirección --}}
-                    <div class="grid grid-cols-3 gap-4">
-                        <div>
-                            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Estado</p>
-                            @if($editing)
-                                <select wire:model="status"
-                                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                    <option value="active">Activa</option>
-                                    <option value="inactive">Inactiva</option>
-                                </select>
-                            @else
-                                <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
-                                    {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
-                                </span>
-                            @endif
-                        </div>
+                    {{-- Email + Dirección --}}
+                    <div class="grid grid-cols-2 gap-4">
                         <div>
                             <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
                             @if($editing)

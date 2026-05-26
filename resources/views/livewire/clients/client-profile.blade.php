@@ -142,7 +142,7 @@ new class extends Component {
                     <option value="inactive">Inactiva</option>
                 </select>
             @else
-                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
                     {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
                 </span>
             @endif

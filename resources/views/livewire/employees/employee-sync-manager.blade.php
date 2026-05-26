@@ -17,11 +17,64 @@ new class extends Component {
     public string  $search    = '';
     public string  $tab         = 'biometric'; // 'biometric' | 'factorial' | 'mapping' | 'unresolved'
     public string  $scoreFilter = 'all';       // 'all' | 'perfect' | 'good' | 'low'
+    public array   $selected    = [];          // PINs seleccionados para mapear
+    public array   $assignments = [];          // PIN => factorial_employee_id (pendiente de guardar)
 
     public function updatedSearch(): void      { $this->resetPage(); }
-    public function updatedClientId(): void    { $this->resetPage(); }
-    public function updatedTab(): void         { $this->resetPage(); }
-    public function updatedScoreFilter(): void { $this->resetPage(); }
+    public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; }
+    public function updatedTab(): void         { $this->resetPage(); $this->selected = []; }
+    public function updatedScoreFilter(): void { $this->resetPage(); $this->selected = []; }
+
+    public function setSelectAll(array $pins, bool $checked): void
+    {
+        if ($checked) {
+            $this->selected = array_values(array_unique(array_merge($this->selected, $pins)));
+        } else {
+            $this->selected = array_values(array_diff($this->selected, $pins));
+        }
+    }
+
+    public function updateAssignment(string $pin, mixed $employeeId): void
+    {
+        $this->assignments[$pin] = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
+    }
+
+    public function mapSelected(): void
+    {
+        if (!$this->client_id || empty($this->selected)) return;
+
+        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
+        if (!$provider) return;
+
+        foreach ($this->selected as $pin) {
+            $employeeId = $this->assignments[$pin] ?? null;
+            if (!$employeeId) continue;
+
+            BiometricUserSync::updateOrCreate(
+                ['biometric_provider_id' => $provider->id, 'external_employee_code' => $pin],
+                ['client_id' => $this->client_id, 'factorial_employee_id' => $employeeId, 'sync_status' => 'pending', 'last_attempt_at' => now()]
+            );
+
+            $logIds = AttendanceLog::where('client_id', $this->client_id)
+                ->where('employee_code', $pin)
+                ->whereNull('factorial_employee_id')
+                ->pluck('id');
+
+            if ($logIds->isNotEmpty()) {
+                AttendanceLog::whereIn('id', $logIds)->update([
+                    'factorial_employee_id' => $employeeId,
+                    'sync_status'           => 'resolved',
+                ]);
+                $delay = 0;
+                foreach ($logIds as $logId) {
+                    SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
+                    $delay += 2;
+                }
+            }
+        }
+
+        $this->selected = [];
+    }
 
     public function with(): array
     {
@@ -100,11 +153,22 @@ new class extends Component {
                 };
 
                 // Ordenar alfabéticamente por nombre del dispositivo
-                $unmappedUsers = $unmappedUsers->sortBy(fn($u) => mb_strtolower($u['name']));
+                $unmappedUsers = $unmappedUsers->sortBy(fn($u) => mb_strtolower($u['name']))->values();
+
+                // Inicializar assignments desde sugerencias (solo si no están ya definidos)
+                foreach ($unmappedUsers as $u) {
+                    if (!array_key_exists($u['pin'], $this->assignments) && $u['suggested_id']) {
+                        $this->assignments[$u['pin']] = $u['suggested_id'];
+                    }
+                }
             }
 
+            $allSelected = $unmappedUsers->isNotEmpty()
+                && $unmappedUsers->every(fn($u) => in_array($u['pin'], $this->selected));
+
             return [
-                'unmappedUsers'     => $unmappedUsers->values(),
+                'unmappedUsers'     => $unmappedUsers,
+                'allSelected'       => $allSelected,
                 'biometricUsers'    => collect(),
                 'biometricSources'  => collect(),
                 'employees'         => $employees,
@@ -172,6 +236,7 @@ new class extends Component {
 
             return [
                 'unmappedUsers'    => collect(),
+                'allSelected'      => false,
                 'biometricUsers'   => $biometricUsers,
                 'biometricSources' => $biometricSources,
                 'employees'        => collect(),
@@ -214,6 +279,7 @@ new class extends Component {
 
             return [
                 'unmappedUsers'    => collect(),
+                'allSelected'      => false,
                 'biometricUsers'   => collect(),
                 'biometricSources' => collect(),
                 'employees'        => collect(),
@@ -228,7 +294,7 @@ new class extends Component {
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['unmappedUsers' => collect(), 'biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
+            return ['unmappedUsers' => collect(), 'allSelected' => false, 'biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -257,6 +323,7 @@ new class extends Component {
 
         return [
             'unmappedUsers'     => collect(),
+            'allSelected'       => false,
             'biometricUsers'    => collect(),
             'biometricSources'  => collect(),
             'employees'         => $query->paginate(20),
@@ -300,117 +367,6 @@ new class extends Component {
                 'factorial_employee_id' => $employee->id,
                 'sync_status'           => 'resolved',
             ]);
-    }
-
-    public function mapAllPerfect(): void
-    {
-        if (!$this->client_id) return;
-
-        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
-        if (!$provider) return;
-
-        $employees = FactorialEmployee::where('client_id', $this->client_id)->get()->keyBy('id');
-
-        $mappedPins = BiometricUserSync::where('client_id', $this->client_id)
-            ->whereNotNull('factorial_employee_id')
-            ->pluck('external_employee_code')
-            ->map(fn($c) => (string) $c)
-            ->flip();
-
-        $normalize = fn($s) => preg_replace('/\s+/', ' ', trim(str_replace(
-            ['„','ê','û','î','â','ô','Ñ','ñ','Á','á','É','é','Í','í','Ó','ó','Ú','ú','Ü','ü'],
-            ['n','e','u','i','a','o','n','n','a','a','e','e','i','i','o','o','u','u','u','u'],
-            mb_strtolower($s)
-        )));
-
-        $normalizedEmployees = $employees->map(fn($e) => [
-            'id'   => $e->id,
-            'norm' => $normalize($e->full_name),
-        ])->all();
-
-        BiometricSource::where('client_id', $this->client_id)->get()
-            ->each(function ($source) use (&$mappedPins, $normalize, $normalizedEmployees, $provider, $employees) {
-                foreach ($source->device_users ?? [] as $u) {
-                    $pin  = (string) ($u['pin'] ?? '');
-                    $name = $u['name'] ?? '';
-                    if ($pin === '' || $mappedPins->has($pin)) continue;
-
-                    $bestScore = 0;
-                    $bestId    = null;
-                    $normName  = $normalize($name);
-
-                    foreach ($normalizedEmployees as $emp) {
-                        similar_text($normName, $emp['norm'], $pct);
-                        if ($pct > $bestScore) {
-                            $bestScore = $pct;
-                            $bestId    = $emp['id'];
-                        }
-                    }
-
-                    if ($bestScore < 100 || !$bestId) continue;
-
-                    BiometricUserSync::updateOrCreate(
-                        ['biometric_provider_id' => $provider->id, 'external_employee_code' => $pin],
-                        ['client_id' => $this->client_id, 'factorial_employee_id' => $bestId, 'sync_status' => 'pending', 'last_attempt_at' => now()]
-                    );
-
-                    $logIds = AttendanceLog::where('client_id', $this->client_id)
-                        ->where('employee_code', $pin)
-                        ->whereNull('factorial_employee_id')
-                        ->pluck('id');
-
-                    if ($logIds->isNotEmpty()) {
-                        AttendanceLog::whereIn('id', $logIds)->update([
-                            'factorial_employee_id' => $bestId,
-                            'sync_status'           => 'resolved',
-                        ]);
-                        $delay = 0;
-                        foreach ($logIds as $logId) {
-                            SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
-                            $delay += 2;
-                        }
-                    }
-
-                    $mappedPins[$pin] = true;
-                }
-            });
-    }
-
-    public function mapUser(string $pin, mixed $employeeId, ?int $providerId = null): void
-    {
-        $employeeId = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
-        if (!$employeeId || !$this->client_id) return;
-
-        $emp = FactorialEmployee::find($employeeId);
-        if (!$emp) return;
-
-        $provider = $providerId
-            ? BiometricProvider::find($providerId)
-            : BiometricProvider::where('client_id', $this->client_id)->first();
-        if (!$provider) return;
-
-        BiometricUserSync::updateOrCreate(
-            ['biometric_provider_id' => $provider->id, 'external_employee_code' => $pin],
-            ['client_id' => $this->client_id, 'factorial_employee_id' => $employeeId, 'sync_status' => 'pending', 'last_attempt_at' => now()]
-        );
-
-        $logIds = AttendanceLog::where('client_id', $this->client_id)
-            ->where('employee_code', $pin)
-            ->whereNull('factorial_employee_id')
-            ->pluck('id');
-
-        if ($logIds->isNotEmpty()) {
-            AttendanceLog::whereIn('id', $logIds)->update([
-                'factorial_employee_id' => $employeeId,
-                'sync_status'           => 'resolved',
-            ]);
-
-            $delay = 0;
-            foreach ($logIds as $logId) {
-                SyncAttendanceToFactorial::dispatch($logId)->delay(now()->addSeconds($delay));
-                $delay += 2;
-            }
-        }
     }
 
 }; ?>
@@ -540,48 +496,46 @@ new class extends Component {
             </div>
         @else
         <div class="px-6 py-3 border-b border-gray-100 space-y-2">
-            {{-- Fila superior: contadores + botón bulk --}}
-            <div class="flex items-center justify-between">
-                <p class="text-sm text-gray-500">
-                    {{ $unmappedUsers->count() }} usuario(s) sin mapear · ordenados alfabéticamente
-                </p>
-                <div class="flex items-center gap-3">
-                    <p class="text-xs text-gray-400">{{ $employees->count() }} empleados Factorial disponibles</p>
-                    @php $perfectCount = $unmappedUsers->where('score', 100)->count(); @endphp
-                    @if($perfectCount > 0 && $scoreFilter !== 'good' && $scoreFilter !== 'low')
-                    <button
-                        wire:click="mapAllPerfect"
-                        wire:loading.attr="disabled"
-                        wire:confirm="¿Aceptar automáticamente los {{ $perfectCount }} match(es) al 100%?"
-                        class="inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded transition disabled:opacity-50">
-                        <span wire:loading.remove wire:target="mapAllPerfect">✓ Aceptar {{ $perfectCount }} al 100%</span>
-                        <span wire:loading wire:target="mapAllPerfect">Guardando…</span>
-                    </button>
-                    @endif
-                </div>
-            </div>
             {{-- Filtros por porcentaje --}}
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
-                @foreach([
-                    ['all',     'Todos',   'bg-gray-100 text-gray-700 hover:bg-gray-200'],
-                    ['perfect', '100%',    'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'],
-                    ['good',    '70–99%',  'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'],
-                    ['low',     '< 70%',   'bg-red-100 text-red-600 hover:bg-red-200'],
-                ] as [$val, $label, $cls])
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
+                    @foreach([
+                        ['all',     'Todos',  'bg-gray-100 text-gray-700 hover:bg-gray-200'],
+                        ['perfect', '100%',   'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'],
+                        ['good',    '70–99%', 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'],
+                        ['low',     '< 70%',  'bg-red-100 text-red-600 hover:bg-red-200'],
+                    ] as [$val, $label, $cls])
+                    <button
+                        wire:click="$set('scoreFilter', '{{ $val }}')"
+                        class="text-xs font-medium px-3 py-1 rounded-full transition {{ $scoreFilter === $val ? 'ring-2 ring-offset-1 ring-gray-400 ' : '' }}{{ $cls }}">
+                        {{ $label }}
+                    </button>
+                    @endforeach
+                    <span class="text-xs text-gray-400 ml-2">· {{ $unmappedUsers->count() }} pendiente(s) · {{ $employees->count() }} en Factorial</span>
+                </div>
+                {{-- Botón mapear seleccionados --}}
+                @if(count($selected) > 0)
                 <button
-                    wire:click="$set('scoreFilter', '{{ $val }}')"
-                    class="text-xs font-medium px-3 py-1 rounded-full transition {{ $scoreFilter === $val ? 'ring-2 ring-offset-1 ring-gray-400 ' : '' }}{{ $cls }}">
-                    {{ $label }}
+                    wire:click="mapSelected"
+                    wire:loading.attr="disabled"
+                    class="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded transition disabled:opacity-50">
+                    <span wire:loading.remove wire:target="mapSelected">✓ Mapear {{ count($selected) }} seleccionado(s)</span>
+                    <span wire:loading wire:target="mapSelected">Guardando…</span>
                 </button>
-                @endforeach
-                <span class="text-xs text-gray-300 ml-2">· Se guarda automáticamente al asignar</span>
+                @endif
             </div>
         </div>
         <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 text-sm">
             <thead class="bg-gray-50">
                 <tr>
+                    <th class="px-4 py-3 w-10">
+                        <input type="checkbox"
+                            @checked($allSelected)
+                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            @change="$wire.setSelectAll({{ Js::from($unmappedUsers->pluck('pin')->all()) }}, $event.target.checked)">
+                    </th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">PIN</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre en dispositivo</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dispositivo</th>
@@ -593,11 +547,19 @@ new class extends Component {
                 @foreach($unmappedUsers as $row)
                 @php
                     $score = $row['score'] ?? 0;
-                    $scoreColor = $score >= 90 ? 'bg-emerald-100 text-emerald-700'
+                    $scoreColor = $score >= 100 ? 'bg-emerald-100 text-emerald-700'
                                 : ($score >= 70 ? 'bg-yellow-100 text-yellow-700'
                                 : 'bg-red-100 text-red-600');
+                    $isSelected = in_array($row['pin'], $selected);
                 @endphp
-                <tr class="hover:bg-gray-50">
+                <tr class="{{ $isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50' }}">
+                    <td class="px-4 py-3">
+                        <input type="checkbox"
+                            value="{{ $row['pin'] }}"
+                            @checked($isSelected)
+                            wire:change="@if($isSelected) setSelectAll(['{{ $row['pin'] }}'], false) @else setSelectAll(['{{ $row['pin'] }}'], true) @endif"
+                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                    </td>
                     <td class="px-4 py-3 font-mono font-semibold text-gray-900">{{ $row['pin'] }}</td>
                     <td class="px-4 py-3 text-gray-800">{{ $row['name'] ?: '—' }}</td>
                     <td class="px-4 py-3 text-gray-400 text-xs">{{ $row['source'] }}</td>
@@ -608,11 +570,11 @@ new class extends Component {
                     </td>
                     <td class="px-4 py-3">
                         <select
-                            wire:change="mapUser('{{ $row['pin'] }}', $event.target.value, {{ $row['provider_id'] ?? 'null' }})"
+                            wire:change="updateAssignment('{{ $row['pin'] }}', $event.target.value)"
                             class="block w-full rounded border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 py-1">
                             <option value="">— Sin mapear —</option>
                             @foreach($employees as $emp)
-                                <option value="{{ $emp->id }}" @selected($emp->id == ($row['suggested_id'] ?? null))>
+                                <option value="{{ $emp->id }}" @selected($emp->id == ($assignments[$row['pin']] ?? null))>
                                     {{ $emp->full_name }}
                                 </option>
                             @endforeach

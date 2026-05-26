@@ -5,6 +5,7 @@ use App\Models\BiometricSource;
 use App\Models\Client;
 use App\Models\FactorialConnection;
 use App\Jobs\SyncAttendanceToFactorial;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -30,53 +31,49 @@ new class extends Component {
 
     public function loadStats(): void
     {
-        $this->todayTotal  = AttendanceLog::whereDate('occurred_at', today())->count();
-        $this->pendingSync = AttendanceLog::where('sync_status', 'pending')->count();
-        $this->failedSync  = AttendanceLog::where('sync_status', 'failed')->count();
-        $this->syncedToday = AttendanceLog::whereDate('processed_at', today())->where('sync_status', 'synced')->count();
+        // Sync counters — cambian frecuentemente, cache corta de 30s
+        $this->todayTotal  = Cache::remember('stats.today_total',  30, fn() => AttendanceLog::whereDate('occurred_at', today())->count());
+        $this->pendingSync = Cache::remember('stats.pending_sync',  30, fn() => AttendanceLog::where('sync_status', 'pending')->count());
+        $this->failedSync  = Cache::remember('stats.failed_sync',   30, fn() => AttendanceLog::where('sync_status', 'failed')->count());
+        $this->syncedToday = Cache::remember('stats.synced_today',  30, fn() => AttendanceLog::whereDate('processed_at', today())->where('sync_status', 'synced')->count());
 
-        $counts = BiometricSource::selectRaw('client_id, count(*) as total')
-            ->whereNotNull('client_id')
-            ->groupBy('client_id')
-            ->pluck('total', 'client_id');
+        // Dispositivos por empresa — cambia poco, cache de 5 min
+        $this->byClient = Cache::remember('stats.by_client', 300, function () {
+            $counts  = BiometricSource::selectRaw('client_id, count(*) as total')->whereNotNull('client_id')->groupBy('client_id')->pluck('total', 'client_id');
+            $clients = Client::whereIn('id', $counts->keys())->pluck('name', 'id');
+            return $counts->map(fn($total, $clientId) => [
+                'name'  => $clients[$clientId] ?? 'Sin cliente',
+                'total' => $total,
+            ])->values()->toArray();
+        });
 
-        $clients = Client::whereIn('id', $counts->keys())->pluck('name', 'id');
+        // Conexiones Factorial — cambia poco, cache de 5 min
+        [$this->activeConnections, $this->inactiveConnections, $this->connections] = Cache::remember('stats.connections', 300, function () {
+            $all = FactorialConnection::with('client')->get();
+            return [
+                $all->whereNotNull('access_token')->count(),
+                $all->whereNull('access_token')->count(),
+                $all->map(fn($c) => ['name' => $c->client?->name ?? $c->name, 'active' => !is_null($c->access_token)])->values()->toArray(),
+            ];
+        });
 
-        $this->byClient = $counts->map(fn($total, $clientId) => [
-            'name'  => $clients[$clientId] ?? 'Sin cliente',
-            'total' => $total,
-        ])->values()->toArray();
-
-        $allConnections = FactorialConnection::with('client')->get();
-        $this->activeConnections   = $allConnections->whereNotNull('access_token')->count();
-        $this->inactiveConnections = $allConnections->whereNull('access_token')->count();
-
-        $this->connections = $allConnections->map(fn($c) => [
-            'name'   => $c->client?->name ?? $c->name,
-            'active' => !is_null($c->access_token),
-        ])->values()->toArray();
-
-        // Estatus biométricos — una sola query con CASE
-        $devStats = BiometricSource::selectRaw("
-            SUM(CASE WHEN status='active' AND last_ping_at >= ? THEN 1 ELSE 0 END) as online,
-            SUM(CASE WHEN status='active' AND last_ping_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as recent,
-            SUM(CASE WHEN status='active' AND (last_ping_at IS NULL OR last_ping_at < ?) THEN 1 ELSE 0 END) as offline,
-            SUM(CASE WHEN status='inactive' THEN 1 ELSE 0 END) as inactive
-        ", [
-            now()->subMinutes(15),
-            now()->subHour(), now()->subMinutes(15),
-            now()->subHour(),
-        ])->first();
-
-        $this->devOnline   = (int) ($devStats->online   ?? 0);
-        $this->devRecent   = (int) ($devStats->recent   ?? 0);
-        $this->devOffline  = (int) ($devStats->offline  ?? 0);
-        $this->devInactive = (int) ($devStats->inactive ?? 0);
+        // Estatus biométricos — cache de 60s
+        [$this->devOnline, $this->devRecent, $this->devOffline, $this->devInactive] = Cache::remember('stats.dev_status', 60, function () {
+            $s = BiometricSource::selectRaw("
+                SUM(CASE WHEN status='active' AND last_ping_at >= ? THEN 1 ELSE 0 END) as online,
+                SUM(CASE WHEN status='active' AND last_ping_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as recent,
+                SUM(CASE WHEN status='active' AND (last_ping_at IS NULL OR last_ping_at < ?) THEN 1 ELSE 0 END) as offline,
+                SUM(CASE WHEN status='inactive' THEN 1 ELSE 0 END) as inactive
+            ", [now()->subMinutes(15), now()->subHour(), now()->subMinutes(15), now()->subHour()])->first();
+            return [(int)($s->online ?? 0), (int)($s->recent ?? 0), (int)($s->offline ?? 0), (int)($s->inactive ?? 0)];
+        });
     }
 
     public function dismissFailed(): void
     {
         AttendanceLog::where('sync_status', 'failed')->delete();
+        Cache::forget('stats.failed_sync');
+        Cache::forget('stats.pending_sync');
         $this->loadStats();
     }
 
@@ -99,6 +96,8 @@ new class extends Component {
                 }
             });
 
+        Cache::forget('stats.failed_sync');
+        Cache::forget('stats.pending_sync');
         $this->loadStats();
     }
 }; ?>

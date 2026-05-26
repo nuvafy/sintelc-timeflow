@@ -2,6 +2,7 @@
 
 use App\Livewire\Actions\Logout;
 use App\Models\BiometricSource;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Volt\Component;
 
 new class extends Component
@@ -11,8 +12,12 @@ new class extends Component
 
     public function mount(): void
     {
-        $this->unassignedDevices   = BiometricSource::whereNull('client_id')->count();
-        $this->unresolvedEmployees = \App\Models\BiometricUserSync::whereNull('factorial_employee_id')->count();
+        $this->unassignedDevices   = Cache::remember('nav.unassigned_devices', 60, fn() =>
+            BiometricSource::whereNull('client_id')->count()
+        );
+        $this->unresolvedEmployees = Cache::remember('nav.unresolved_employees', 60, fn() =>
+            \App\Models\BiometricUserSync::whereNull('factorial_employee_id')->count()
+        );
     }
 
     public function logout(Logout $logout): void

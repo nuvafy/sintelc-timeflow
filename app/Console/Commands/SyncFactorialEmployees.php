@@ -63,6 +63,7 @@ class SyncFactorialEmployees extends Command
         $limit        = 100;
         $pageNum      = 0;
         $total        = null;
+        $seenIds      = [];
 
         do {
             $pageNum++;
@@ -71,10 +72,16 @@ class SyncFactorialEmployees extends Command
             $meta     = $response['meta'] ?? [];
 
             if ($total === null) {
-                $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? null;
+                $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? $meta['filtered_count'] ?? null;
             }
 
             if (empty($page)) break;
+
+            // Detectar si la API repite páginas
+            $newIds  = array_column($page, 'id');
+            $overlap = array_intersect($newIds, $seenIds);
+            if (!empty($overlap) && count($overlap) === count($newIds)) break;
+            $seenIds = array_merge($seenIds, $newIds);
 
             $allEmployees = array_merge($allEmployees, $page);
             $offset += $limit;

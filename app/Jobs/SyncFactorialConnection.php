@@ -45,20 +45,34 @@ class SyncFactorialConnection implements ShouldQueue
             $pageNum      = 0;
             $total        = null;
 
+            $seenIds = [];
+
             do {
                 $pageNum++;
                 $this->storeResult(['ok' => null, 'progress' => "Página {$pageNum} · " . count($allEmployees) . " empleados descargados…"]);
 
-                $response     = $service->getEmployees(['offset' => $offset, 'limit' => $limit]);
-                $page         = $response['data'] ?? [];
-                $meta         = $response['meta'] ?? [];
+                $response = $service->getEmployees(['offset' => $offset, 'limit' => $limit]);
+                $page     = $response['data'] ?? [];
+                $meta     = $response['meta'] ?? [];
 
-                // Obtener total desde meta la primera vez
-                if ($total === null) {
-                    $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? null;
+                // Loguear meta en primera página para conocer su estructura
+                if ($pageNum === 1) {
+                    Log::info('SyncFactorialConnection: meta keys', ['meta' => $meta]);
+                    $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? $meta['filtered_count'] ?? null;
                 }
 
                 if (empty($page)) break;
+
+                // Detectar si la API está repitiendo páginas (IDs ya vistos)
+                $newIds = array_column($page, 'id');
+                $overlap = array_intersect($newIds, $seenIds);
+                if (!empty($overlap) && count($overlap) === count($newIds)) {
+                    Log::info('SyncFactorialConnection: API repitiendo página, deteniendo paginación', [
+                        'page' => $pageNum, 'offset' => $offset,
+                    ]);
+                    break;
+                }
+                $seenIds = array_merge($seenIds, $newIds);
 
                 $allEmployees = array_merge($allEmployees, $page);
                 $offset      += $limit;
@@ -66,7 +80,7 @@ class SyncFactorialConnection implements ShouldQueue
                 // Parar si ya tenemos todos según meta
                 if ($total !== null && count($allEmployees) >= (int) $total) break;
 
-                // Seguridad: máximo 50 páginas (5000 empleados)
+                // Seguridad: máximo 50 páginas
                 if ($pageNum >= 50) break;
 
             } while (count($page) === $limit);

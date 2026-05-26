@@ -63,21 +63,30 @@ new class extends Component {
 
         $now = now()->toDateTimeString();
 
-        // 1. updateOrCreate por pin — correcto con el unique (provider, employee)
+        // 1. Guardar BiometricUserSync — SELECT explícito para evitar race condition
         foreach ($toMap as $pin => $employeeId) {
             try {
-                BiometricUserSync::updateOrCreate(
-                    [
-                        'biometric_provider_id' => $provider->id,
-                        'factorial_employee_id'  => $employeeId,
-                    ],
-                    [
+                $existing = BiometricUserSync::where('biometric_provider_id', $provider->id)
+                    ->where('factorial_employee_id', $employeeId)
+                    ->first();
+
+                if ($existing) {
+                    $existing->update([
                         'external_employee_code' => $pin,
                         'client_id'              => $this->client_id,
                         'sync_status'            => 'pending',
                         'last_attempt_at'        => $now,
-                    ]
-                );
+                    ]);
+                } else {
+                    BiometricUserSync::create([
+                        'biometric_provider_id'  => $provider->id,
+                        'factorial_employee_id'  => $employeeId,
+                        'external_employee_code' => $pin,
+                        'client_id'              => $this->client_id,
+                        'sync_status'            => 'pending',
+                        'last_attempt_at'        => $now,
+                    ]);
+                }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('mapSelected: error al guardar sync', [
                     'pin'        => $pin,

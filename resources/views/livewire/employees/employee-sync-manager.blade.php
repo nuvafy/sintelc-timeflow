@@ -241,15 +241,16 @@ new class extends Component {
                 'unmappedUsers'     => $unmappedUsers,
                 'totalUnmapped'     => $totalUnmapped ?? 0,
                 'allSelected'       => $allSelected,
-                'biometricUsers'    => collect(),
-                'biometricSources'  => collect(),
-                'employees'         => $employees,
-                'unresolved'        => collect(),
-                'unresolvedCount'   => 0,
-                'clients'           => $clients,
-                'vendorName'        => 'Biométrico',
-                'mappedEmployeeIds' => collect(),
-                'biometricIds'      => collect(),
+                'biometricUsers'      => collect(),
+                'biometricMappedCount'=> 0,
+                'biometricSources'    => collect(),
+                'employees'           => $employees,
+                'unresolved'          => collect(),
+                'unresolvedCount'     => 0,
+                'clients'             => $clients,
+                'vendorName'          => 'Biométrico',
+                'mappedEmployeeIds'   => collect(),
+                'biometricIds'        => collect(),
             ];
         }
 
@@ -289,6 +290,9 @@ new class extends Component {
                 });
             }
 
+            // Total mapeados (antes de aplicar filtro de estado)
+            $biometricMappedCount = $biometricUsers->filter(fn($u) => $u['mapped'])->count();
+
             // Filtro por estado
             if ($this->statusFilter === 'mapped') {
                 $biometricUsers = $biometricUsers->filter(fn($u) => $u['mapped']);
@@ -312,21 +316,22 @@ new class extends Component {
                 'unmappedUsers'    => collect(),
                 'allSelected'      => false,
                 'totalUnmapped'    => 0,
-                'biometricUsers'   => $biometricUsers,
-                'biometricSources' => $biometricSources,
-                'employees'        => collect(),
-                'unresolved'        => collect(),
-                'unresolvedCount'   => 0,
-                'clients'           => $clients,
-                'vendorName'        => 'Biométrico',
-                'mappedEmployeeIds' => collect(),
-                'biometricIds'      => collect(),
+                'biometricUsers'      => $biometricUsers,
+                'biometricMappedCount'=> $biometricMappedCount ?? 0,
+                'biometricSources'    => $biometricSources,
+                'employees'           => collect(),
+                'unresolved'          => collect(),
+                'unresolvedCount'     => 0,
+                'clients'             => $clients,
+                'vendorName'          => 'Biométrico',
+                'mappedEmployeeIds'   => collect(),
+                'biometricIds'        => collect(),
             ];
         }
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
+            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'biometricMappedCount' => 0, 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -497,9 +502,17 @@ new class extends Component {
                     </span>
                     @endif
                 @elseif($tab === 'biometric')
-                    <span class="text-xs text-gray-400">{{ $biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator ? $biometricUsers->total() : $biometricUsers->count() }} usuario(s)</span>
+                    <span class="text-xs text-gray-400">
+                        {{ $biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator ? $biometricUsers->total() : $biometricUsers->count() }} empleado(s)
+                        <span class="text-gray-300 mx-1">·</span>
+                        {{ $biometricMappedCount }} mapeado(s)
+                    </span>
                 @elseif($tab === 'factorial')
-                    <span class="text-xs text-gray-400">{{ $employees instanceof \Illuminate\Pagination\LengthAwarePaginator ? $employees->total() : $employees->count() }} empleado(s)</span>
+                    <span class="text-xs text-gray-400">
+                        {{ $employees instanceof \Illuminate\Pagination\LengthAwarePaginator ? $employees->total() : $employees->count() }} empleado(s)
+                        <span class="text-gray-300 mx-1">·</span>
+                        {{ $mappedEmployeeIds->count() }} mapeado(s)
+                    </span>
                 @endif
             </div>
         </div>

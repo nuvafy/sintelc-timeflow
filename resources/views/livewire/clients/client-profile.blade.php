@@ -148,156 +148,130 @@ new class extends Component {
             @endif
         </div>
 
-        {{-- Cuerpo: 2 columnas principales --}}
-        <div class="px-6 py-5">
-            <div class="grid grid-cols-1 lg:grid-cols-5 gap-0 lg:divide-x lg:divide-gray-100">
+        {{-- Fila 1: Email + Slug --}}
+        <div class="px-6 py-5 grid grid-cols-2 gap-6">
+            <div>
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
+                @if($editing)
+                    <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
+                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                @else
+                    <p class="text-sm text-gray-700">{{ $client->contact_email ?: '—' }}</p>
+                @endif
+            </div>
+            <div>
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Slug</p>
+                @if($editing)
+                    <input wire:model="slug" type="text"
+                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                @else
+                    <p class="text-sm font-mono text-gray-600">{{ $client->slug }}</p>
+                @endif
+            </div>
+        </div>
 
-                {{-- Columna izquierda: datos generales (3/5) --}}
-                <div class="lg:col-span-3 lg:pr-8 space-y-5">
-
-                    {{-- Slug --}}
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Slug</p>
-                            @if($editing)
-                                <input wire:model="slug" type="text"
-                                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                            @else
-                                <p class="text-sm font-mono text-gray-600">{{ $client->slug }}</p>
-                            @endif
-                        </div>
-                    </div>
-
-                    {{-- Email + Dirección --}}
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
-                            @if($editing)
-                                <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
-                                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                                @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                            @else
-                                <p class="text-sm text-gray-700 truncate">{{ $client->contact_email ?: '—' }}</p>
-                            @endif
-                        </div>
-                        <div>
-                            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Dirección HQ</p>
-                            @if($editing)
-                                <input wire:model="hq_address" type="text" placeholder="Av. Insurgentes Sur 1234"
-                                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                                @error('hq_address') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                            @else
-                                <p class="text-sm text-gray-700 truncate">{{ $client->hq_address ?: '—' }}</p>
-                            @endif
-                        </div>
-                    </div>
-
-                </div>
-
-                {{-- Columna derecha: credenciales + asistencia (2/5) --}}
-                <div class="lg:col-span-2 lg:pl-8 mt-5 lg:mt-0 space-y-5 pt-5 lg:pt-0 border-t border-gray-100 lg:border-t-0">
-
-                    {{-- OAuth --}}
+        {{-- Separador + Credenciales OAuth --}}
+        <div class="border-t border-gray-100">
+            <div class="px-6 py-5">
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4">Credenciales Factorial OAuth</p>
+                <div class="grid grid-cols-2 gap-6">
                     <div>
-                        <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Credenciales Factorial OAuth</p>
-                        <div class="space-y-3">
-                            <div>
-                                <p class="text-xs text-gray-400 mb-1">Client ID</p>
-                                @if($editing)
-                                    <input wire:model="oauth_client_id" type="text" autocomplete="off"
-                                        placeholder="thAYmPF7qXq..."
-                                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                    @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                @else
-                                    <p class="text-sm font-mono text-gray-700 truncate">
-                                        {{ $client->oauth_client_id ? \Illuminate\Support\Str::limit($client->oauth_client_id, 28) : '—' }}
-                                    </p>
-                                @endif
-                            </div>
-                            <div>
-                                <p class="text-xs text-gray-400 mb-1">Client Secret</p>
-                                @if($editing)
-                                    <input wire:model="oauth_client_secret" type="text" autocomplete="off"
-                                        placeholder="Client secret..."
-                                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                    @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                @else
-                                    <p class="text-sm font-mono text-gray-500">
-                                        {{ $client->oauth_client_secret ? '••••••••••••••••' : '—' }}
-                                    </p>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- Asistencia biométrica --}}
-                    <div class="border-t border-gray-100 pt-5">
-                        <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Asistencia biométrica</p>
+                        <p class="text-xs text-gray-400 mb-1">Client ID</p>
                         @if($editing)
-                            <div class="grid grid-cols-2 gap-3 mb-3">
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-1">ID Entrada</label>
-                                    <input wire:model="checkin_id" type="text" placeholder="0"
-                                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                    @error('checkin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-1">ID Salida</label>
-                                    <input wire:model="checkout_id" type="text" placeholder="1"
-                                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                    @error('checkout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                </div>
-                                @if($has_breaks)
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-1">ID Inicio descanso</label>
-                                    <input wire:model="breakin_id" type="text" placeholder="2"
-                                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                    @error('breakin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-1">ID Fin descanso</label>
-                                    <input wire:model="breakout_id" type="text" placeholder="3"
-                                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                                    @error('breakout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                </div>
-                                @endif
-                            </div>
-                            <label class="inline-flex items-center gap-2 cursor-pointer">
-                                <input wire:model.live="has_breaks" type="checkbox"
-                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
-                                <span class="text-sm text-gray-700">¿Tiene pausas / descansos?</span>
-                            </label>
+                            <input wire:model="oauth_client_id" type="text" autocomplete="off"
+                                placeholder="thAYmPF7qXq..."
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                         @else
-                            @php $config = $client->attendanceConfig; @endphp
-                            <div class="flex flex-wrap gap-5">
-                                <div>
-                                    <p class="text-xs text-gray-400 mb-0.5">Entrada</p>
-                                    <p class="text-sm font-mono font-semibold text-gray-700">{{ $config?->checkin_id ?? '0' }}</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs text-gray-400 mb-0.5">Salida</p>
-                                    <p class="text-sm font-mono font-semibold text-gray-700">{{ $config?->checkout_id ?? '1' }}</p>
-                                </div>
-                                @if($config?->has_breaks)
-                                <div>
-                                    <p class="text-xs text-gray-400 mb-0.5">Inicio descanso</p>
-                                    <p class="text-sm font-mono font-semibold text-gray-700">{{ $config->breakin_id }}</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs text-gray-400 mb-0.5">Fin descanso</p>
-                                    <p class="text-sm font-mono font-semibold text-gray-700">{{ $config->breakout_id }}</p>
-                                </div>
-                                @endif
-                                <div>
-                                    <p class="text-xs text-gray-400 mb-0.5">Descansos</p>
-                                    <p class="text-sm text-gray-700">{{ $config?->has_breaks ? 'Sí' : 'No' }}</p>
-                                </div>
-                            </div>
+                            <p class="text-sm font-mono text-gray-700">
+                                {{ $client->oauth_client_id ? \Illuminate\Support\Str::limit($client->oauth_client_id, 36) : '—' }}
+                            </p>
                         @endif
                     </div>
-
+                    <div>
+                        <p class="text-xs text-gray-400 mb-1">Client Secret</p>
+                        @if($editing)
+                            <input wire:model="oauth_client_secret" type="text" autocomplete="off"
+                                placeholder="Client secret..."
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        @else
+                            <p class="text-sm font-mono text-gray-500">
+                                {{ $client->oauth_client_secret ? '••••••••••••••••' : '—' }}
+                            </p>
+                        @endif
+                    </div>
                 </div>
+            </div>
+        </div>
+
+        {{-- Separador + Asistencia biométrica --}}
+        <div class="border-t border-gray-100">
+            <div class="px-6 py-5">
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4">Asistencia biométrica</p>
+                @if($editing)
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ID Entrada</label>
+                            <input wire:model="checkin_id" type="text" placeholder="0"
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('checkin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ID Salida</label>
+                            <input wire:model="checkout_id" type="text" placeholder="1"
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('checkout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        @if($has_breaks)
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ID Inicio descanso</label>
+                            <input wire:model="breakin_id" type="text" placeholder="2"
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('breakin_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ID Fin descanso</label>
+                            <input wire:model="breakout_id" type="text" placeholder="3"
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                            @error('breakout_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        @endif
+                    </div>
+                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                        <input wire:model.live="has_breaks" type="checkbox"
+                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
+                        <span class="text-sm text-gray-700">¿Tiene pausas / descansos?</span>
+                    </label>
+                @else
+                    @php $config = $client->attendanceConfig; @endphp
+                    <div class="flex gap-8">
+                        <div>
+                            <p class="text-xs text-gray-400 mb-0.5">Entrada</p>
+                            <p class="text-sm font-mono font-semibold text-gray-700">{{ $config?->checkin_id ?? '0' }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400 mb-0.5">Salida</p>
+                            <p class="text-sm font-mono font-semibold text-gray-700">{{ $config?->checkout_id ?? '1' }}</p>
+                        </div>
+                        @if($config?->has_breaks)
+                        <div>
+                            <p class="text-xs text-gray-400 mb-0.5">Inicio descanso</p>
+                            <p class="text-sm font-mono font-semibold text-gray-700">{{ $config->breakin_id }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400 mb-0.5">Fin descanso</p>
+                            <p class="text-sm font-mono font-semibold text-gray-700">{{ $config->breakout_id }}</p>
+                        </div>
+                        @endif
+                        <div>
+                            <p class="text-xs text-gray-400 mb-0.5">Descansos</p>
+                            <p class="text-sm text-gray-700">{{ $config?->has_breaks ? 'Sí' : 'No' }}</p>
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
     </div>

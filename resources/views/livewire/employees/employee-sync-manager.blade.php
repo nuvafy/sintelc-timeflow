@@ -197,14 +197,6 @@ new class extends Component {
                         }
                     });
 
-                // Filtrar por score
-                $unmappedUsers = match ($this->scoreFilter) {
-                    'perfect' => $unmappedUsers->filter(fn($u) => $u['score'] >= 100),
-                    'good'    => $unmappedUsers->filter(fn($u) => $u['score'] >= 70 && $u['score'] < 100),
-                    'low'     => $unmappedUsers->filter(fn($u) => $u['score'] < 70),
-                    default   => $unmappedUsers,
-                };
-
                 // Excluir PINs cuyo empleado sugerido (100%) ya está mapeado a otro PIN
                 $mappedEmployeeIds = BiometricUserSync::where('client_id', $this->client_id)
                     ->whereNotNull('factorial_employee_id')
@@ -212,12 +204,22 @@ new class extends Component {
                     ->flip();
 
                 $unmappedUsers = $unmappedUsers->filter(function ($u) use ($mappedEmployeeIds) {
-                    // Si el score es 100% y el empleado sugerido ya está mapeado → duplicado, ocultar
                     if ($u['score'] >= 100 && $u['suggested_id'] && $mappedEmployeeIds->has($u['suggested_id'])) {
                         return false;
                     }
                     return true;
                 });
+
+                // Guardar total antes de aplicar filtro de score
+                $totalUnmapped = $unmappedUsers->count();
+
+                // Filtrar por score
+                $unmappedUsers = match ($this->scoreFilter) {
+                    'perfect' => $unmappedUsers->filter(fn($u) => $u['score'] >= 100),
+                    'good'    => $unmappedUsers->filter(fn($u) => $u['score'] >= 70 && $u['score'] < 100),
+                    'low'     => $unmappedUsers->filter(fn($u) => $u['score'] < 70),
+                    default   => $unmappedUsers,
+                };
 
                 // Ordenar alfabéticamente por nombre del dispositivo
                 $unmappedUsers = $unmappedUsers->sortBy(fn($u) => mb_strtolower($u['name']))->values();
@@ -235,6 +237,7 @@ new class extends Component {
 
             return [
                 'unmappedUsers'     => $unmappedUsers,
+                'totalUnmapped'     => $totalUnmapped ?? 0,
                 'allSelected'       => $allSelected,
                 'biometricUsers'    => collect(),
                 'biometricSources'  => collect(),
@@ -304,6 +307,7 @@ new class extends Component {
             return [
                 'unmappedUsers'    => collect(),
                 'allSelected'      => false,
+                'totalUnmapped'    => 0,
                 'biometricUsers'   => $biometricUsers,
                 'biometricSources' => $biometricSources,
                 'employees'        => collect(),
@@ -347,6 +351,7 @@ new class extends Component {
             return [
                 'unmappedUsers'    => collect(),
                 'allSelected'      => false,
+                'totalUnmapped'    => 0,
                 'biometricUsers'   => collect(),
                 'biometricSources' => collect(),
                 'employees'        => collect(),
@@ -361,7 +366,7 @@ new class extends Component {
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['unmappedUsers' => collect(), 'allSelected' => false, 'biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
+            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -391,6 +396,7 @@ new class extends Component {
         return [
             'unmappedUsers'     => collect(),
             'allSelected'       => false,
+            'totalUnmapped'     => 0,
             'biometricUsers'    => collect(),
             'biometricSources'  => collect(),
             'employees'         => $query->paginate(20),
@@ -553,7 +559,7 @@ new class extends Component {
     <div class="bg-white shadow rounded-lg overflow-hidden">
         @if(!$client_id)
             <p class="px-6 py-10 text-center text-sm text-gray-500">Selecciona una empresa para ver el mapping.</p>
-        @elseif($unmappedUsers->isEmpty())
+        @elseif($totalUnmapped === 0)
             <div class="px-6 py-10 text-center">
                 <svg class="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -618,6 +624,13 @@ new class extends Component {
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-100">
+                @if($unmappedUsers->isEmpty())
+                <tr>
+                    <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-400">
+                        Sin resultados para este filtro — prueba con otro pill.
+                    </td>
+                </tr>
+                @endif
                 @foreach($unmappedUsers as $row)
                 @php
                     $score = $row['score'] ?? 0;

@@ -24,7 +24,7 @@ new class extends Component {
     public function updatedSearch(): void      { $this->resetPage(); }
     public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; }
     public function updatedTab(): void         { $this->resetPage(); $this->selected = []; }
-    public function updatedScoreFilter(): void { $this->resetPage(); $this->selected = []; }
+    public function updatedScoreFilter(): void { $this->resetPage(); }
 
     public function setSelectAll(array $pins, bool $checked): void
     {

@@ -71,6 +71,11 @@ new class extends Component {
                     ->first();
 
                 if ($existing) {
+                    // Si ya está mapeado al mismo PIN, no hacer nada
+                    if ((string) $existing->external_employee_code === (string) $pin) {
+                        continue;
+                    }
+                    // Si está mapeado a otro PIN, actualizar (el admin decidió cambiar)
                     $existing->update([
                         'external_employee_code' => $pin,
                         'client_id'              => $this->client_id,
@@ -199,6 +204,20 @@ new class extends Component {
                     'low'     => $unmappedUsers->filter(fn($u) => $u['score'] < 70),
                     default   => $unmappedUsers,
                 };
+
+                // Excluir PINs cuyo empleado sugerido (100%) ya está mapeado a otro PIN
+                $mappedEmployeeIds = BiometricUserSync::where('client_id', $this->client_id)
+                    ->whereNotNull('factorial_employee_id')
+                    ->pluck('factorial_employee_id')
+                    ->flip();
+
+                $unmappedUsers = $unmappedUsers->filter(function ($u) use ($mappedEmployeeIds) {
+                    // Si el score es 100% y el empleado sugerido ya está mapeado → duplicado, ocultar
+                    if ($u['score'] >= 100 && $u['suggested_id'] && $mappedEmployeeIds->has($u['suggested_id'])) {
+                        return false;
+                    }
+                    return true;
+                });
 
                 // Ordenar alfabéticamente por nombre del dispositivo
                 $unmappedUsers = $unmappedUsers->sortBy(fn($u) => mb_strtolower($u['name']))->values();

@@ -19,6 +19,7 @@ new class extends Component {
     public string  $scoreFilter = 'all';       // 'all' | 'perfect' | 'good' | 'low'
     public array   $selected    = [];          // PINs seleccionados para mapear
     public array   $assignments = [];          // PIN => factorial_employee_id (pendiente de guardar)
+    public ?string $mapMessage  = null;        // Resultado del último mapeo
 
     public function updatedSearch(): void      { $this->resetPage(); }
     public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; }
@@ -103,6 +104,10 @@ new class extends Component {
             $delay += 2;
         }
 
+        $saved   = count($toMap);
+        $skipped = count($this->selected) - $saved;
+
+        $this->mapMessage = "✓ {$saved} mapeado(s)" . ($skipped > 0 ? " · ⚠ {$skipped} omitido(s) sin asignación" : "");
         $this->selected = [];
     }
 
@@ -545,6 +550,12 @@ new class extends Component {
                     <span class="text-xs text-gray-400 ml-2">· {{ $unmappedUsers->count() }} pendiente(s) · {{ $employees->count() }} en Factorial</span>
                 </div>
                 {{-- Botón mapear seleccionados --}}
+                <div class="flex items-center gap-3">
+                @if($mapMessage)
+                <span class="text-xs {{ str_contains($mapMessage, '⚠') ? 'text-amber-600' : 'text-emerald-600' }} font-medium">
+                    {{ $mapMessage }}
+                </span>
+                @endif
                 @if(count($selected) > 0)
                 <button
                     wire:click="mapSelected"
@@ -554,6 +565,7 @@ new class extends Component {
                     <span wire:loading wire:target="mapSelected">Guardando…</span>
                 </button>
                 @endif
+                </div>
             </div>
         </div>
         <div class="overflow-x-auto">
@@ -580,9 +592,13 @@ new class extends Component {
                     $scoreColor = $score >= 100 ? 'bg-emerald-100 text-emerald-700'
                                 : ($score >= 70 ? 'bg-yellow-100 text-yellow-700'
                                 : 'bg-red-100 text-red-600');
-                    $isSelected = in_array($row['pin'], $selected);
+                    $isSelected   = in_array($row['pin'], $selected);
+                    $hasAssign    = !empty($assignments[$row['pin']]);
+                    $rowBg = $isSelected
+                        ? ($hasAssign ? 'bg-indigo-50' : 'bg-amber-50')
+                        : 'hover:bg-gray-50';
                 @endphp
-                <tr class="{{ $isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50' }}">
+                <tr class="{{ $rowBg }}">
                     <td class="px-4 py-3">
                         <input type="checkbox"
                             value="{{ $row['pin'] }}"

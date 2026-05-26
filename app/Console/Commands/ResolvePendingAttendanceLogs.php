@@ -25,6 +25,7 @@ class ResolvePendingAttendanceLogs extends Command
         $logs = AttendanceLog::whereNull('factorial_employee_id')
             ->whereIn('employee_code', $mappings->keys())
             ->where('sync_status', 'pending')
+            ->orderBy('occurred_at')
             ->get(['id', 'employee_code']);
 
         if ($logs->isEmpty()) {

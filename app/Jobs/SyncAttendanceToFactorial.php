@@ -90,21 +90,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
         } catch (RequestException $e) {
             $body    = $e->response->json() ?? [];
-            $errors  = $body['errors'] ?? [];
             $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
-
-            // Si hay un turno abierto de un día anterior, cerrarlo y reintentar
-            $hasOpenShift = isset($errors['clock_out'])
-                || (isset($errors['base']) && collect($errors['base'])->contains(fn($m) => str_contains($m, 'solapa')));
-
-            if ($hasOpenShift && in_array($log->check_type, ['check_in', 'break_out'])) {
-                Log::warning('SyncAttendanceToFactorial: turno abierto detectado, cerrando y reintentando', [
-                    'attendance_log_id' => $log->id,
-                    'error'             => $message,
-                ]);
-                $this->closeOpenShiftsAndRetry($log, $employee, $service, $payload, $message);
-                return;
-            }
 
             Log::warning('SyncAttendanceToFactorial: método directo falló, intentando overwrite', [
                 'attendance_log_id' => $log->id,
@@ -116,60 +102,6 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
         } catch (\Throwable $e) {
             $this->fail($log, $e->getMessage());
-            throw $e;
-        }
-    }
-
-    // ── Cerrar turnos abiertos de días anteriores y reintentar ────
-
-    private function closeOpenShiftsAndRetry(
-        AttendanceLog $log,
-        FactorialEmployee $employee,
-        FactorialService $service,
-        array $payload,
-        string $primaryError
-    ): void {
-        try {
-            $today = $log->occurred_at->format('Y-m-d');
-
-            // Buscar turnos abiertos (sin clock_out) de días anteriores
-            $allShifts = $service->getShifts([
-                'employee_ids' => [$employee->factorial_id],
-            ]);
-
-            $openPrevious = collect($allShifts)->filter(
-                fn($s) => $s['clock_out'] === null
-                       && (int) $s['employee_id'] === $employee->factorial_id
-                       && ($s['date'] ?? '') < $today
-            );
-
-            if ($openPrevious->isEmpty()) {
-                $this->fail($log, "No se encontraron turnos abiertos anteriores para cerrar. Error original: {$primaryError}");
-                return;
-            }
-
-            // Cerrar cada turno abierto con 23:59:00 de su día
-            foreach ($openPrevious as $shift) {
-                $service->updateShift($shift['id'], ['clock_out' => '23:59:00']);
-
-                Log::info('SyncAttendanceToFactorial: turno anterior cerrado a 23:59', [
-                    'attendance_log_id'  => $log->id,
-                    'factorial_shift_id' => $shift['id'],
-                    'shift_date'         => $shift['date'],
-                ]);
-            }
-
-            // Reintentar el clock_in original
-            $response = $service->clockIn($payload);
-            $this->markSynced($log, $response['id'] ?? null, 'close-and-retry');
-
-        } catch (RequestException $e) {
-            $body    = $e->response->json() ?? [];
-            $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
-            $this->fail($log, "close-and-retry falló — {$message}. Error original: {$primaryError}");
-            throw $e;
-        } catch (\Throwable $e) {
-            $this->fail($log, "close-and-retry excepción — {$e->getMessage()}. Error original: {$primaryError}");
             throw $e;
         }
     }

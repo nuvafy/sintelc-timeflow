@@ -299,11 +299,14 @@ class IclockController extends Controller
             );
 
             if (!empty($resolvedCodes)) {
-                // Recuperar los IDs recién insertados filtrando por created_at
-                // (no occurred_at, ya que el dispositivo puede enviar registros acumulados offline)
+                // Recuperar los IDs recién insertados, ordenados cronológicamente.
+                // Al ordenar por occurred_at ASC garantizamos que los registros
+                // acumulados offline se envían a Factorial de más antiguo a más
+                // reciente: check_out de ayer antes que check_in de hoy.
                 $insertedIds = AttendanceLog::where('biometric_source_id', $source->id)
                     ->whereIn('employee_code', $resolvedCodes)
                     ->where('created_at', '>=', now()->subMinutes(2))
+                    ->orderBy('occurred_at')
                     ->pluck('id');
 
                 $delay = 0;

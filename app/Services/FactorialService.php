@@ -176,25 +176,54 @@ class FactorialService
         // Construimos el query string como string y lo pasamos como opción 'query' a Guzzle.
         // Guzzle, al recibir un string, lo procesa con withQuery() que codifica [] a %5B%5D.
         // Si pasamos la URL ya construida, Guzzle puede double-encodear los %5B%5D a %255B%255D.
-        $parts = [];
-
-        foreach ($query as $key => $value) {
-            if (is_array($value)) {
-                foreach ($value as $item) {
-                    $parts[] = rawurlencode($key) . '[]=' . rawurlencode((string) $item);
+        $buildQuery = function (array $q) {
+            $parts = [];
+            foreach ($q as $key => $value) {
+                if (is_array($value)) {
+                    foreach ($value as $item) {
+                        $parts[] = rawurlencode($key) . '[]=' . rawurlencode((string) $item);
+                    }
+                } else {
+                    $parts[] = rawurlencode($key) . '=' . rawurlencode((string) $value);
                 }
-            } else {
-                $parts[] = rawurlencode($key) . '=' . rawurlencode((string) $value);
             }
-        }
+            return implode('&', $parts);
+        };
 
-        $response = $this->request(
-            'get',
-            '/api/2026-04-01/resources/attendance/shifts',
-            ['query' => implode('&', $parts)]
-        )->json();
+        $allShifts = [];
+        $offset    = 0;
+        $limit     = 100;
+        $pageNum   = 0;
+        $total     = null;
 
-        return $response['data'] ?? $response;
+        do {
+            $pageNum++;
+            $pagedQuery = array_merge($query, ['offset' => $offset, 'limit' => $limit]);
+
+            $response = $this->request(
+                'get',
+                '/api/2026-04-01/resources/attendance/shifts',
+                ['query' => $buildQuery($pagedQuery)]
+            )->json();
+
+            $page  = $response['data'] ?? $response;
+            $meta  = $response['meta'] ?? [];
+
+            if ($total === null) {
+                $total = $meta['total_count'] ?? $meta['total'] ?? $meta['count'] ?? null;
+            }
+
+            if (empty($page) || !is_array($page)) break;
+
+            $allShifts = array_merge($allShifts, $page);
+            $offset   += $limit;
+
+            if ($total !== null && count($allShifts) >= (int) $total) break;
+            if ($pageNum >= 20) break; // cap: 2000 turnos máximo
+
+        } while (count($page) === $limit);
+
+        return $allShifts;
     }
 
     public function clockIn(array $payload): array

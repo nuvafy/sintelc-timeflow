@@ -19,13 +19,13 @@ Route::view('devices', 'devices')
     ->middleware(['auth'])
     ->name('devices');
 
-Route::view('connections', 'connections')
-    ->middleware(['auth'])
-    ->name('connections');
-
 Route::view('clients', 'clients')
     ->middleware(['auth'])
     ->name('clients');
+
+Route::get('clients/{client}/connections', fn(Client $client) => view('clients.connections', compact('client')))
+    ->middleware(['auth', 'verified'])
+    ->name('clients.connections');
 
 Route::get('clients/{client}/records', fn(Client $client) => view('clients.records', compact('client')))
     ->middleware(['auth', 'verified'])

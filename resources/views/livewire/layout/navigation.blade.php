@@ -47,7 +47,7 @@ new class extends Component
                     <!-- Empresas Dropdown -->
                     <div class="relative" x-data="{ open: false }" @click.outside="open = false" @close.stop="open = false">
                         <div @click="open = ! open" class="h-full flex items-center">
-                            <button class="inline-flex items-center gap-1 px-1 pt-1 border-b-2 h-full text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none {{ request()->routeIs('clients', 'clients.*', 'connections', 'employees') ? 'border-indigo-400 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                            <button class="inline-flex items-center gap-1 px-1 pt-1 border-b-2 h-full text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none {{ request()->routeIs('clients', 'clients.*', 'employees') ? 'border-indigo-400 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                                 Empresas
                                 <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -68,9 +68,6 @@ new class extends Component
                             <div class="rounded-md ring-1 ring-black ring-opacity-5 py-1 bg-white">
                                 <x-dropdown-link href="{{ route('clients') }}" wire:navigate>
                                     Empresas
-                                </x-dropdown-link>
-                                <x-dropdown-link href="{{ route('connections') }}" wire:navigate>
-                                    Conexiones
                                 </x-dropdown-link>
                                 <x-dropdown-link href="{{ route('employees') }}" wire:navigate>
                                     <span class="flex items-center justify-between gap-2">
@@ -145,11 +142,8 @@ new class extends Component
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('clients')" :active="request()->routeIs('clients')" wire:navigate>
+            <x-responsive-nav-link :href="route('clients')" :active="request()->routeIs('clients', 'clients.*')" wire:navigate>
                 Empresas
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('connections')" :active="request()->routeIs('connections')" wire:navigate>
-                &nbsp;&nbsp;↳ Conexiones
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
                 &nbsp;&nbsp;↳ Empleados

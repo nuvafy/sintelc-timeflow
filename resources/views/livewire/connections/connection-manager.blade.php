@@ -18,17 +18,14 @@ new class extends Component {
     public array $syncPending  = [];
     public array $syncProgress = [];
 
-    public string $name      = '';
-    public ?int   $client_id = null;
+    public string $name           = '';
+    public ?int   $client_id      = null;
+    public ?int   $clientFilterId = null;   // cuando se accede desde /clients/{client}/connections
 
     public function mount(): void
     {
-        $clientId = request('client_id');
-        if ($clientId) {
-            $this->client_id = (int) $clientId;
-            $this->suggestName();
-            $this->editing   = false;
-            $this->showModal = true;
+        if ($this->clientFilterId) {
+            $this->client_id = $this->clientFilterId;
         }
     }
 
@@ -42,9 +39,15 @@ new class extends Component {
 
     public function with(): array
     {
+        $connectionsQuery = FactorialConnection::with('client');
+        if ($this->clientFilterId) {
+            $connectionsQuery->where('client_id', $this->clientFilterId);
+        }
+
         return [
-            'connections' => FactorialConnection::with('client')->get(),
-            'clients'     => Client::orderBy('name')->get(),
+            'connections'    => $connectionsQuery->get(),
+            'clients'        => Client::orderBy('name')->get(),
+            'filteredClient' => $this->clientFilterId ? Client::find($this->clientFilterId) : null,
         ];
     }
 
@@ -160,7 +163,12 @@ new class extends Component {
 <div>
     {{-- Header --}}
     <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-semibold text-gray-800">Conexiones Factorial</h2>
+        <h2 class="text-xl font-semibold text-gray-800">
+            Conexiones Factorial
+            @if($filteredClient)
+                <span class="ml-2 text-base font-normal text-gray-500">— {{ $filteredClient->name }}</span>
+            @endif
+        </h2>
         <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
             <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -287,7 +295,7 @@ new class extends Component {
                 {{-- Empresa --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Empresa</label>
-                    @if($editing)
+                    @if($editing || $clientFilterId)
                         <p class="mt-1 block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
                             {{ $clients->find($client_id)?->name ?? '—' }}
                         </p>

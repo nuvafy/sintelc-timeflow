@@ -16,15 +16,17 @@ new class extends Component {
     public ?int    $client_id = null;
     public string  $search    = '';
     public string  $tab         = 'biometric'; // 'biometric' | 'factorial' | 'mapping' | 'unresolved'
-    public string  $scoreFilter = 'all';       // 'all' | 'perfect' | 'good' | 'low'
+    public string  $scoreFilter  = 'all';       // 'all' | 'perfect' | 'good' | 'low'
+    public string  $statusFilter = 'all';       // 'all' | 'mapped' | 'unmapped' (biometric/factorial tabs)
     public array   $selected    = [];          // PINs seleccionados para mapear
     public array   $assignments = [];          // PIN => factorial_employee_id (pendiente de guardar)
     public ?string $mapMessage  = null;        // Resultado del último mapeo
 
     public function updatedSearch(): void      { $this->resetPage(); }
-    public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; }
-    public function updatedTab(): void         { $this->resetPage(); $this->selected = []; }
+    public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; }
+    public function updatedTab(): void         { $this->resetPage(); $this->selected = []; $this->statusFilter = 'all'; }
     public function updatedScoreFilter(): void { $this->resetPage(); }
+    public function updatedStatusFilter(): void { $this->resetPage(); }
 
     public function setSelectAll(array $pins, bool $checked): void
     {
@@ -292,6 +294,13 @@ new class extends Component {
                 ->distinct('employee_code')
                 ->count('employee_code');
 
+            // Filtro por estado
+            if ($this->statusFilter === 'mapped') {
+                $biometricUsers = $biometricUsers->filter(fn($u) => $u['mapped']);
+            } elseif ($this->statusFilter === 'unmapped') {
+                $biometricUsers = $biometricUsers->filter(fn($u) => !$u['mapped']);
+            }
+
             // Paginación manual sobre la colección in-memory
             $perPage   = 20;
             $page      = $this->getPage();
@@ -392,6 +401,12 @@ new class extends Component {
             ->pluck('external_employee_code', 'factorial_employee_id');
 
         $mappedEmployeeIds = $biometricIds->flip();
+
+        if ($this->statusFilter === 'mapped') {
+            $query->whereIn('id', $mappedEmployeeIds->keys()->all());
+        } elseif ($this->statusFilter === 'unmapped') {
+            $query->whereNotIn('id', $mappedEmployeeIds->keys()->all());
+        }
 
         return [
             'unmappedUsers'     => collect(),
@@ -515,6 +530,20 @@ new class extends Component {
     @if($tab === 'biometric')
 
     <div class="bg-white shadow rounded-lg overflow-hidden">
+        {{-- Pills biométrico --}}
+        <div class="px-6 py-3 border-b border-gray-100 flex items-center gap-2">
+            <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
+            @foreach(['all' => 'Todos', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'] as $val => $label)
+            <button
+                wire:click="$set('statusFilter', '{{ $val }}')"
+                class="px-3 py-1 rounded-full text-xs font-medium transition-colors
+                    {{ $statusFilter === $val
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                {{ $label }}
+            </button>
+            @endforeach
+        </div>
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
@@ -693,6 +722,20 @@ new class extends Component {
     {{-- TAB: Empleados Factorial --}}
     @if($tab === 'factorial')
     <div class="bg-white shadow rounded-lg overflow-hidden">
+        {{-- Pills Factorial --}}
+        <div class="px-6 py-3 border-b border-gray-100 flex items-center gap-2">
+            <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
+            @foreach(['all' => 'Todos', 'mapped' => 'Con PIN', 'unmapped' => 'Sin PIN'] as $val => $label)
+            <button
+                wire:click="$set('statusFilter', '{{ $val }}')"
+                class="px-3 py-1 rounded-full text-xs font-medium transition-colors
+                    {{ $statusFilter === $val
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                {{ $label }}
+            </button>
+            @endforeach
+        </div>
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>

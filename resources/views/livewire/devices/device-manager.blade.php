@@ -63,9 +63,9 @@ new class extends Component {
             'devices'            => BiometricSource::with(['client', 'location'])
                 ->whereNotNull('client_id')
                 ->withCount('attendanceLogs')
-                ->when($this->statusFilter === 'online',   fn($q) => $q->where('status', 'active')->where('last_ping_at', '>=', now()->subHours(24)))
-                ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subDays(7), now()->subHours(24)]))
-                ->when($this->statusFilter === 'offline',  fn($q) => $q->where('status', 'active')->where(fn($q2) => $q2->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subDays(7))))
+                ->when($this->statusFilter === 'online',   fn($q) => $q->where('status', 'active')->where('last_ping_at', '>=', now()->subMinutes(15)))
+                ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subHour(), now()->subMinutes(15)]))
+                ->when($this->statusFilter === 'offline',  fn($q) => $q->where('status', 'active')->where(fn($q2) => $q2->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subHour())))
                 ->when($this->statusFilter === 'inactive', fn($q) => $q->where('status', 'inactive'))
                 ->when($this->clientFilter,                fn($q) => $q->where('client_id', $this->clientFilter))
                 ->paginate(10),
@@ -395,11 +395,11 @@ new class extends Component {
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-400">
                                 Sin señal
                             </span>
-                        @elseif($device->last_ping_at->gt(now()->subHours(24)))
+                        @elseif($device->last_ping_at->gt(now()->subMinutes(15)))
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-700">
                                 En línea
                             </span>
-                        @elseif($device->last_ping_at->gt(now()->subDays(7)))
+                        @elseif($device->last_ping_at->gt(now()->subHour()))
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-700">
                                 Reciente
                             </span>

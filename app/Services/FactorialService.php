@@ -140,24 +140,11 @@ class FactorialService
             'limit'         => 100,
         ];
 
-        $merged = array_merge($defaultQuery, $query);
-
-        Log::debug('FactorialService::getEmployees request', ['query' => $merged]);
-
-        $response = $this->request(
+        return $this->request(
             'get',
             '/api/2026-04-01/resources/employees/employees',
-            ['query' => $merged]
+            ['query' => array_merge($defaultQuery, $query)]
         )->json();
-
-        Log::debug('FactorialService::getEmployees response meta', [
-            'meta'       => $response['meta'] ?? null,
-            'data_count' => count($response['data'] ?? []),
-            'first_id'   => $response['data'][0]['id'] ?? null,
-            'last_id'    => $response['data'][array_key_last($response['data'] ?? [])] ?? null,
-        ]);
-
-        return $response;
     }
 
     public function getCompany(): array

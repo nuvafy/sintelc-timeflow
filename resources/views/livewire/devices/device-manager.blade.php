@@ -323,9 +323,10 @@ new class extends Component {
     @endif
 
     {{-- ── Header equipos registrados ───────────────────────────────── --}}
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 class="text-xl font-semibold text-gray-800">Dispositivos biométricos</h2>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+            {{-- Filtro empresa --}}
             <select wire:model.live="clientFilter"
                 class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todas las empresas</option>
@@ -333,14 +334,17 @@ new class extends Component {
                     <option value="{{ $c->id }}">{{ mb_substr(ucwords(mb_strtolower($c->name)), 0, 30) }}</option>
                 @endforeach
             </select>
-            <select wire:model.live="statusFilter"
-                class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="">Todos los estados</option>
-                <option value="online">En línea</option>
-                <option value="recent">Reciente</option>
-                <option value="offline">Sin señal</option>
-                <option value="inactive">Deshabilitado</option>
-            </select>
+            {{-- Pills estado --}}
+            @foreach(['' => 'Todos', 'online' => 'En línea', 'recent' => 'Reciente', 'offline' => 'Sin señal', 'inactive' => 'Inactivo'] as $val => $label)
+            <button
+                wire:click="$set('statusFilter', '{{ $val }}')"
+                class="px-3 py-1 rounded-full text-xs font-medium transition-colors
+                    {{ $statusFilter === $val
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                {{ $label }}
+            </button>
+            @endforeach
             <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
                 <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>

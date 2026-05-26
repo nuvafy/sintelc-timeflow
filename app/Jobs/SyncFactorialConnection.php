@@ -38,20 +38,24 @@ class SyncFactorialConnection implements ShouldQueue
         try {
             $service = new FactorialService($connection);
 
-            // ── Empleados con paginación ──────────────────────────────
+            // ── Empleados con paginación cursor-based ─────────────────
             $allEmployees = [];
-            $offset       = 0;
             $limit        = 100;
             $pageNum      = 0;
             $total        = null;
-
-            $seenIds = [];
+            $cursor       = null;
+            $seenIds      = [];
 
             do {
                 $pageNum++;
                 $this->storeResult(['ok' => null, 'progress' => "Página {$pageNum} · " . count($allEmployees) . " empleados descargados…"]);
 
-                $response = $service->getEmployees(['limit' => $limit]);
+                $params = ['limit' => $limit];
+                if ($cursor) {
+                    $params['cursor'] = $cursor;
+                }
+
+                $response = $service->getEmployees($params);
                 $page     = $response['data'] ?? [];
                 $meta     = $response['meta'] ?? [];
 
@@ -62,23 +66,32 @@ class SyncFactorialConnection implements ShouldQueue
                     $total = (int) ($meta['total'] ?? 0);
                 }
 
-                // Dedup: parar si todos los IDs de esta página ya los vimos
+                // Dedup: parar si todos los IDs de esta página ya los vimos (safety net)
                 $newIds  = array_column($page, 'id');
                 $overlap = array_intersect($newIds, $seenIds);
-                if (count($overlap) === count($newIds)) break;
+                if (count($overlap) === count($newIds)) {
+                    Log::warning('SyncFactorialConnection: dedup break (API devolvió IDs repetidos)', [
+                        'connection_id' => $this->connectionId,
+                        'pageNum'       => $pageNum,
+                        'cursor'        => $cursor,
+                    ]);
+                    break;
+                }
 
-                // Solo agregar los IDs nuevos
-                $newEntries = array_filter($page, fn($e) => !in_array($e['id'], $seenIds));
-                $allEmployees = array_merge($allEmployees, array_values($newEntries));
-                $seenIds = array_merge($seenIds, $newIds);
+                $allEmployees = array_merge($allEmployees, $page);
+                $seenIds      = array_merge($seenIds, $newIds);
+
+                // Avanzar cursor
+                $hasNext = (bool) ($meta['has_next_page'] ?? false);
+                $cursor  = $meta['end_cursor'] ?? null;
 
                 // Parar si ya tenemos el total según meta
                 if ($total > 0 && count($allEmployees) >= $total) break;
 
-                // Cap duro: máximo 10 páginas (1000 empleados)
-                if ($pageNum >= 10) break;
+                // Cap duro: máximo 20 páginas (2000 empleados)
+                if ($pageNum >= 20) break;
 
-            } while (count($page) === $limit);
+            } while ($hasNext && $cursor);
 
             $empCount = 0;
             $now      = now()->toDateTimeString();

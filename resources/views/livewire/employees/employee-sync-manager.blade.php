@@ -63,14 +63,15 @@ new class extends Component {
 
         $now = now()->toDateTimeString();
 
-        // 1. Bulk upsert BiometricUserSync — 1 sola query
+        // 1. Bulk upsert BiometricUserSync usando el unique constraint real
+        //    Unique: (biometric_provider_id, factorial_employee_id)
         $syncRows = [];
         foreach ($toMap as $pin => $employeeId) {
             $syncRows[] = [
                 'biometric_provider_id'  => $provider->id,
+                'factorial_employee_id'  => $employeeId,
                 'external_employee_code' => $pin,
                 'client_id'              => $this->client_id,
-                'factorial_employee_id'  => $employeeId,
                 'sync_status'            => 'pending',
                 'last_attempt_at'        => $now,
                 'created_at'             => $now,
@@ -79,8 +80,8 @@ new class extends Component {
         }
         BiometricUserSync::upsert(
             $syncRows,
-            ['biometric_provider_id', 'external_employee_code'],
-            ['client_id', 'factorial_employee_id', 'sync_status', 'last_attempt_at', 'updated_at']
+            ['biometric_provider_id', 'factorial_employee_id'],
+            ['external_employee_code', 'client_id', 'sync_status', 'last_attempt_at', 'updated_at']
         );
 
         // 2. Actualizar attendance_logs — 1 query por pin (todos simples y rápidos)

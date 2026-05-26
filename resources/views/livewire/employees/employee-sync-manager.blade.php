@@ -502,7 +502,7 @@ new class extends Component {
                     <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
                     @foreach([
                         ['all',     'Todos',  'bg-gray-100 text-gray-700 hover:bg-gray-200'],
-                        ['perfect', '100%',   'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'],
+                        ['perfect', '100%',   'bg-emerald-200 text-emerald-800 hover:bg-emerald-300'],
                         ['good',    '70–99%', 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'],
                         ['low',     '< 70%',  'bg-red-100 text-red-600 hover:bg-red-200'],
                     ] as [$val, $label, $cls])

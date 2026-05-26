@@ -45,31 +45,40 @@ class SyncFactorialConnection implements ShouldQueue
             $pageNum      = 0;
             $total        = null;
 
-            $cursor  = null;
+            $seenIds = [];
 
             do {
                 $pageNum++;
                 $this->storeResult(['ok' => null, 'progress' => "Página {$pageNum} · " . count($allEmployees) . " empleados descargados…"]);
 
-                $params   = ['limit' => $limit];
-                if ($cursor) $params['after'] = $cursor;
-
-                $response = $service->getEmployees($params);
+                $response = $service->getEmployees(['limit' => $limit]);
                 $page     = $response['data'] ?? [];
                 $meta     = $response['meta'] ?? [];
 
                 if (empty($page)) break;
 
-                $allEmployees = array_merge($allEmployees, $page);
+                // Obtener total en primera página
+                if ($pageNum === 1) {
+                    $total = (int) ($meta['total'] ?? 0);
+                }
 
-                // Cursor-based pagination
-                $hasNext = $meta['has_next_page'] ?? false;
-                $cursor  = $meta['end_cursor'] ?? null;
+                // Dedup: parar si todos los IDs de esta página ya los vimos
+                $newIds  = array_column($page, 'id');
+                $overlap = array_intersect($newIds, $seenIds);
+                if (count($overlap) === count($newIds)) break;
 
-                // Seguridad: máximo 50 páginas
-                if ($pageNum >= 50) break;
+                // Solo agregar los IDs nuevos
+                $newEntries = array_filter($page, fn($e) => !in_array($e['id'], $seenIds));
+                $allEmployees = array_merge($allEmployees, array_values($newEntries));
+                $seenIds = array_merge($seenIds, $newIds);
 
-            } while ($hasNext && $cursor);
+                // Parar si ya tenemos el total según meta
+                if ($total > 0 && count($allEmployees) >= $total) break;
+
+                // Cap duro: máximo 10 páginas (1000 empleados)
+                if ($pageNum >= 10) break;
+
+            } while (count($page) === $limit);
 
             $empCount = 0;
             $now      = now()->toDateTimeString();

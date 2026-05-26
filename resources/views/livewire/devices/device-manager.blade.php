@@ -322,10 +322,9 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Header equipos registrados ───────────────────────────────── --}}
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <h2 class="text-xl font-semibold text-gray-800">Dispositivos biométricos</h2>
-        <div class="flex items-center gap-3">
+    {{-- ── Tarjeta filtros ─────────────────────────────────────────── --}}
+    <div class="bg-white shadow rounded-lg px-6 py-4 mb-4">
+        <div class="flex items-center justify-between gap-3">
             <select wire:model.live="clientFilter"
                 class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todas las empresas</option>
@@ -340,24 +339,26 @@ new class extends Component {
                 Nuevo dispositivo
             </button>
         </div>
+        <div class="border-t border-gray-100 mt-4 pt-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
+                @foreach(['' => 'Todos', 'online' => 'En línea', 'recent' => 'Reciente', 'offline' => 'Sin señal', 'inactive' => 'Inactivo'] as $val => $label)
+                <button
+                    wire:click="$set('statusFilter', '{{ $val }}')"
+                    class="px-3 py-1 rounded-full text-xs font-medium transition-colors
+                        {{ $statusFilter === $val
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                    {{ $label }}
+                </button>
+                @endforeach
+            </div>
+            <span class="text-xs text-gray-400">{{ $devices->total() }} dispositivo(s)</span>
+        </div>
     </div>
 
-    {{-- ── Tabla dispositivos registrados ───────────────────────────── --}}
+    {{-- ── Tabla resultados ────────────────────────────────────────── --}}
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        {{-- Pills estado --}}
-        <div class="px-6 py-3 border-b border-gray-100 flex items-center gap-2">
-            <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
-            @foreach(['' => 'Todos', 'online' => 'En línea', 'recent' => 'Reciente', 'offline' => 'Sin señal', 'inactive' => 'Inactivo'] as $val => $label)
-            <button
-                wire:click="$set('statusFilter', '{{ $val }}')"
-                class="px-3 py-1 rounded-full text-xs font-medium transition-colors
-                    {{ $statusFilter === $val
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
-                {{ $label }}
-            </button>
-            @endforeach
-        </div>
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>

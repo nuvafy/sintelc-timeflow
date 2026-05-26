@@ -405,29 +405,108 @@ new class extends Component {
 }; ?>
 
 <div>
-    {{-- Selector de empresa --}}
-    <div class="flex flex-col sm:flex-row gap-3 mb-4">
+    {{-- ── Tarjeta filtros ──────────────────────────────────────────── --}}
+    <div class="bg-white shadow rounded-lg px-6 py-4 mb-4">
+
+        {{-- Fila 1: empresa + búsqueda --}}
+        <div class="flex gap-3">
+            <div class="{{ $client_id ? 'w-56' : 'w-full sm:w-72' }} shrink-0">
+                <select wire:model.live="client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">— Selecciona una empresa —</option>
+                    @foreach($clients as $client)
+                        <option value="{{ $client->id }}">{{ $client->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            @if($client_id)
+            <div class="flex-1">
+                <input
+                    wire:model.live.debounce.300ms="search"
+                    type="text"
+                    placeholder="Buscar por nombre, email o PIN..."
+                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+            </div>
+            @endif
+        </div>
+
         @if($client_id)
-        <div class="flex-1">
-            <input
-                wire:model.live.debounce.300ms="search"
-                type="text"
-                placeholder="Buscar por nombre, email o PIN..."
-                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
-            />
+        {{-- Tabs --}}
+        <div class="border-t border-gray-100 mt-4 -mb-px">
+            <nav class="flex gap-6">
+                <button wire:click="$set('tab', 'biometric')"
+                    class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'biometric' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                    Empleados en Biométrico
+                </button>
+                <button wire:click="$set('tab', 'factorial')"
+                    class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                    Empleados en Factorial
+                </button>
+                <button wire:click="$set('tab', 'mapping')"
+                    class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'mapping' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                    Mapping
+                </button>
+            </nav>
+        </div>
+
+        {{-- Pills + count / acciones --}}
+        <div class="border-t border-gray-100 pt-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
+                @if($tab === 'mapping')
+                    @foreach([
+                        ['all',     'Todos',  'bg-gray-100 text-gray-700 hover:bg-gray-200'],
+                        ['perfect', '100%',   'bg-emerald-200 text-emerald-800 hover:bg-emerald-300'],
+                        ['good',    '70–99%', 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'],
+                        ['low',     '< 70%',  'bg-red-100 text-red-600 hover:bg-red-200'],
+                    ] as [$val, $label, $cls])
+                    <button wire:click="$set('scoreFilter', '{{ $val }}')"
+                        class="text-xs font-medium px-3 py-1 rounded-full transition {{ $scoreFilter === $val ? 'ring-2 ring-offset-1 ring-gray-400 ' : '' }}{{ $cls }}">
+                        {{ $label }}
+                    </button>
+                    @endforeach
+                @else
+                    @php
+                        $pillOptions = $tab === 'factorial'
+                            ? ['all' => 'Todos', 'mapped' => 'Con PIN', 'unmapped' => 'Sin PIN']
+                            : ['all' => 'Todos', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'];
+                    @endphp
+                    @foreach($pillOptions as $val => $label)
+                    <button wire:click="$set('statusFilter', '{{ $val }}')"
+                        class="px-3 py-1 rounded-full text-xs font-medium transition-colors
+                            {{ $statusFilter === $val ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        {{ $label }}
+                    </button>
+                    @endforeach
+                @endif
+            </div>
+            <div class="flex items-center gap-3">
+                @if($tab === 'mapping')
+                    @if($mapMessage)
+                    <span class="text-xs {{ str_contains($mapMessage, '⚠') ? 'text-amber-600' : 'text-emerald-600' }} font-medium">{{ $mapMessage }}</span>
+                    @endif
+                    @if(count($selected) > 0)
+                    <button wire:click="mapSelected" wire:loading.attr="disabled"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded transition disabled:opacity-50">
+                        <span wire:loading.remove wire:target="mapSelected">✓ Mapear {{ count($selected) }} seleccionado(s)</span>
+                        <span wire:loading wire:target="mapSelected">Guardando…</span>
+                    </button>
+                    @else
+                    <span class="text-xs text-gray-400">
+                        {{ $unmappedUsers->count() }}{{ $unmappedUsers->count() !== $totalUnmapped ? ' de ' . $totalUnmapped : '' }} pendiente(s)
+                    </span>
+                    @endif
+                @elseif($tab === 'biometric')
+                    <span class="text-xs text-gray-400">{{ $biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator ? $biometricUsers->total() : $biometricUsers->count() }} usuario(s)</span>
+                @elseif($tab === 'factorial')
+                    <span class="text-xs text-gray-400">{{ $employees instanceof \Illuminate\Pagination\LengthAwarePaginator ? $employees->total() : $employees->count() }} empleado(s)</span>
+                @endif
+            </div>
         </div>
         @endif
-        <div class="{{ $client_id ? 'sm:w-56' : 'w-full sm:w-72' }}">
-            <select wire:model.live="client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="">— Selecciona una empresa —</option>
-                @foreach($clients as $client)
-                    <option value="{{ $client->id }}">{{ $client->name }}</option>
-                @endforeach
-            </select>
-        </div>
     </div>
 
-    {{-- Sin empresa seleccionada: prompt --}}
+    {{-- Sin empresa: prompt --}}
     @if(!$client_id)
     <div class="bg-white shadow rounded-lg">
         <div class="px-6 py-16 text-center">
@@ -440,45 +519,11 @@ new class extends Component {
     </div>
     @else
 
-    {{-- Tabs --}}
-    <div class="border-b border-gray-200 mb-4">
-        <nav class="-mb-px flex gap-6">
-            <button
-                wire:click="$set('tab', 'biometric')"
-                class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'biometric' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                Empleados en Biométrico
-            </button>
-            <button
-                wire:click="$set('tab', 'factorial')"
-                class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                Empleados en Factorial
-            </button>
-            <button
-                wire:click="$set('tab', 'mapping')"
-                class="pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 {{ $tab === 'mapping' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                Mapping
-            </button>
-        </nav>
-    </div>
+    {{-- ── Resultados ───────────────────────────────────────────────── --}}
 
     {{-- TAB: Empleados en Biométrico --}}
     @if($tab === 'biometric')
-
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        {{-- Pills biométrico --}}
-        <div class="px-6 py-3 border-b border-gray-100 flex items-center gap-2">
-            <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
-            @foreach(['all' => 'Todos', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'] as $val => $label)
-            <button
-                wire:click="$set('statusFilter', '{{ $val }}')"
-                class="px-3 py-1 rounded-full text-xs font-medium transition-colors
-                    {{ $statusFilter === $val
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
-                {{ $label }}
-            </button>
-            @endforeach
-        </div>
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
@@ -541,44 +586,6 @@ new class extends Component {
                 <p class="mt-1 text-xs text-gray-400">Importa el CSV desde <strong>Dispositivos</strong> si hay usuarios nuevos.</p>
             </div>
         @else
-        <div class="px-6 py-3 border-b border-gray-100 space-y-2">
-            {{-- Filtros por porcentaje --}}
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
-                    @foreach([
-                        ['all',     'Todos',  'bg-gray-100 text-gray-700 hover:bg-gray-200'],
-                        ['perfect', '100%',   'bg-emerald-200 text-emerald-800 hover:bg-emerald-300'],
-                        ['good',    '70–99%', 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'],
-                        ['low',     '< 70%',  'bg-red-100 text-red-600 hover:bg-red-200'],
-                    ] as [$val, $label, $cls])
-                    <button
-                        wire:click="$set('scoreFilter', '{{ $val }}')"
-                        class="text-xs font-medium px-3 py-1 rounded-full transition {{ $scoreFilter === $val ? 'ring-2 ring-offset-1 ring-gray-400 ' : '' }}{{ $cls }}">
-                        {{ $label }}
-                    </button>
-                    @endforeach
-                    <span class="text-xs text-gray-400 ml-2">· {{ $unmappedUsers->count() }} pendiente(s) · {{ $employees->count() }} en Factorial</span>
-                </div>
-                {{-- Botón mapear seleccionados --}}
-                <div class="flex items-center gap-3">
-                @if($mapMessage)
-                <span class="text-xs {{ str_contains($mapMessage, '⚠') ? 'text-amber-600' : 'text-emerald-600' }} font-medium">
-                    {{ $mapMessage }}
-                </span>
-                @endif
-                @if(count($selected) > 0)
-                <button
-                    wire:click="mapSelected"
-                    wire:loading.attr="disabled"
-                    class="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded transition disabled:opacity-50">
-                    <span wire:loading.remove wire:target="mapSelected">✓ Mapear {{ count($selected) }} seleccionado(s)</span>
-                    <span wire:loading wire:target="mapSelected">Guardando…</span>
-                </button>
-                @endif
-                </div>
-            </div>
-        </div>
         <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 text-sm">
             <thead class="bg-gray-50">
@@ -657,20 +664,6 @@ new class extends Component {
     {{-- TAB: Empleados Factorial --}}
     @if($tab === 'factorial')
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        {{-- Pills Factorial --}}
-        <div class="px-6 py-3 border-b border-gray-100 flex items-center gap-2">
-            <span class="text-xs text-gray-400 mr-1">Filtrar:</span>
-            @foreach(['all' => 'Todos', 'mapped' => 'Con PIN', 'unmapped' => 'Sin PIN'] as $val => $label)
-            <button
-                wire:click="$set('statusFilter', '{{ $val }}')"
-                class="px-3 py-1 rounded-full text-xs font-medium transition-colors
-                    {{ $statusFilter === $val
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
-                {{ $label }}
-            </button>
-            @endforeach
-        </div>
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>

@@ -318,6 +318,45 @@ new class extends Component {
         </div>
     </div>
 
+    {{-- ── Equipos descubiertos (sin asignar) ───────────────────────── --}}
+    @if($unassigned->isNotEmpty())
+    <div class="mb-4 rounded-lg overflow-hidden border border-amber-300 shadow-sm">
+        <div class="px-5 py-3 bg-amber-400 flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-900 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <h3 class="text-sm font-semibold text-amber-900">Equipos descubiertos sin asignar ({{ $unassigned->count() }})</h3>
+        </div>
+        <table class="min-w-full divide-y divide-amber-200">
+            <thead class="bg-amber-100">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-amber-800 uppercase tracking-wider">Serial</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-amber-800 uppercase tracking-wider">Último ping</th>
+                    <th class="px-6 py-3 text-right text-xs font-semibold text-amber-800 uppercase tracking-wider">Acción</th>
+                </tr>
+            </thead>
+            <tbody class="bg-amber-50 divide-y divide-amber-200">
+                @foreach($unassigned as $device)
+                <tr class="hover:bg-amber-100 transition">
+                    <td class="px-6 py-3 text-sm font-mono font-medium text-amber-900">
+                        {{ $device->serial_number ?? '—' }}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-amber-700">
+                        {{ $device->last_ping_at?->diffForHumans() ?? 'Nunca' }}
+                    </td>
+                    <td class="px-6 py-3 text-right">
+                        <button wire:click="openAssign({{ $device->id }})"
+                            class="inline-flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-md hover:bg-amber-700 transition">
+                            Asignar empresa
+                        </button>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+    @endif
+
     {{-- ── Tabla resultados ────────────────────────────────────────── --}}
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
@@ -409,45 +448,6 @@ new class extends Component {
         </div>
         @endif
     </div>
-
-    {{-- ── Equipos descubiertos (sin asignar) ───────────────────────── --}}
-    @if($unassigned->isNotEmpty())
-    <div class="mt-6 rounded-lg overflow-hidden border border-amber-300 shadow-sm">
-        <div class="px-5 py-3 bg-amber-400 flex items-center gap-2">
-            <svg class="w-4 h-4 text-amber-900 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            </svg>
-            <h3 class="text-sm font-semibold text-amber-900">Equipos descubiertos sin asignar ({{ $unassigned->count() }})</h3>
-        </div>
-        <table class="min-w-full divide-y divide-amber-200">
-            <thead class="bg-amber-100">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-amber-800 uppercase tracking-wider">Serial</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-amber-800 uppercase tracking-wider">Último ping</th>
-                    <th class="px-6 py-3 text-right text-xs font-semibold text-amber-800 uppercase tracking-wider">Acción</th>
-                </tr>
-            </thead>
-            <tbody class="bg-amber-50 divide-y divide-amber-200">
-                @foreach($unassigned as $device)
-                <tr class="hover:bg-amber-100 transition">
-                    <td class="px-6 py-3 text-sm font-mono font-medium text-amber-900">
-                        {{ $device->serial_number ?? '—' }}
-                    </td>
-                    <td class="px-6 py-3 text-sm text-amber-700">
-                        {{ $device->last_ping_at?->diffForHumans() ?? 'Nunca' }}
-                    </td>
-                    <td class="px-6 py-3 text-right">
-                        <button wire:click="openAssign({{ $device->id }})"
-                            class="inline-flex items-center px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-md hover:bg-amber-700 transition">
-                            Asignar empresa
-                        </button>
-                    </td>
-                </tr>
-                @endforeach
-            </tbody>
-        </table>
-    </div>
-    @endif
 
     {{-- ── Modal: Crear / Editar dispositivo ────────────────────────── --}}
     @if($showModal)

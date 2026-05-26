@@ -63,26 +63,29 @@ new class extends Component {
 
         $now = now()->toDateTimeString();
 
-        // 1. Bulk upsert BiometricUserSync usando el unique constraint real
-        //    Unique: (biometric_provider_id, factorial_employee_id)
-        $syncRows = [];
+        // 1. updateOrCreate por pin — correcto con el unique (provider, employee)
         foreach ($toMap as $pin => $employeeId) {
-            $syncRows[] = [
-                'biometric_provider_id'  => $provider->id,
-                'factorial_employee_id'  => $employeeId,
-                'external_employee_code' => $pin,
-                'client_id'              => $this->client_id,
-                'sync_status'            => 'pending',
-                'last_attempt_at'        => $now,
-                'created_at'             => $now,
-                'updated_at'             => $now,
-            ];
+            try {
+                BiometricUserSync::updateOrCreate(
+                    [
+                        'biometric_provider_id' => $provider->id,
+                        'factorial_employee_id'  => $employeeId,
+                    ],
+                    [
+                        'external_employee_code' => $pin,
+                        'client_id'              => $this->client_id,
+                        'sync_status'            => 'pending',
+                        'last_attempt_at'        => $now,
+                    ]
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('mapSelected: error al guardar sync', [
+                    'pin'        => $pin,
+                    'employeeId' => $employeeId,
+                    'error'      => $e->getMessage(),
+                ]);
+            }
         }
-        BiometricUserSync::upsert(
-            $syncRows,
-            ['biometric_provider_id', 'factorial_employee_id'],
-            ['external_employee_code', 'client_id', 'sync_status', 'last_attempt_at', 'updated_at']
-        );
 
         // 2. Actualizar attendance_logs — 1 query por pin (todos simples y rápidos)
         foreach ($toMap as $pin => $employeeId) {
@@ -599,9 +602,10 @@ new class extends Component {
                         ? ($hasAssign ? 'bg-indigo-50' : 'bg-amber-50')
                         : 'hover:bg-gray-50';
                 @endphp
-                <tr class="{{ $rowBg }}">
+                <tr wire:key="maprow-{{ $row['pin'] }}" class="{{ $rowBg }}">
                     <td class="px-4 py-3">
                         <input type="checkbox"
+                            wire:key="cb-{{ $row['pin'] }}"
                             value="{{ $row['pin'] }}"
                             @checked($isSelected)
                             wire:change="@if($isSelected) setSelectAll(['{{ $row['pin'] }}'], false) @else setSelectAll(['{{ $row['pin'] }}'], true) @endif"

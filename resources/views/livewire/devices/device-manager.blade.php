@@ -616,7 +616,11 @@ new class extends Component {
                     @if($importError)
                         <p class="text-xs text-red-600">{{ $importError }}</p>
                     @endif
-                    <p class="text-xs text-gray-400">Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code></p>
+                    <p class="text-xs text-gray-400">
+                        Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>
+                        &nbsp;·&nbsp;
+                        <a href="/plantilla-empleados.csv" download class="text-emerald-600 hover:text-emerald-800 underline">Descargar plantilla</a>
+                    </p>
                 @endif
             </div>
 

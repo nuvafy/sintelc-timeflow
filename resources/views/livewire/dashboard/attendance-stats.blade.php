@@ -75,6 +75,7 @@ new class extends Component {
         Cache::forget('stats.failed_sync');
         Cache::forget('stats.pending_sync');
         $this->loadStats();
+        $this->dispatch('stats-refreshed');
     }
 
     public function retryFailed(): void
@@ -112,7 +113,7 @@ new class extends Component {
 <div class="grid grid-cols-2 gap-5">
 
     {{-- Card 1: Sincronización --}}
-    <div class="bg-white shadow rounded-lg p-5">
+    <div class="bg-white shadow rounded-lg p-5" wire:key="sync-card-{{ $syncedToday }}-{{ $pendingSync }}-{{ $failedSync }}">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Sincronización</p>
         <div class="flex items-center gap-8">
             @php $pct = $todayTotal > 0 ? round(($syncedToday / $todayTotal) * 100) : 0; @endphp

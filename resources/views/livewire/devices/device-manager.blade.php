@@ -619,7 +619,7 @@ new class extends Component {
                     <p class="text-xs text-gray-400">
                         Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>
                         &nbsp;·&nbsp;
-                        <a href="/plantilla-empleados.csv" download class="text-emerald-600 hover:text-emerald-800 underline">Descargar plantilla</a>
+                        <a href="{{ route('templates.empleados') }}" class="text-emerald-600 hover:text-emerald-800 underline">Descargar plantilla</a>
                     </p>
                 @endif
             </div>

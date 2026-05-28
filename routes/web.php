@@ -36,6 +36,15 @@ Route::view('employees', 'employees')
     ->middleware(['auth'])
     ->name('employees');
 
+Route::get('templates/empleados.csv', function () {
+    $bom  = "\xEF\xBB\xBF";
+    $rows = "pin,nombre\r\n1001,Tony Stark\r\n1002,Steve Rogers\r\n";
+    return response($bom . $rows, 200, [
+        'Content-Type'        => 'text/csv; charset=UTF-8',
+        'Content-Disposition' => 'attachment; filename="plantilla-empleados.csv"',
+    ]);
+})->middleware(['auth'])->name('templates.empleados');
+
 // Factorial OAuth
 Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect'])->name('oauth.factorial.redirect');
 Route::get('/oauth/factorial/callback', [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');

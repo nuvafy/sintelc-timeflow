@@ -78,6 +78,28 @@ new class extends Component {
         $this->dispatch('stats-refreshed');
     }
 
+    public function retryPending(): void
+    {
+        $delay = 0;
+
+        // Los que ya tienen employee mapeado → despachar directo
+        AttendanceLog::where('sync_status', 'pending')
+            ->whereNotNull('factorial_employee_id')
+            ->orderBy('occurred_at')
+            ->pluck('id')
+            ->each(function ($id) use (&$delay) {
+                AttendanceLog::where('id', $id)->update(['sync_status' => 'resolved']);
+                SyncAttendanceToFactorial::dispatch($id)->delay(now()->addSeconds($delay));
+                $delay += 2;
+            });
+
+        // Los sin mapeo + los resolved huérfanos → resolve-pending los toma
+        \Illuminate\Support\Facades\Artisan::call('attendance:resolve-pending');
+
+        Cache::forget('stats.pending_sync');
+        $this->loadStats();
+    }
+
     public function retryFailed(): void
     {
         $delay = 0;
@@ -155,12 +177,23 @@ new class extends Component {
                     </div>
                     <span class="text-sm font-semibold text-gray-900">{{ $syncedToday }}</span>
                 </div>
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
-                        <span class="text-sm text-gray-600">Pendientes</span>
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color:#eab308;"></span>
+                            <span class="text-sm text-gray-600">Pendientes</span>
+                        </div>
+                        <span class="text-sm font-semibold {{ $pendingSync > 0 ? 'text-amber-600' : 'text-gray-900' }}">{{ $pendingSync }}</span>
                     </div>
-                    <span class="text-sm font-semibold text-gray-900">{{ $pendingSync }}</span>
+                    @if($pendingSync > 0)
+                    <div class="flex items-center gap-3 mt-1 pl-5">
+                        <button wire:click="retryPending" wire:loading.attr="disabled"
+                            class="text-xs text-amber-500 hover:text-amber-700 disabled:opacity-40 transition">
+                            <span wire:loading.remove wire:target="retryPending">Reintentar</span>
+                            <span wire:loading wire:target="retryPending">...</span>
+                        </button>
+                    </div>
+                    @endif
                 </div>
                 <div>
                     <div class="flex items-center justify-between">

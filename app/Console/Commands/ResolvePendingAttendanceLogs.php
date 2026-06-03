@@ -22,16 +22,12 @@ class ResolvePendingAttendanceLogs extends Command
             return self::SUCCESS;
         }
 
+        // Pendientes sin mapeo → resolver y despachar
         $logs = AttendanceLog::whereNull('factorial_employee_id')
             ->whereIn('employee_code', $mappings->keys())
             ->where('sync_status', 'pending')
             ->orderBy('occurred_at')
             ->get(['id', 'employee_code']);
-
-        if ($logs->isEmpty()) {
-            $this->info('Sin logs pendientes para resolver.');
-            return self::SUCCESS;
-        }
 
         $delay    = 0;
         $resolved = 0;
@@ -50,7 +46,21 @@ class ResolvePendingAttendanceLogs extends Command
             $resolved++;
         }
 
-        $this->info("Resueltos y despachados: {$resolved} logs.");
+        // Resueltos huérfanos (job perdido por worker caído) → re-despachar
+        $stale = AttendanceLog::where('sync_status', 'resolved')
+            ->whereNotNull('factorial_employee_id')
+            ->where('updated_at', '<', now()->subMinutes(5))
+            ->orderBy('occurred_at')
+            ->pluck('id');
+
+        $requeued = 0;
+        foreach ($stale as $id) {
+            SyncAttendanceToFactorial::dispatch($id)->delay(now()->addSeconds($delay));
+            $delay += 2;
+            $requeued++;
+        }
+
+        $this->info("Resueltos y despachados: {$resolved} logs. Re-despachados huérfanos: {$requeued}.");
         return self::SUCCESS;
     }
 }

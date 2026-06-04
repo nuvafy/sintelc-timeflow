@@ -124,13 +124,17 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            // Regla: no sobreescribir turnos creados vía API/biométrico (in_source = null).
-            // null                → creado vía API/biométrico → NO tocar
+            // Regla: no sobreescribir turnos creados vía API/biométrico (in_source = null)
+            // EXCEPTO para operaciones de cierre (check_out, break_in) — el turno fue
+            // abierto por el biométrico y debe cerrarse aunque in_source sea null.
+            // null                → creado vía API/biométrico → NO tocar (salvo cierre)
             // desktop             → web de Factorial          → SÍ permitir
             // mobile              → app móvil Factorial       → SÍ permitir
             // mobile_geolocation  → app móvil con geoloc.     → SÍ permitir
-            $inSource = $openShift['in_source'] ?? null;
-            if ($inSource === null) {
+            $inSource      = $openShift['in_source'] ?? null;
+            $isCloseAction = in_array($log->check_type, ['check_out', 'break_in']);
+
+            if ($inSource === null && !$isCloseAction) {
                 $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico (in_source=null). Error original: {$primaryError}");
                 return;
             }
@@ -150,7 +154,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
             $service->updateShift($openShift['id'], $updatePayload);
 
-            $this->markSynced($log, $openShift['id'], "overwrite ({$inSource})");
+            $this->markSynced($log, $openShift['id'], "overwrite (" . ($inSource ?? 'api/biometric-close') . ")");
 
             Log::info('SyncAttendanceToFactorial: OK (overwrite)', [
                 'attendance_log_id'  => $log->id,

@@ -124,32 +124,24 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            // Regla: no sobreescribir turnos creados vía API/biométrico (in_source = null)
-            // EXCEPTO para operaciones de cierre (check_out, break_in) — el turno fue
-            // abierto por el biométrico y debe cerrarse aunque in_source sea null.
-            // null                → creado vía API/biométrico → NO tocar (salvo cierre)
+            // Regla: solo sobreescribir turnos creados desde Factorial web/app (in_source != null).
+            // null                → creado vía API/biométrico → NO tocar
             // desktop             → web de Factorial          → SÍ permitir
             // mobile              → app móvil Factorial       → SÍ permitir
             // mobile_geolocation  → app móvil con geoloc.     → SÍ permitir
-            $inSource      = $openShift['in_source'] ?? null;
-            $isCloseAction = in_array($log->check_type, ['check_out', 'break_in']);
-
-            // El overwrite solo aplica para acciones de cierre (check_out, break_in).
-            // Para apertura (check_in, break_out) no tiene sentido modificar un turno
-            // existente — podría generar clock_out < clock_in.
-            if (!$isCloseAction) {
-                $this->fail($log, "No se puede sobreescribir para acción de apertura. Error original: {$primaryError}");
-                return;
-            }
-
-            if ($inSource === null && !$isCloseAction) {
+            $inSource = $openShift['in_source'] ?? null;
+            if ($inSource === null) {
                 $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico (in_source=null). Error original: {$primaryError}");
                 return;
             }
 
             $time = $log->occurred_at->format('H:i:s');
 
-            $updatePayload = ['clock_out' => $time];
+            $updatePayload = match ($log->check_type) {
+                'check_in', 'break_out' => ['clock_in'  => $time],
+                'check_out', 'break_in' => ['clock_out' => $time],
+                default                 => null,
+            };
 
             if ($updatePayload === null) {
                 $this->fail($log, "check_type no soportado: {$log->check_type}");
@@ -158,7 +150,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
             $service->updateShift($openShift['id'], $updatePayload);
 
-            $this->markSynced($log, $openShift['id'], "overwrite (" . ($inSource ?? 'api/biometric-close') . ")");
+            $this->markSynced($log, $openShift['id'], "overwrite ({$inSource})");
 
             Log::info('SyncAttendanceToFactorial: OK (overwrite)', [
                 'attendance_log_id'  => $log->id,

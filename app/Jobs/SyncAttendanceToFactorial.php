@@ -134,6 +134,14 @@ class SyncAttendanceToFactorial implements ShouldQueue
             $inSource      = $openShift['in_source'] ?? null;
             $isCloseAction = in_array($log->check_type, ['check_out', 'break_in']);
 
+            // El overwrite solo aplica para acciones de cierre (check_out, break_in).
+            // Para apertura (check_in, break_out) no tiene sentido modificar un turno
+            // existente — podría generar clock_out < clock_in.
+            if (!$isCloseAction) {
+                $this->fail($log, "No se puede sobreescribir para acción de apertura. Error original: {$primaryError}");
+                return;
+            }
+
             if ($inSource === null && !$isCloseAction) {
                 $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico (in_source=null). Error original: {$primaryError}");
                 return;
@@ -141,11 +149,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
             $time = $log->occurred_at->format('H:i:s');
 
-            $updatePayload = match ($log->check_type) {
-                'check_in', 'break_out' => ['clock_in'  => $time],
-                'check_out', 'break_in' => ['clock_out' => $time],
-                default                 => null,
-            };
+            $updatePayload = ['clock_out' => $time];
 
             if ($updatePayload === null) {
                 $this->fail($log, "check_type no soportado: {$log->check_type}");

@@ -198,11 +198,12 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
         // Filtro defensivo: aunque la API devuelva más registros de los esperados,
         // solo aceptamos turnos del empleado correcto en la fecha exacta.
-        return collect($shifts)->first(
+        // Si hay varios abiertos, tomamos el de clock_in más temprano.
+        return collect($shifts)->filter(
             fn($s) => $s['clock_out'] === null
                    && (int) $s['employee_id'] === $factorialEmployeeId
                    && $s['date'] === $targetDate
-        );
+        )->sortBy('clock_in')->first();
     }
 
     private function markSynced(AttendanceLog $log, ?int $shiftId, string $note): void

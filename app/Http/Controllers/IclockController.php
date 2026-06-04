@@ -54,12 +54,12 @@ class IclockController extends Controller
             ->first();
 
         if (!$command) {
-            return $this->plainResponse('OK');
+            return $this->plainResponse($this->buildGetRequestResponse());
         }
 
         $command->update(['status' => 'sent', 'sent_at' => now()]);
 
-        $line = "C:{$command->command_seq}:{$command->payload}";
+        $line = $this->buildGetRequestResponse("C:{$command->command_seq}:{$command->payload}");
 
         return $this->plainResponse($line);
     }
@@ -323,6 +323,14 @@ class IclockController extends Controller
     }
 
     // ─── Private: Builders ───────────────────────────────────────────
+
+    private function buildGetRequestResponse(string $command = 'OK'): string
+    {
+        // Incluimos la hora local del servidor para que el dispositivo sincronice
+        // su reloj con la zona horaria correcta (evita desfase de 1h en Gen 2).
+        $date = now()->format('Y-m-d H:i:s');
+        return "{$command}\nDate={$date}";
+    }
 
     private function buildInitResponse(?string $sn): string
     {

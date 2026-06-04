@@ -326,16 +326,14 @@ class IclockController extends Controller
 
     private function buildGetRequestResponse(string $command = 'OK'): string
     {
-        // Incluimos la hora local del servidor para que el dispositivo sincronice
-        // su reloj con la zona horaria correcta (evita desfase de 1h en Gen 2).
-        $date = now()->format('Y-m-d H:i:s');
-        return "{$command}\nDate={$date}";
+        return $command;
     }
 
     private function buildInitResponse(?string $sn): string
     {
         return "GET OPTION FROM: {$sn}\n"
             . "Stamp=0\n"
+            . "TimeZone=-6\n"
             . "TransFlag=111111111111\n"
             . "PushProtVer=2.4.1\n";
     }

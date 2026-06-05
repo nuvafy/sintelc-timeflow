@@ -183,8 +183,8 @@ new class extends Component {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             @php
-                                $statusColors = ['pending'=>'bg-yellow-100 text-yellow-800','synced'=>'bg-green-100 text-green-800','failed'=>'bg-red-100 text-red-800','incomplete'=>'bg-gray-100 text-gray-600'];
-                                $statusLabels = ['pending'=>'Pendiente','synced'=>'Sincronizado','failed'=>'Fallido','incomplete'=>'Incompleto'];
+                                $statusColors = ['pending'=>'bg-yellow-100 text-yellow-800','resolved'=>'bg-blue-100 text-blue-800','synced'=>'bg-green-100 text-green-800','failed'=>'bg-red-100 text-red-800','incomplete'=>'bg-gray-100 text-gray-600'];
+                                $statusLabels = ['pending'=>'Pendiente','resolved'=>'En proceso','synced'=>'Sincronizado','failed'=>'Fallido','incomplete'=>'Incompleto'];
                             @endphp
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full cursor-default {{ $statusColors[$log->sync_status] ?? 'bg-gray-100 text-gray-800' }}"
                                 @if($log->sync_error) title="{{ $log->sync_error }}"

@@ -124,17 +124,15 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            $inSource      = $openShift['in_source'] ?? null;
-            $isCloseAction = in_array($log->check_type, ['check_out', 'break_in']);
-
-            // Para acciones de cierre (check_out, break_in): permitir overwrite aunque
-            // in_source=null, porque el turno fue abierto por nuestro clockIn y debemos
-            // poder cerrarlo.
-            // Para acciones de apertura (check_in, break_out): solo permitir si el turno
-            // fue creado por un humano desde Factorial (in_source != null), para evitar
-            // generar clock_out < clock_in en turnos ya cerrados.
-            if (!$isCloseAction && $inSource === null) {
-                $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico para acción de apertura. Error original: {$primaryError}");
+            // Overwrite solo si el turno fue creado por un humano desde Factorial (web/app).
+            // Si in_source=null fue creado por API/biométrico — no tocar.
+            // null                → creado vía API/biométrico → NO tocar
+            // desktop             → web de Factorial          → SÍ permitir
+            // mobile              → app móvil Factorial       → SÍ permitir
+            // mobile_geolocation  → app móvil con geoloc.     → SÍ permitir
+            $inSource = $openShift['in_source'] ?? null;
+            if ($inSource === null) {
+                $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico (in_source=null). Error original: {$primaryError}");
                 return;
             }
 
@@ -153,7 +151,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
             $service->updateShift($openShift['id'], $updatePayload);
 
-            $this->markSynced($log, $openShift['id'], "overwrite (" . ($inSource ?? 'api/biometric') . ")");
+            $this->markSynced($log, $openShift['id'], "overwrite ({$inSource})");
 
             Log::info('SyncAttendanceToFactorial: OK (overwrite)', [
                 'attendance_log_id'  => $log->id,

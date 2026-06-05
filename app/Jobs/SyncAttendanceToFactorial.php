@@ -86,7 +86,13 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            $this->markSynced($log, $response['id'] ?? null, 'directo');
+            $shiftId = $response['id'] ?? null;
+            if (!$shiftId) {
+                $this->fail($log, 'Factorial no devolvió ID de turno en la respuesta directa');
+                return;
+            }
+
+            $this->markSynced($log, $shiftId, 'directo');
 
         } catch (RequestException $e) {
             $body    = $e->response->json() ?? [];
@@ -149,9 +155,15 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            $service->updateShift($openShift['id'], $updatePayload);
+            $updated = $service->updateShift($openShift['id'], $updatePayload);
 
-            $this->markSynced($log, $openShift['id'], "overwrite ({$inSource})");
+            $confirmedId = $updated['id'] ?? null;
+            if (!$confirmedId) {
+                $this->fail($log, "Factorial no confirmó la actualización del turno {$openShift['id']}");
+                return;
+            }
+
+            $this->markSynced($log, $confirmedId, "overwrite ({$inSource})");
 
             Log::info('SyncAttendanceToFactorial: OK (overwrite)', [
                 'attendance_log_id'  => $log->id,

@@ -115,7 +115,7 @@ new class extends Component {
             {{-- Estado pills --}}
             <div class="flex items-center gap-2">
                 <span class="text-xs text-gray-400 mr-1">Estado:</span>
-                @foreach(['' => 'Todos', 'synced' => 'Sincronizado', 'pending' => 'Pendiente', 'failed' => 'Fallido', 'resolved' => 'Resuelto', 'descartado' => 'Descartado'] as $val => $label)
+                @foreach(['' => 'Todos', 'synced' => 'Sincronizado', 'pending' => 'Pendiente', 'resolved' => 'En proceso', 'failed' => 'Fallido', 'descartado' => 'Descartado'] as $val => $label)
                 <button wire:click="$set('statusFilter', '{{ $val }}')"
                     class="px-3 py-1 rounded-full text-xs font-medium transition-colors
                         {{ $statusFilter === $val

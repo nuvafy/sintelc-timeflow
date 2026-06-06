@@ -88,6 +88,12 @@ class SyncAttendanceToFactorial implements ShouldQueue
 
             $shiftId = $response['id'] ?? null;
             if (!$shiftId) {
+                // La respuesta llegó pero sin ID — verificar si Factorial igualmente creó el turno
+                $existing = $this->findMatchingShift($service, $employee->factorial_id, $log);
+                if ($existing) {
+                    $this->markSynced($log, $existing['id'], 'idempotente - turno confirmado sin ID en respuesta');
+                    return;
+                }
                 $this->fail($log, 'Factorial no devolvió ID de turno en la respuesta directa');
                 return;
             }
@@ -97,6 +103,15 @@ class SyncAttendanceToFactorial implements ShouldQueue
         } catch (RequestException $e) {
             $body    = $e->response->json() ?? [];
             $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
+
+            // Antes de intentar overwrite, verificar idempotencia:
+            // el job pudo haber creado el turno en Factorial en una ejecución anterior
+            // pero fallar antes de actualizar nuestra DB.
+            $existing = $this->findMatchingShift($service, $employee->factorial_id, $log);
+            if ($existing) {
+                $this->markSynced($log, $existing['id'], 'idempotente - turno ya existía en Factorial');
+                return;
+            }
 
             Log::warning('SyncAttendanceToFactorial: método directo falló, intentando overwrite', [
                 'attendance_log_id' => $log->id,
@@ -191,6 +206,33 @@ class SyncAttendanceToFactorial implements ShouldQueue
      * devuelve todos los turnos de la empresa. Filtramos en PHP para garantizar
      * que solo tocamos turnos del empleado correcto en la fecha correcta.
      */
+    /**
+     * Verifica si Factorial ya tiene un turno que coincida con el tiempo del log.
+     * Usado para idempotencia: detecta el caso en que el job creó el turno en Factorial
+     * pero crasheó antes de actualizar nuestra DB.
+     *
+     * Para check_in / break_out → busca un turno con clock_in == hora del log.
+     * Para check_out / break_in → busca un turno con clock_out == hora del log.
+     */
+    private function findMatchingShift(FactorialService $service, int $factorialEmployeeId, AttendanceLog $log): ?array
+    {
+        $targetDate = $log->occurred_at->format('Y-m-d');
+        $logTime    = $log->occurred_at->format('H:i');
+        $field      = in_array($log->check_type, ['check_in', 'break_out']) ? 'clock_in' : 'clock_out';
+
+        $shifts = $service->getShifts([
+            'employee_ids' => [$factorialEmployeeId],
+            'start_on'     => $targetDate,
+            'end_on'       => $targetDate,
+        ]);
+
+        return collect($shifts)->first(
+            fn($s) => (int) $s['employee_id'] === $factorialEmployeeId
+                   && $s['date'] === $targetDate
+                   && substr($s[$field] ?? '', 0, 5) === $logTime
+        );
+    }
+
     private function findOpenShift(FactorialService $service, int $factorialEmployeeId, \Carbon\Carbon $date): ?array
     {
         $targetDate = $date->format('Y-m-d');

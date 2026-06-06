@@ -153,6 +153,16 @@ class SyncAttendanceToFactorial implements ShouldQueue
             // mobile_geolocation  → app móvil con geoloc.     → SÍ permitir
             $inSource = $openShift['in_source'] ?? 'api/biométrico';
 
+            // Si el turno ya fue editado por nuestro biométrico para este mismo
+            // tipo de operación, no volvemos a tocarlo — el segundo fichaje es
+            // un doble-golpe en el equipo y no debe sobreescribir el primero.
+            $marker       = "Editado por biométrico SFT: {$log->check_type}";
+            $observations = $openShift['observations'] ?? '';
+            if (str_contains((string) $observations, $marker)) {
+                $this->fail($log, "Turno ya editado por biométrico SFT para {$log->check_type}. Error original: {$primaryError}");
+                return;
+            }
+
             $time = $log->occurred_at->format('H:i:s');
 
             $updatePayload = match ($log->check_type) {
@@ -166,7 +176,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            $updatePayload['observations'] = 'Editado por biométrico SFT';
+            $updatePayload['observations'] = $marker;
 
             $updated = $service->updateShift($openShift['id'], $updatePayload);
 

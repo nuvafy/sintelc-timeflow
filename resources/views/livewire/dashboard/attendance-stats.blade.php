@@ -104,10 +104,12 @@ new class extends Component {
     {
         $delay = 0;
 
-        // Calcular inicio de la quincena actual
+        // Calcular inicio de la quincena anterior (colchón de una quincena)
+        // Si estamos en la 1a quincena → guardamos desde el 16 del mes pasado
+        // Si estamos en la 2a quincena → guardamos desde el 1 del mes actual
         $quincenaStart = today()->day <= 15
-            ? today()->startOfMonth()
-            : today()->setDay(16)->startOfDay();
+            ? today()->subMonthNoOverflow()->setDay(16)->startOfDay()
+            : today()->startOfMonth();
 
         // Fuera de quincena → descartar
         AttendanceLog::where('sync_status', 'failed')

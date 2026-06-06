@@ -104,12 +104,28 @@ new class extends Component {
     {
         $delay = 0;
 
+        // Calcular inicio de la quincena actual
+        $quincenaStart = today()->day <= 15
+            ? today()->startOfMonth()
+            : today()->setDay(16)->startOfDay();
+
+        // Fuera de quincena → descartar
         AttendanceLog::where('sync_status', 'failed')
+            ->where('occurred_at', '<', $quincenaStart)
+            ->update([
+                'sync_status' => 'descartado',
+                'sync_error'  => null,
+                'sync_note'   => 'Descartado automáticamente — fuera de quincena',
+            ]);
+
+        // Dentro de quincena → reintentar
+        AttendanceLog::where('sync_status', 'failed')
+            ->where('occurred_at', '>=', $quincenaStart)
             ->chunkById(50, function ($logs) use (&$delay) {
                 $ids = $logs->pluck('id');
 
                 AttendanceLog::whereIn('id', $ids)->update([
-                    'sync_status' => 'pending',
+                    'sync_status' => 'resolved',
                     'sync_error'  => null,
                 ]);
 

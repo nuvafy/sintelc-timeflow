@@ -130,17 +130,13 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
-            // Overwrite solo si el turno fue creado por un humano desde Factorial (web/app).
-            // Si in_source=null fue creado por API/biométrico — no tocar.
-            // null                → creado vía API/biométrico → NO tocar
+            // El biométrico tiene prioridad sobre cualquier turno abierto,
+            // independientemente de su origen (API, biométrico, web, app).
+            // null                → creado vía API/biométrico → SÍ permitir
             // desktop             → web de Factorial          → SÍ permitir
             // mobile              → app móvil Factorial       → SÍ permitir
             // mobile_geolocation  → app móvil con geoloc.     → SÍ permitir
-            $inSource = $openShift['in_source'] ?? null;
-            if ($inSource === null) {
-                $this->fail($log, "No se permite sobreescribir turno creado vía API/biométrico (in_source=null). Error original: {$primaryError}");
-                return;
-            }
+            $inSource = $openShift['in_source'] ?? 'api/biométrico';
 
             $time = $log->occurred_at->format('H:i:s');
 

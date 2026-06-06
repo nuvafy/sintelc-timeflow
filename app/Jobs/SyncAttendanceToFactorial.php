@@ -230,6 +230,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
             fn($s) => (int) $s['employee_id'] === $factorialEmployeeId
                    && $s['date'] === $targetDate
                    && substr($s[$field] ?? '', 0, 5) === $logTime
+                   && ($s['in_source'] ?? null) === null  // solo turnos creados por nuestra API
         );
     }
 

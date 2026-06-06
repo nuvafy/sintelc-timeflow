@@ -166,6 +166,8 @@ class SyncAttendanceToFactorial implements ShouldQueue
                 return;
             }
 
+            $updatePayload['observations'] = 'Editado por biométrico SFT';
+
             $updated = $service->updateShift($openShift['id'], $updatePayload);
 
             $confirmedId = $updated['id'] ?? null;

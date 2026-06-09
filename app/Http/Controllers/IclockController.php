@@ -84,8 +84,8 @@ class IclockController extends Controller
             return $this->handleAttlog($request, $sn);
         }
 
-        if ($table === 'USERINFO') {
-            return $this->handleUserInfo($request, $sn);
+        if ($table === 'USERINFO' || $table === 'user') {
+            return $this->handleUserInfo($request, $sn, $table);
         }
 
         return $this->plainResponse('OK');
@@ -157,7 +157,7 @@ class IclockController extends Controller
 
     // ─── Private: Handlers ───────────────────────────────────────────
 
-    private function handleUserInfo(Request $request, ?string $sn): Response
+    private function handleUserInfo(Request $request, ?string $sn, string $table = 'USERINFO'): Response
     {
         $source = BiometricSource::where('serial_number', $sn)->first();
 
@@ -172,20 +172,24 @@ class IclockController extends Controller
             $line = trim($line);
             if (empty($line)) continue;
 
-            // Format: PIN=X\tName=Y\tPassword=\tCard=\tRole=0\t...
             $fields = [];
             foreach (explode("\t", $line) as $part) {
                 [$key, $val] = array_pad(explode('=', $part, 2), 2, '');
                 $fields[trim($key)] = trim($val);
             }
 
-            if (empty($fields['PIN'])) continue;
+            // Attendance PUSH Protocol: PIN=  /  Security PUSH Protocol: Pin=
+            $pin = $fields['PIN'] ?? $fields['Pin'] ?? null;
+            if (empty($pin)) continue;
 
             $users[] = [
-                'pin'  => $fields['PIN'],
-                'name' => $fields['Name'] ?? '',
-                'card' => $fields['Card'] ?? '',
-                'role' => $fields['Role'] ?? '0',
+                'pin'       => $pin,
+                'name'      => $fields['Name'] ?? '',
+                // Attendance PUSH: Card= / Security PUSH: CardNo=
+                'card'      => $fields['Card'] ?? $fields['CardNo'] ?? '',
+                // Attendance PUSH: Role= / Security PUSH: Privilege=
+                'privilege' => $fields['Role'] ?? $fields['Privilege'] ?? '0',
+                'protocol'  => $table === 'user' ? 'security' : 'attendance',
             ];
         }
 
@@ -194,7 +198,7 @@ class IclockController extends Controller
             'device_users_fetched_at' => now(),
         ]);
 
-        Log::info('ZKTeco USERINFO recibido', ['sn' => $sn, 'count' => count($users)]);
+        Log::info('ZKTeco USERINFO recibido', ['sn' => $sn, 'table' => $table, 'count' => count($users)]);
 
         return $this->plainResponse('OK');
     }
@@ -348,7 +352,7 @@ class IclockController extends Controller
             'RequestDelay=2',
             'TransTimes=00:00;14:00',
             'TransInterval=1',
-            'TransTables=User Transaction',
+            'TransTables=Transaction',  // solo asistencia; usuarios solo bajo petición explícita (DATA QUERY USERINFO)
             'Realtime=1',
             'SessionID=demo-session-id',
             'TimeoutSec=10',

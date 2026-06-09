@@ -45,6 +45,12 @@ new class extends Component {
     public string $importError  = '';
     public ?array $csvResult    = null;
 
+    // Modal Push usuarios → dispositivo
+    public bool   $showPushModal    = false;
+    public ?int   $pushSourceId     = null;
+    public int    $pushEmployeeCount = 0;
+    public ?string $pushSuccessMsg  = null;
+
     public function rules(): array
     {
         return [
@@ -79,6 +85,9 @@ new class extends Component {
                 : collect(),
         ];
     }
+
+    public function updatedClientFilter(): void { $this->resetPage(); }
+    public function updatedStatusFilter(): void  { $this->resetPage(); }
 
     public function updatedClientId(): void
     {
@@ -181,6 +190,41 @@ new class extends Component {
 
         $this->showAssignModal   = false;
         $this->assigningSourceId = null;
+    }
+
+    // ── Push usuarios Factorial → dispositivo ─────────────────────
+
+    public function openPushModal(int $id): void
+    {
+        $source = BiometricSource::findOrFail($id);
+
+        $this->pushSourceId      = $source->id;
+        $this->pushSuccessMsg    = null;
+        $this->pushEmployeeCount = FactorialEmployee::where('client_id', $source->client_id)
+            ->whereNotNull('access_id')
+            ->where('active', true)
+            ->count();
+
+        $this->showPushModal = true;
+    }
+
+    public function confirmPush(): void
+    {
+        $source = BiometricSource::findOrFail($this->pushSourceId);
+
+        \Illuminate\Support\Facades\Artisan::call('biometric:push-users', [
+            'sourceId' => $source->id,
+        ]);
+
+        $this->pushSuccessMsg = "{$this->pushEmployeeCount} usuario(s) encolados. El equipo los recibirá en su próximo ping.";
+    }
+
+    public function closePushModal(): void
+    {
+        $this->showPushModal     = false;
+        $this->pushSourceId      = null;
+        $this->pushEmployeeCount = 0;
+        $this->pushSuccessMsg    = null;
     }
 
     // ── CSV Import ────────────────────────────────────────────────
@@ -359,13 +403,14 @@ new class extends Component {
 
     {{-- ── Tabla resultados ────────────────────────────────────────── --}}
     <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios en equipo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
@@ -380,9 +425,22 @@ new class extends Component {
                         <div class="text-xs text-gray-400">{{ $vendorLabels[$device->provider?->vendor] ?? ($device->provider?->vendor ?? 'ZKTeco') }}</div>
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->client?->name ?? '—' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->location?->name ?? '—' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <p class="text-sm text-gray-700">{{ $device->client?->name ?? '—' }}</p>
+                        <p class="text-xs text-gray-400">{{ $device->location?->name ?? 'Sin ubicación' }}</p>
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @php $deviceUsers = $device->device_users ?? []; @endphp
+                        @if(count($deviceUsers) > 0)
+                            <span class="text-sm font-medium text-gray-700">{{ count($deviceUsers) }}</span>
+                            @if($device->device_users_fetched_at)
+                                <p class="text-xs text-gray-400">{{ $device->device_users_fetched_at->diffForHumans() }}</p>
+                            @endif
+                        @else
+                            <span class="text-xs text-gray-400">—</span>
+                        @endif
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ $device->last_ping_at?->diffForHumans() ?? '—' }}
                     </td>
@@ -411,6 +469,13 @@ new class extends Component {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
+                            {{-- Push usuarios Factorial → dispositivo --}}
+                            <button wire:click="openPushModal({{ $device->id }})" title="Enviar empleados de Factorial al dispositivo"
+                                class="text-sky-500 hover:text-sky-700">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                                </svg>
+                            </button>
                             {{-- Importar CSV --}}
                             <button wire:click="openCsvModal({{ $device->id }})" title="Importar empleados desde CSV"
                                 class="text-emerald-500 hover:text-emerald-700">
@@ -442,6 +507,7 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
+        </div>{{-- overflow-x-auto --}}
         @if($devices->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $devices->links() }}
@@ -582,6 +648,75 @@ new class extends Component {
                 <button wire:click="saveAssign" class="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700">
                     Asignar
                 </button>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Modal: Push usuarios → dispositivo ────────────────────────── --}}
+    @if($showPushModal)
+    @php $pushSource = $pushSourceId ? \App\Models\BiometricSource::find($pushSourceId) : null; @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closePushModal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Enviar empleados al dispositivo</h3>
+                    @if($pushSource)
+                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $pushSource->name }} · {{ $pushSource->serial_number }}</p>
+                    @endif
+                </div>
+                <button wire:click="closePushModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+
+            <div class="px-6 py-5">
+                @if($pushSuccessMsg)
+                    <div class="rounded-lg bg-sky-50 border border-sky-200 px-4 py-3 flex items-start gap-3">
+                        <svg class="w-5 h-5 text-sky-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <p class="text-sm text-sky-800">{{ $pushSuccessMsg }}</p>
+                    </div>
+                @else
+                    <div class="flex items-start gap-3">
+                        <svg class="w-10 h-10 text-sky-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                        </svg>
+                        <div>
+                            <p class="text-sm text-gray-700">
+                                Se enviarán <span class="font-semibold text-gray-900">{{ $pushEmployeeCount }} empleado(s) activos</span>
+                                de Factorial al dispositivo.
+                            </p>
+                            <p class="text-xs text-gray-400 mt-1">
+                                El equipo los recibirá en su próximo ping al servidor.
+                            </p>
+                            @if($pushEmployeeCount === 0)
+                                <p class="text-xs text-amber-600 mt-2 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                    No hay empleados activos con PIN asignado para este cliente.
+                                </p>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button wire:click="closePushModal"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    {{ $pushSuccessMsg ? 'Cerrar' : 'Cancelar' }}
+                </button>
+                @if(!$pushSuccessMsg)
+                <button wire:click="confirmPush" wire:loading.attr="disabled"
+                    @disabled($pushEmployeeCount === 0)
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span wire:loading.remove wire:target="confirmPush">
+                        <svg class="w-4 h-4 inline -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                        </svg>
+                        Enviar empleados
+                    </span>
+                    <span wire:loading wire:target="confirmPush">Encolando…</span>
+                </button>
+                @endif
             </div>
         </div>
     </div>

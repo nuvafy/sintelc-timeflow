@@ -45,7 +45,12 @@ class PushUsersToDevice extends Command
             $seq     = $maxSeq + $i + 1;
             $pin     = $employee->access_id;
             $name    = mb_substr($employee->full_name, 0, 24);
-            $payload = "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tCard=\tRole=0";
+            // Security PUSH Protocol (dispositivos ZKTeco VGU/face recognition).
+            // Tabla: "user" (no USERINFO). Campos: CardNo, Pin, Password, Group,
+            // StartTime, EndTime, Name, Privilege.
+            // -629 = "Incorrect table name" → ocurría porque usábamos USERINFO
+            // que es del Attendance PUSH Protocol, no del Security PUSH.
+            $payload = "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
 
             $inserts[] = [
                 'biometric_source_id' => $source->id,
@@ -59,6 +64,16 @@ class PushUsersToDevice extends Command
         }
 
         DeviceCommand::insert($inserts);
+
+        // Actualizar device_users_fetched_at y el conteo en nuestra DB
+        // basándonos en los empleados encolados (Security PUSH no soporta QUERY).
+        $source->update([
+            'device_users'            => $employees->map(fn($e) => [
+                'pin'  => $e->access_id,
+                'name' => mb_substr($e->full_name, 0, 24),
+            ])->toArray(),
+            'device_users_fetched_at' => $now,
+        ]);
 
         $this->info("Se encolaron {$employees->count()} usuarios para el dispositivo \"{$source->name}\" (SN: {$source->serial_number}).");
         $this->line("El equipo los recibirá en su próxima llamada a /iclock/getrequest.");

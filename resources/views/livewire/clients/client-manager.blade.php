@@ -269,7 +269,7 @@ new class extends Component {
     </div>
 
     {{-- Cards --}}
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         @forelse($clients as $client)
         <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">
             {{-- Card header --}}
@@ -286,10 +286,13 @@ new class extends Component {
                     @endif
                     <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $client->slug }}</p>
                 </div>
-                <div class="flex items-center gap-3 ml-3 flex-shrink-0">
-                    <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
-                        {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
-                    </span>
+                <div class="flex items-center ml-3 flex-shrink-0">
+                    <button type="button" disabled
+                        class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
+                            {{ $client->status === 'active' ? 'bg-green-500' : 'bg-gray-200' }}">
+                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
+                            {{ $client->status === 'active' ? 'translate-x-4' : 'translate-x-0' }}"></span>
+                    </button>
                 </div>
             </div>
 

@@ -252,6 +252,8 @@ new class extends Component {
                 'vendorName'          => 'Biométrico',
                 'mappedEmployeeIds'   => collect(),
                 'biometricIds'        => collect(),
+                'biometricSyncs'      => collect(),
+                'sourcesPerProvider'  => collect(),
             ];
         }
 
@@ -336,7 +338,7 @@ new class extends Component {
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'biometricTotalCount' => 0, 'biometricMappedCount' => 0, 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect()];
+            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'biometricTotalCount' => 0, 'biometricMappedCount' => 0, 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect(), 'biometricSyncs' => collect(), 'sourcesPerProvider' => collect()];
         }
 
         $query = FactorialEmployee::query()
@@ -350,11 +352,18 @@ new class extends Component {
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         $vendorName = $provider?->vendor ?? 'Biométrico';
 
-        $biometricIds = BiometricUserSync::where('client_id', $this->client_id)
+        $biometricSyncs = BiometricUserSync::where('client_id', $this->client_id)
             ->whereNotNull('factorial_employee_id')
-            ->pluck('external_employee_code', 'factorial_employee_id');
+            ->get(['factorial_employee_id', 'external_employee_code', 'biometric_provider_id'])
+            ->keyBy('factorial_employee_id');
 
+        $biometricIds      = $biometricSyncs->pluck('external_employee_code', 'factorial_employee_id');
         $mappedEmployeeIds = $biometricIds->flip();
+
+        $sourcesPerProvider = BiometricSource::where('client_id', $this->client_id)
+            ->get(['biometric_provider_id', 'name'])
+            ->groupBy('biometric_provider_id')
+            ->map(fn($s) => $s->pluck('name')->join(', '));
 
         if ($this->statusFilter === 'mapped') {
             $query->whereIn('id', $mappedEmployeeIds->keys()->all());
@@ -375,6 +384,8 @@ new class extends Component {
             'vendorName'        => $vendorName,
             'mappedEmployeeIds' => $mappedEmployeeIds,
             'biometricIds'      => $biometricIds,
+            'biometricSyncs'    => $biometricSyncs,
+            'sourcesPerProvider'=> $sourcesPerProvider,
         ];
     }
 
@@ -449,7 +460,7 @@ new class extends Component {
                 </button>
                 <button wire:click="$set('tab', 'factorial')"
                     class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                    Empleados en Factorial
+                    Factorial
                 </button>
                 <button wire:click="$set('tab', 'mapping')"
                     class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'mapping' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
@@ -678,52 +689,58 @@ new class extends Component {
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ID Factorial</th>
-                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ID Vendor</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en Factorial</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapeado</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Biométrico</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($employees as $employee)
                 @php
-                    $isMapped = isset($biometricIds[$employee->id]);
+                    $isMapped   = isset($biometricIds[$employee->id]);
+                    $sync       = $biometricSyncs[$employee->id] ?? null;
+                    $deviceName = $sync ? ($sourcesPerProvider[$sync->biometric_provider_id] ?? '—') : '—';
                 @endphp
                 <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
+                        {{ $employee->factorial_id }}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $employee->full_name }}</div>
                         <div class="text-xs text-gray-500">{{ $employee->email }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700 text-center">
-                        {{ $employee->factorial_id }}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{ $isMapped ? $deviceName : '—' }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-center">
+                    <td class="px-6 py-4 whitespace-nowrap">
                         @if($isMapped)
-                            <span class="text-gray-700">{{ $biometricIds[$employee->id] }}</span>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Sí</span>
                         @else
-                            <div x-data="{ pin: '', saved: false }" class="flex items-center gap-1">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">No</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
+                        @if($isMapped)
+                            {{ $biometricIds[$employee->id] }}
+                        @else
+                            <div x-data="{ pin: '' }" class="flex items-center gap-1">
                                 <input
                                     x-model="pin"
                                     type="text"
                                     placeholder="PIN"
                                     class="w-24 rounded border-gray-300 text-xs font-mono px-2 py-1 focus:border-indigo-500 focus:ring-indigo-500"
-                                    @keydown.enter="if(pin.trim()) { $wire.saveBiometricId({{ $employee->id }}, pin); saved = true }"
+                                    @keydown.enter="if(pin.trim()) $wire.saveBiometricId({{ $employee->id }}, pin)"
                                 />
                                 <button
                                     x-show="pin.trim().length > 0"
-                                    @click="$wire.saveBiometricId({{ $employee->id }}, pin); saved = true"
+                                    @click="$wire.saveBiometricId({{ $employee->id }}, pin)"
                                     class="text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded transition">
                                     ✓
                                 </button>
                             </div>
-                        @endif
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        @if($isMapped)
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Listo</span>
-                        @else
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">Pendiente</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -738,7 +755,7 @@ new class extends Component {
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-500">
                         Sin empleados.
                     </td>
                 </tr>

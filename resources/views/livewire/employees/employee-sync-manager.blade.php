@@ -271,7 +271,8 @@ new class extends Component {
                     ->map(fn($id) => (int) $id);
 
                 $employees = FactorialEmployee::where('client_id', $this->client_id)
-                    ->pluck('full_name', 'id');
+                    ->get(['id', 'factorial_id', 'full_name'])
+                    ->keyBy('id');
 
                 $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees) {
                     foreach ($source->device_users ?? [] as $u) {
@@ -279,13 +280,14 @@ new class extends Component {
                         if ($this->search && stripos($pin, $this->search) === false && stripos($u['name'] ?? '', $this->search) === false) {
                             continue;
                         }
-                        $empId = $mappings[$pin] ?? null;
+                        $empId  = $mappings[$pin] ?? null;
+                        $emp    = $empId ? ($employees[$empId] ?? null) : null;
                         $biometricUsers[$pin] = [
-                            'pin'           => $pin,
-                            'name'          => $u['name'] ?? null,
-                            'source'        => $source->name,
-                            'mapped'        => $empId !== null,
-                            'employee_name' => $empId ? ($employees[$empId] ?? '—') : null,
+                            'pin'          => $pin,
+                            'name'         => $u['name'] ?? null,
+                            'source'       => $source->name,
+                            'mapped'       => $empId !== null,
+                            'factorial_id' => $emp?->factorial_id,
                         ];
                     }
                 });
@@ -540,6 +542,7 @@ new class extends Component {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -561,10 +564,13 @@ new class extends Component {
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">Sin asignar</span>
                         @endif
                     </td>
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-500">
+                        {{ $user['factorial_id'] ?? '—' }}
+                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="4" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
                         No hay empleados registrados en el biométrico.
                     </td>
                 </tr>

@@ -159,6 +159,12 @@ new class extends Component {
         $this->resetClientForm();
     }
 
+    public function toggleStatus(int $id): void
+    {
+        $client = Client::findOrFail($id);
+        $client->update(['status' => $client->status === 'active' ? 'inactive' : 'active']);
+    }
+
     public function delete(int $id): void
     {
         Client::findOrFail($id)->delete();
@@ -287,8 +293,8 @@ new class extends Component {
                     <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $client->slug }}</p>
                 </div>
                 <div class="flex items-center ml-3 flex-shrink-0">
-                    <button type="button" disabled
-                        class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
+                    <button type="button" wire:click="toggleStatus({{ $client->id }})"
+                        class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer
                             {{ $client->status === 'active' ? 'bg-green-500' : 'bg-gray-200' }}">
                         <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
                             {{ $client->status === 'active' ? 'translate-x-4' : 'translate-x-0' }}"></span>

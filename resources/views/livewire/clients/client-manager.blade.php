@@ -8,6 +8,7 @@ use App\Models\FactorialConnection;
 use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
 use Illuminate\Support\Str;
+use Vinkla\Hashids\Facades\Hashids;
 
 new class extends Component {
 
@@ -42,6 +43,10 @@ new class extends Component {
 
     // ── Búsqueda ───────────────────────────────────────────────────
     public string $search = '';
+
+    // ── Modal éxito creación ───────────────────────────────────────
+    public bool   $showSuccessModal  = false;
+    public string $newClientOauthUrl = '';
 
     public function updatedSearch(): void { }
 
@@ -133,13 +138,17 @@ new class extends Component {
         }
 
         // Crear conexión automáticamente si el cliente no tiene una
+        $oauthUrl = null;
         if (!$this->editing) {
             $hasConnection = FactorialConnection::where('client_id', $client->id)->exists();
             if (!$hasConnection) {
-                FactorialConnection::create([
+                $connection = FactorialConnection::create([
                     'client_id'           => $client->id,
                     'name'                => 'cnx_' . $this->slug,
                     'resource_owner_type' => 'company',
+                ]);
+                $oauthUrl = route('oauth.factorial.redirect', [
+                    'connection_id' => Hashids::encode($connection->id),
                 ]);
             }
         }
@@ -157,6 +166,11 @@ new class extends Component {
 
         $this->showModal = false;
         $this->resetClientForm();
+
+        if ($oauthUrl) {
+            $this->newClientOauthUrl = $oauthUrl;
+            $this->showSuccessModal  = true;
+        }
     }
 
     public function toggleStatus(int $id): void
@@ -535,6 +549,63 @@ new class extends Component {
                 </button>
                 <button wire:click="saveProvider" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
                     Agregar proveedor
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- Modal: Empresa creada exitosamente --}}
+    @if($showSuccessModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4" x-data="{ copied: false }">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900">Empresa creada correctamente</h3>
+                </div>
+                <button wire:click="$set('showSuccessModal', false)" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-5 space-y-4">
+                <p class="text-sm text-gray-600">
+                    Comparte esta URL con la empresa para que autorice el acceso de Factorial a FlowTime.
+                </p>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">URL de autorización Factorial</label>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1 min-w-0 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                            <p class="text-xs font-mono text-gray-700 break-all">{{ $newClientOauthUrl }}</p>
+                        </div>
+                        <button type="button"
+                            @click="navigator.clipboard.writeText('{{ $newClientOauthUrl }}').then(() => { copied = true; setTimeout(() => copied = false, 2000) })"
+                            class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition"
+                            :class="copied ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'">
+                            <svg x-show="!copied" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                            <svg x-show="copied" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <span x-text="copied ? 'Copiado' : 'Copiar'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <button wire:click="$set('showSuccessModal', false)"
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                    Listo
                 </button>
             </div>
         </div>

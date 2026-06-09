@@ -28,12 +28,11 @@ class PushUsersToDevice extends Command
         }
 
         $employees = FactorialEmployee::where('client_id', $source->client_id)
-            ->whereNotNull('access_id')
             ->where('active', true)
             ->get();
 
         if ($employees->isEmpty()) {
-            $this->warn("No hay empleados activos con PIN para el cliente #{$source->client_id}.");
+            $this->warn("No hay empleados activos para el cliente #{$source->client_id}.");
             return self::SUCCESS;
         }
 
@@ -43,7 +42,7 @@ class PushUsersToDevice extends Command
 
         foreach ($employees as $i => $employee) {
             $seq     = $maxSeq + $i + 1;
-            $pin     = $employee->access_id;
+            $pin     = $employee->factorial_id;
             $name    = mb_substr($employee->full_name, 0, 24);
             // Security PUSH Protocol (dispositivos ZKTeco VGU/face recognition).
             // Tabla: "user" (no USERINFO). Campos: CardNo, Pin, Password, Group,
@@ -69,7 +68,7 @@ class PushUsersToDevice extends Command
         // basándonos en los empleados encolados (Security PUSH no soporta QUERY).
         $source->update([
             'device_users'            => $employees->map(fn($e) => [
-                'pin'  => $e->access_id,
+                'pin'  => (string) $e->factorial_id,
                 'name' => mb_substr($e->full_name, 0, 24),
             ])->toArray(),
             'device_users_fetched_at' => $now,

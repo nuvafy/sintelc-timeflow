@@ -201,7 +201,6 @@ new class extends Component {
         $this->pushSourceId      = $source->id;
         $this->pushSuccessMsg    = null;
         $this->pushEmployeeCount = FactorialEmployee::where('client_id', $source->client_id)
-            ->whereNotNull('access_id')
             ->where('active', true)
             ->count();
 

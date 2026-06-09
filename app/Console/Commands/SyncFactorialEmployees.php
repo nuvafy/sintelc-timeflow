@@ -104,7 +104,6 @@ class SyncFactorialEmployees extends Command
                 'factorial_connection_id' => $connection->id,
                 'factorial_id'            => (int) $employee['id'],
                 'client_id'               => $connection->client_id,
-                'access_id'               => isset($employee['access_id']) ? (int) $employee['access_id'] : null,
                 'first_name'              => $employee['first_name'] ?? null,
                 'last_name'               => $employee['last_name'] ?? null,
                 'full_name'               => $employee['full_name'] ?? null,
@@ -130,7 +129,7 @@ class SyncFactorialEmployees extends Command
                 $rows,
                 ['factorial_connection_id', 'factorial_id'],
                 [
-                    'client_id', 'access_id', 'first_name', 'last_name', 'full_name',
+                    'client_id', 'first_name', 'last_name', 'full_name',
                     'email', 'login_email', 'company_id', 'company_identifier',
                     'location_id', 'active', 'attendable', 'is_terminating',
                     'terminated_on', 'factorial_created_at', 'factorial_updated_at',

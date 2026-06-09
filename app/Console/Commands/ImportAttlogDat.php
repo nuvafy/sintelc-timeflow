@@ -6,8 +6,6 @@ use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use App\Models\BiometricUserSync;
 use App\Models\ClientAttendanceConfig;
-use App\Models\FactorialConnection;
-use App\Models\FactorialEmployee;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -55,25 +53,9 @@ class ImportAttlogDat extends Command
             ->whereNotNull('factorial_employee_id')
             ->pluck('factorial_employee_id', 'external_employee_code');
 
-        $factorialCompanyId = FactorialConnection::where('client_id', $source->client_id)
-            ->whereNotNull('factorial_company_id')
-            ->value('factorial_company_id');
-
-        $employeeQuery = FactorialEmployee::whereNotNull('access_id');
-
-        if ($factorialCompanyId) {
-            $employeeQuery->where('company_id', $factorialCompanyId);
-        } else {
-            $employeeQuery->where('factorial_connection_id', function ($q) use ($source) {
-                $q->select('id')->from('factorial_connections')->where('client_id', $source->client_id);
-            });
-        }
-
-        $accessIdMap = $employeeQuery->pluck('id', 'access_id');
-
         $attendanceConfig = ClientAttendanceConfig::where('client_id', $source->client_id)->first();
 
-        $this->info("Mappings cargados: {$mappings->count()} por código | {$accessIdMap->count()} por access_id");
+        $this->info("Mappings cargados: {$mappings->count()} por código");
 
         // ── 4. Leer archivo ──────────────────────────────────────────
         $lines   = array_values(array_filter(
@@ -148,7 +130,7 @@ class ImportAttlogDat extends Command
             $checkType = $attendanceConfig
                 ? ($attendanceConfig->resolveCheckType($status) ?? 'unknown')
                 : ClientAttendanceConfig::defaultCheckType($status);
-            $employeeId = $mappings[$pin] ?? $accessIdMap[$pin] ?? null;
+            $employeeId = $mappings[$pin] ?? null;
 
             $records[] = [
                 'client_id'             => $source->client_id,

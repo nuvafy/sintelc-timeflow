@@ -12,7 +12,6 @@ class FactorialEmployee extends Model
         'client_id',
         'factorial_connection_id',
         'factorial_id',
-        'access_id',
         'first_name',
         'last_name',
         'full_name',

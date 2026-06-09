@@ -236,16 +236,6 @@ class IclockController extends Controller
             return $this->plainResponse('OK: 0');
         }
 
-        $employeeQuery = \App\Models\FactorialEmployee::whereNotNull('access_id');
-        if ($factorialCompanyId) {
-            $employeeQuery->where('company_id', $factorialCompanyId);
-        } else {
-            $employeeQuery->where('factorial_connection_id', function ($q) use ($source) {
-                $q->select('id')->from('factorial_connections')->where('client_id', $source->client_id);
-            });
-        }
-        $accessIdMap = $employeeQuery->pluck('id', 'access_id');
-
         // ── Pre-cargar claves únicas ya existentes (evita N+1 de exists()) ──
         $existingKeys = AttendanceLog::where('biometric_source_id', $source->id)
             ->where('occurred_at', '>=', now()->subDays(7))
@@ -277,7 +267,7 @@ class IclockController extends Controller
             $key = $pin . '|' . $occurredAt->format('Y-m-d H:i:s');
             if (isset($existingKeys[$key])) continue;
 
-            $employeeId = $mappings[$pin] ?? $accessIdMap[$pin] ?? null;
+            $employeeId = $mappings[$pin] ?? null;
 
             $records[] = [
                 'client_id'             => $source->client_id,

@@ -6,7 +6,6 @@ use App\Jobs\SyncAttendanceToFactorial;
 use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use App\Models\BiometricUserSync;
-use App\Models\FactorialEmployee;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -40,12 +39,10 @@ class ResolveAttendanceLogs extends Command
 
         // Pre-cargar mappings y employees por fuente para evitar N+1
         $mappingsCache   = [];
-        $accessIdCache   = [];
-        $companyIdCache  = [];
 
         $query->with('biometricSource')->chunkById(100, function ($logs) use (
             &$resolved, &$unresolved, &$delay,
-            &$mappingsCache, &$accessIdCache, &$companyIdCache
+            &$mappingsCache
         ) {
             $resolvedIds = [];
 
@@ -63,26 +60,7 @@ class ResolveAttendanceLogs extends Command
                         ->pluck('factorial_employee_id', 'external_employee_code');
                 }
 
-                // Cache employees por cliente
-                if (!isset($accessIdCache[$clientId])) {
-                    $companyIdCache[$clientId] = \App\Models\FactorialConnection::where('client_id', $clientId)
-                        ->whereNotNull('factorial_company_id')
-                        ->value('factorial_company_id');
-
-                    $empQuery = FactorialEmployee::whereNotNull('access_id');
-                    if ($companyIdCache[$clientId]) {
-                        $empQuery->where('company_id', $companyIdCache[$clientId]);
-                    } else {
-                        $empQuery->where('factorial_connection_id', function ($q) use ($clientId) {
-                            $q->select('id')->from('factorial_connections')->where('client_id', $clientId);
-                        });
-                    }
-                    $accessIdCache[$clientId] = $empQuery->pluck('id', 'access_id');
-                }
-
-                $employeeId = $mappingsCache[$providerId][$log->employee_code]
-                    ?? $accessIdCache[$clientId][$log->employee_code]
-                    ?? null;
+                $employeeId = $mappingsCache[$providerId][$log->employee_code] ?? null;
 
                 if ($employeeId) {
                     $resolvedIds[$log->id] = $employeeId;

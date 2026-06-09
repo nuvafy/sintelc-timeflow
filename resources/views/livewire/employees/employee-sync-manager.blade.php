@@ -341,8 +341,7 @@ new class extends Component {
             ->where('client_id', $this->client_id)
             ->when($this->search, fn($q) => $q->where(function ($q2) {
                 $q2->where('full_name', 'like', "%{$this->search}%")
-                   ->orWhere('email', 'like', "%{$this->search}%")
-                   ->orWhere('access_id', 'like', "%{$this->search}%");
+                   ->orWhere('email', 'like', "%{$this->search}%");
             }))
             ->orderBy('full_name');
 

@@ -273,7 +273,7 @@ new class extends Component {
         @forelse($clients as $client)
         <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">
             {{-- Card header --}}
-            <div class="px-5 py-4 flex items-center justify-between border-b border-gray-100">
+            <div class="px-5 py-4 flex items-start justify-between border-b border-gray-100">
                 <div class="min-w-0 flex-1">
                     <h3 class="text-base font-semibold text-gray-900 truncate">{{ $client->name }}</h3>
                     @if($client->contact_email)

@@ -570,7 +570,7 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         {{ $user['source'] }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap align-middle">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $user['mapped'] ? 'bg-green-500' : 'bg-gray-200' }}">
@@ -725,7 +725,7 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         {{ $isMapped ? $deviceName : '—' }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap align-middle">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $isMapped ? 'bg-green-500' : 'bg-gray-200' }}">

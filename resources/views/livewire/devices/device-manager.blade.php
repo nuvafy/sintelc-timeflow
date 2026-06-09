@@ -419,9 +419,9 @@ new class extends Component {
                 @forelse($devices as $device)
                 <tr class="hover:bg-gray-50">
                     <td class="px-5 py-3 whitespace-nowrap">
-                        <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
                         @php $vendorLabels = ['zkteco'=>'ZKTeco','hikvision'=>'Hikvision','suprema'=>'Suprema','other'=>'Otro']; @endphp
                         <div class="text-xs text-gray-400">{{ $vendorLabels[$device->provider?->vendor] ?? ($device->provider?->vendor ?? 'ZKTeco') }}</div>
+                        <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap">

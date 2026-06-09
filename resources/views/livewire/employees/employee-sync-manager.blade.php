@@ -443,7 +443,7 @@ new class extends Component {
             <nav class="flex gap-6">
                 <button wire:click="$set('tab', 'biometric')"
                     class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'biometric' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                    Empleados en Biométrico
+                    Biométrico
                 </button>
                 <button wire:click="$set('tab', 'factorial')"
                     class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
@@ -536,10 +536,9 @@ new class extends Component {
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado Factorial</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
             </thead>
@@ -555,9 +554,6 @@ new class extends Component {
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ $user['source'] }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {{ $user['employee_name'] ?? '—' }}
-                    </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         @if($user['mapped'])
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Mapeado</span>
@@ -568,7 +564,7 @@ new class extends Component {
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="4" class="px-6 py-10 text-center text-sm text-gray-500">
                         No hay empleados registrados en el biométrico.
                     </td>
                 </tr>

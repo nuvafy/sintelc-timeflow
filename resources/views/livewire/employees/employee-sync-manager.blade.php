@@ -570,13 +570,15 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         {{ $user['source'] }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap align-middle">
+                    <td class="px-5 py-3 whitespace-nowrap">
+                        <div class="flex items-center h-full">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $user['mapped'] ? 'bg-green-500' : 'bg-gray-200' }}">
                             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
                                 {{ $user['mapped'] ? 'translate-x-4' : 'translate-x-0' }}"></span>
                         </button>
+                        </div>
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap font-mono text-sm text-gray-500">
                         {{ $user['factorial_id'] ?? '—' }}
@@ -725,13 +727,15 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         {{ $isMapped ? $deviceName : '—' }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap align-middle">
+                    <td class="px-5 py-3 whitespace-nowrap">
+                        <div class="flex items-center h-full">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $isMapped ? 'bg-green-500' : 'bg-gray-200' }}">
                             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
                                 {{ $isMapped ? 'translate-x-4' : 'translate-x-0' }}"></span>
                         </button>
+                        </div>
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap font-mono text-sm text-gray-700">
                         @if($isMapped)

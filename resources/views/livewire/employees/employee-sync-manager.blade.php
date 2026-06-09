@@ -254,6 +254,7 @@ new class extends Component {
                 'biometricIds'        => collect(),
                 'biometricSyncs'      => collect(),
                 'sourcesPerProvider'  => collect(),
+                'totalSources'        => 0,
             ];
         }
 
@@ -338,7 +339,7 @@ new class extends Component {
 
         // ── Tab: Empleados Factorial ────────────────────────────────
         if (!$this->client_id) {
-            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'biometricTotalCount' => 0, 'biometricMappedCount' => 0, 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect(), 'biometricSyncs' => collect(), 'sourcesPerProvider' => collect()];
+            return ['unmappedUsers' => collect(), 'allSelected' => false, 'totalUnmapped' => 0, 'biometricSources' => collect(), 'biometricTotalCount' => 0, 'biometricMappedCount' => 0, 'employees' => collect(), 'unresolved' => collect(), 'unresolvedCount' => 0, 'clients' => $clients, 'vendorName' => 'Biométrico', 'mappedEmployeeIds' => collect(), 'biometricIds' => collect(), 'biometricSyncs' => collect(), 'sourcesPerProvider' => collect(), 'totalSources' => 0];
         }
 
         $query = FactorialEmployee::query()
@@ -360,10 +361,9 @@ new class extends Component {
         $biometricIds      = $biometricSyncs->pluck('external_employee_code', 'factorial_employee_id');
         $mappedEmployeeIds = $biometricIds->flip();
 
-        $sourcesPerProvider = BiometricSource::where('client_id', $this->client_id)
-            ->get(['biometric_provider_id', 'name'])
-            ->groupBy('biometric_provider_id')
-            ->map(fn($s) => $s->pluck('name')->join(', '));
+        $allSources         = BiometricSource::where('client_id', $this->client_id)->get(['biometric_provider_id', 'name']);
+        $totalSources       = $allSources->count();
+        $sourcesPerProvider = $allSources->groupBy('biometric_provider_id')->map(fn($s) => $s->pluck('name'));
 
         if ($this->statusFilter === 'mapped') {
             $query->whereIn('id', $mappedEmployeeIds->keys()->all());
@@ -386,6 +386,7 @@ new class extends Component {
             'biometricIds'      => $biometricIds,
             'biometricSyncs'    => $biometricSyncs,
             'sourcesPerProvider'=> $sourcesPerProvider,
+            'totalSources'      => $totalSources,
         ];
     }
 
@@ -552,7 +553,7 @@ new class extends Component {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
                 </tr>
             </thead>
@@ -569,11 +570,12 @@ new class extends Component {
                         {{ $user['source'] }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        @if($user['mapped'])
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Mapeado</span>
-                        @else
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">Sin asignar</span>
-                        @endif
+                        <button type="button" disabled
+                            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
+                                {{ $user['mapped'] ? 'bg-green-500' : 'bg-gray-200' }}">
+                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
+                                {{ $user['mapped'] ? 'translate-x-4' : 'translate-x-0' }}"></span>
+                        </button>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-500">
                         {{ $user['factorial_id'] ?? '—' }}
@@ -692,7 +694,7 @@ new class extends Component {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en Factorial</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapeado</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Biométrico</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
@@ -700,9 +702,14 @@ new class extends Component {
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($employees as $employee)
                 @php
-                    $isMapped   = isset($biometricIds[$employee->id]);
-                    $sync       = $biometricSyncs[$employee->id] ?? null;
-                    $deviceName = $sync ? ($sourcesPerProvider[$sync->biometric_provider_id] ?? '—') : '—';
+                    $isMapped    = isset($biometricIds[$employee->id]);
+                    $sync        = $biometricSyncs[$employee->id] ?? null;
+                    $sourceNames = $sync ? ($sourcesPerProvider[$sync->biometric_provider_id] ?? collect()) : collect();
+                    $sourceCount = $sourceNames->count();
+                    $deviceName  = $sourceCount === 0 ? '—'
+                        : ($sourceCount === $totalSources ? 'Todos'
+                        : ($sourceCount > 1 ? 'Varios'
+                        : $sourceNames->first()));
                 @endphp
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
@@ -716,11 +723,12 @@ new class extends Component {
                         {{ $isMapped ? $deviceName : '—' }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        @if($isMapped)
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Sí</span>
-                        @else
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">No</span>
-                        @endif
+                        <button type="button" disabled
+                            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
+                                {{ $isMapped ? 'bg-green-500' : 'bg-gray-200' }}">
+                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
+                                {{ $isMapped ? 'translate-x-4' : 'translate-x-0' }}"></span>
+                        </button>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
                         @if($isMapped)

@@ -327,7 +327,7 @@ new class extends Component {
 
 <div>
     {{-- ── Tarjeta filtros ─────────────────────────────────────────── --}}
-    <div class="bg-white shadow rounded-lg px-6 py-4 mb-4">
+    <div class="bg-white shadow rounded-lg px-5 py-3 mb-4">
         <div class="flex items-center justify-between gap-3">
             <select wire:model.live="clientFilter"
                 class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -373,18 +373,18 @@ new class extends Component {
         <table class="min-w-full divide-y divide-gray-100">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
+                    <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-100">
                 @foreach($unassigned as $device)
                 <tr class="hover:bg-gray-50 transition">
-                    <td class="px-6 py-3 text-sm font-mono font-medium text-gray-800">
+                    <td class="px-5 py-3 text-sm font-mono font-medium text-gray-800">
                         {{ $device->serial_number ?? '—' }}
                     </td>
-                    <td class="px-6 py-3 text-sm text-gray-500">
+                    <td class="px-5 py-3 text-sm text-gray-500">
                         {{ $device->last_ping_at?->diffForHumans() ?? 'Nunca' }}
                     </td>
                     <td class="px-6 py-3 text-right">
@@ -406,30 +406,30 @@ new class extends Component {
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios en equipo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios en equipo</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($devices as $device)
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
                         @php $vendorLabels = ['zkteco'=>'ZKTeco','hikvision'=>'Hikvision','suprema'=>'Suprema','other'=>'Otro']; @endphp
                         <div class="text-xs text-gray-400">{{ $vendorLabels[$device->provider?->vendor] ?? ($device->provider?->vendor ?? 'ZKTeco') }}</div>
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap">
                         <p class="text-sm text-gray-700">{{ $device->client?->name ?? '—' }}</p>
                         <p class="text-xs text-gray-400">{{ $device->location?->name ?? 'Sin ubicación' }}</p>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
+                    <td class="px-5 py-3 whitespace-nowrap">
                         @php $deviceUsers = $device->device_users ?? []; @endphp
                         @if(count($deviceUsers) > 0)
                             <span class="text-sm font-medium text-gray-700">{{ count($deviceUsers) }}</span>
@@ -440,10 +440,10 @@ new class extends Component {
                             <span class="text-xs text-gray-400">—</span>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         {{ $device->last_ping_at?->diffForHumans() ?? '—' }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap">
                         @if($device->status !== 'active')
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500">
                                 Deshabilitado
@@ -466,7 +466,7 @@ new class extends Component {
                             </span>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                    <td class="px-5 py-3 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
                             {{-- Push usuarios Factorial → dispositivo --}}
                             <button wire:click="openPushModal({{ $device->id }})" title="Enviar empleados de Factorial al dispositivo"
@@ -669,7 +669,7 @@ new class extends Component {
 
             <div class="px-6 py-5">
                 @if($pushSuccessMsg)
-                    <div class="rounded-lg bg-sky-50 border border-sky-200 px-4 py-3 flex items-start gap-3">
+                    <div class="rounded-lg bg-sky-50 border border-sky-200 px-5 py-3 flex items-start gap-3">
                         <svg class="w-5 h-5 text-sky-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                         </svg>
@@ -739,7 +739,7 @@ new class extends Component {
             <div class="px-6 py-5 space-y-4">
                 @if($csvResult)
                     {{-- Resultado --}}
-                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 space-y-1">
+                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-5 py-3 space-y-1">
                         <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
                         <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios guardados en el dispositivo.</p>
                         <p class="text-xs text-emerald-600 mt-1">{{ $csvResult['message'] }}</p>

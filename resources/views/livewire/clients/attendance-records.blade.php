@@ -144,17 +144,17 @@ new class extends Component {
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha / Hora</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha / Hora</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     @forelse($logs as $log)
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
+                        <td class="px-5 py-3 whitespace-nowrap">
                             @if($log->factorialEmployee)
                                 <p class="text-sm font-medium text-gray-900">{{ $log->factorialEmployee->full_name }}</p>
                                 <p class="text-xs text-gray-400 font-mono">
@@ -165,7 +165,7 @@ new class extends Component {
                                 <p class="text-xs text-amber-500">Sin resolver</p>
                             @endif
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
+                        <td class="px-5 py-3 whitespace-nowrap">
                             @php
                                 $typeLabels = ['check_in'=>'Entrada','check_out'=>'Salida','break_in'=>'Inicio descanso','break_out'=>'Fin descanso'];
                                 $typeColors = ['check_in'=>'bg-green-100 text-green-800','check_out'=>'bg-blue-100 text-blue-800','break_in'=>'bg-yellow-100 text-yellow-800','break_out'=>'bg-purple-100 text-purple-800'];
@@ -174,14 +174,14 @@ new class extends Component {
                                 {{ $typeLabels[$log->check_type] ?? $log->check_type }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                        <td class="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
                             <p>{{ $log->occurred_at->format('d/m/Y') }}</p>
                             <p class="font-mono">{{ $log->occurred_at->format('H:i:s') }}</p>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                             {{ $log->biometricSource?->name ?? '—' }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
+                        <td class="px-5 py-3 whitespace-nowrap">
                             @php
                                 $statusColors = ['pending'=>'bg-yellow-100 text-yellow-800','resolved'=>'bg-blue-100 text-blue-800','synced'=>'bg-green-100 text-green-800','failed'=>'bg-red-100 text-red-800','incomplete'=>'bg-gray-100 text-gray-600','descartado'=>'bg-gray-100 text-gray-400'];
                                 $statusLabels = ['pending'=>'Pendiente','resolved'=>'En proceso','synced'=>'Sincronizado','failed'=>'Fallido','incomplete'=>'Incompleto','descartado'=>'Descartado'];

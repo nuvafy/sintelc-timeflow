@@ -115,17 +115,17 @@ new class extends Component {
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiempo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiempo</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($logs as $log)
                 <tr class="hover:bg-gray-50 last:border-b-0">
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap">
                         @if($log->factorialEmployee)
                             <p class="text-sm font-medium text-gray-900">{{ $log->factorialEmployee->full_name }}</p>
                             <p class="text-xs text-gray-400 font-mono">ID Factorial: {{ $log->factorialEmployee->factorial_id }}</p>
@@ -135,7 +135,7 @@ new class extends Component {
                             <p class="text-xs text-amber-500">Sin resolver</p>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         @php
                             $typeLabels = ['check_in' => 'Entrada', 'check_out' => 'Salida', 'break_in' => 'Inicio descanso', 'break_out' => 'Fin descanso'];
                             $typeColors = ['check_in' => 'bg-green-100 text-green-800', 'check_out' => 'bg-blue-100 text-blue-800', 'break_in' => 'bg-yellow-100 text-yellow-800', 'break_out' => 'bg-purple-100 text-purple-800'];
@@ -144,7 +144,7 @@ new class extends Component {
                             {{ $typeLabels[$log->check_type] ?? $log->check_type }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 text-sm text-gray-500">
+                    <td class="px-5 py-3 text-sm text-gray-500">
                         <p class="flex items-center gap-1">
                             <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             {{ $log->occurred_at->format('d/m/Y') }}
@@ -154,13 +154,13 @@ new class extends Component {
                             {{ $log->occurred_at->format('H:i:s') }}
                         </p>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
                         <p title="{{ $log->client?->name }}">{{ Str::limit($log->client?->name ?? '—', 12, '…') }}</p>
                         @if($log->biometricSource)
                             <p class="text-xs text-gray-400 font-mono">{{ $log->biometricSource->name }}</p>
                         @endif
                     </td>
-                    <td class="px-6 py-4 max-w-xs">
+                    <td class="px-5 py-3 max-w-xs">
                         @php
                             $statusColors = ['pending' => 'bg-yellow-100 text-yellow-800', 'resolved' => 'bg-indigo-100 text-indigo-700', 'synced' => 'bg-green-100 text-green-800', 'incomplete' => 'bg-gray-100 text-gray-600', 'failed' => 'bg-red-100 text-red-800'];
                             $statusLabels = ['pending' => 'Pendiente', 'resolved' => 'Resuelto', 'synced' => 'Sincronizado', 'incomplete' => 'Incompleto', 'failed' => 'Fallido'];

@@ -547,29 +547,30 @@ new class extends Component {
     {{-- TAB: Empleados en Biométrico --}}
     @if($tab === 'biometric')
     <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($biometricUsers as $user)
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
+                    <td class="px-4 py-2.5 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
                         {{ $user['pin'] }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    <td class="px-4 py-2.5 whitespace-nowrap text-sm text-gray-700">
                         {{ $user['name'] ?? '—' }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td class="px-4 py-2.5 whitespace-nowrap text-sm text-gray-500">
                         {{ $user['source'] }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-4 py-2.5 whitespace-nowrap">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $user['mapped'] ? 'bg-green-500' : 'bg-gray-200' }}">
@@ -577,7 +578,7 @@ new class extends Component {
                                 {{ $user['mapped'] ? 'translate-x-4' : 'translate-x-0' }}"></span>
                         </button>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-500">
+                    <td class="px-4 py-2.5 whitespace-nowrap font-mono text-sm text-gray-500">
                         {{ $user['factorial_id'] ?? '—' }}
                     </td>
                 </tr>
@@ -590,6 +591,7 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
+        </div>
         @if($biometricUsers instanceof \Illuminate\Pagination\LengthAwarePaginator && $biometricUsers->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $biometricUsers->links() }}
@@ -688,15 +690,16 @@ new class extends Component {
     {{-- TAB: Empleados Factorial --}}
     @if($tab === 'factorial')
     <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en Factorial</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Biométrico</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en Factorial</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Biométrico</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -712,17 +715,17 @@ new class extends Component {
                         : $sourceNames->first()));
                 @endphp
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
+                    <td class="px-4 py-2.5 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
                         {{ $employee->factorial_id }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-4 py-2.5 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900">{{ $employee->full_name }}</div>
                         <div class="text-xs text-gray-500">{{ $employee->email }}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td class="px-4 py-2.5 whitespace-nowrap text-sm text-gray-500">
                         {{ $isMapped ? $deviceName : '—' }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-4 py-2.5 whitespace-nowrap">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $isMapped ? 'bg-green-500' : 'bg-gray-200' }}">
@@ -730,7 +733,7 @@ new class extends Component {
                                 {{ $isMapped ? 'translate-x-4' : 'translate-x-0' }}"></span>
                         </button>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700">
+                    <td class="px-4 py-2.5 whitespace-nowrap font-mono text-sm text-gray-700">
                         @if($isMapped)
                             {{ $biometricIds[$employee->id] }}
                         @else
@@ -751,7 +754,7 @@ new class extends Component {
                             </div>
                         @endif
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-4 py-2.5 whitespace-nowrap">
                         @if($employee->active)
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Activo</span>
                         @elseif($employee->is_terminating)
@@ -770,6 +773,7 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
+        </div>
         @if($employees instanceof \Illuminate\Pagination\LengthAwarePaginator && $employees->hasPages())
         <div class="px-6 py-4 border-t border-gray-200">
             {{ $employees->links() }}

@@ -122,7 +122,12 @@ class SyncAttendanceToFactorial implements ShouldQueue
             $this->tryOverwrite($log, $employee, $service, $message);
 
         } catch (\Throwable $e) {
-            $this->fail($log, $e->getMessage());
+            // Solo marcar como fallido si el sync no había completado ya.
+            // Evita que errores de logging (permisos) sobrescriban un status synced.
+            $log->refresh();
+            if ($log->sync_status !== 'synced') {
+                $this->fail($log, $e->getMessage());
+            }
             throw $e;
         }
     }

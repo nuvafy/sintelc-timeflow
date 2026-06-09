@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\BiometricSource;
+use App\Models\BiometricUserSync;
 use App\Models\DeviceCommand;
 use App\Models\FactorialEmployee;
 use Illuminate\Console\Command;
@@ -64,8 +65,7 @@ class PushUsersToDevice extends Command
 
         DeviceCommand::insert($inserts);
 
-        // Actualizar device_users_fetched_at y el conteo en nuestra DB
-        // basándonos en los empleados encolados (Security PUSH no soporta QUERY).
+        // Actualizar device_users en DB (Security PUSH no soporta QUERY).
         $source->update([
             'device_users'            => $employees->map(fn($e) => [
                 'pin'  => (string) $e->factorial_id,
@@ -74,7 +74,27 @@ class PushUsersToDevice extends Command
             'device_users_fetched_at' => $now,
         ]);
 
+        // Crear/actualizar mappings: factorial_id → empleado.
+        // Upsert por (biometric_provider_id, factorial_employee_id) para que
+        // un re-push actualice el external_employee_code si cambió el PIN.
+        $mappings = $employees->map(fn($e) => [
+            'biometric_provider_id'  => $source->biometric_provider_id,
+            'factorial_employee_id'  => $e->id,
+            'client_id'              => $source->client_id,
+            'external_employee_code' => (string) $e->factorial_id,
+            'sync_status'            => 'synced',
+            'created_at'             => $now,
+            'updated_at'             => $now,
+        ])->toArray();
+
+        BiometricUserSync::upsert(
+            $mappings,
+            ['biometric_provider_id', 'factorial_employee_id'],
+            ['external_employee_code', 'sync_status', 'updated_at']
+        );
+
         $this->info("Se encolaron {$employees->count()} usuarios para el dispositivo \"{$source->name}\" (SN: {$source->serial_number}).");
+        $this->line("Mappings actualizados: {$employees->count()} empleados → PIN = factorial_id.");
         $this->line("El equipo los recibirá en su próxima llamada a /iclock/getrequest.");
 
         return self::SUCCESS;

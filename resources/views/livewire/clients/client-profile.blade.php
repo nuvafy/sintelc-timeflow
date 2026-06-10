@@ -133,6 +133,7 @@ new class extends Component {
         <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             @if($editing)
                 <input wire:model="name" type="text"
+                    oninput="this.value=this.value.toUpperCase()"
                     class="block w-64 rounded-md border-gray-300 shadow-sm text-sm font-semibold focus:border-indigo-500 focus:ring-indigo-500"/>
                 @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             @else

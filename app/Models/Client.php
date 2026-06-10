@@ -17,6 +17,11 @@ class Client extends Model
         'contact_email',
     ];
 
+    public function setNameAttribute(string $value): void
+    {
+        $this->attributes['name'] = mb_strtoupper($value);
+    }
+
     public function factorialConnections(): HasMany
     {
         return $this->hasMany(FactorialConnection::class);

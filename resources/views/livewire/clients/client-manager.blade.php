@@ -392,7 +392,8 @@ new class extends Component {
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Nombre</label>
-                        <input wire:model.live="name" type="text" placeholder="Ej: Grupo MLA"
+                        <input wire:model.live="name" type="text" placeholder="Ej: GRUPO MLA"
+                            oninput="this.value=this.value.toUpperCase()"
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                         @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>

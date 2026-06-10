@@ -38,18 +38,16 @@ new class extends Component {
     public ?int $assign_provider_id = null;
     public ?int $assign_location_id = null;
 
-    // Modal CSV import
-    public bool   $showCsvModal = false;
-    public ?int   $csvSourceId  = null;
-    public $csvFile             = null;
-    public string $importError  = '';
-    public ?array $csvResult    = null;
-
-    // Modal Push usuarios → dispositivo
-    public bool   $showPushModal    = false;
-    public ?int   $pushSourceId     = null;
-    public int    $pushEmployeeCount = 0;
-    public ?string $pushSuccessMsg  = null;
+    // Modal importar empleados (tabbed: Factorial / CSV)
+    public bool    $showImportModal   = false;
+    public string  $importTab         = 'factorial';
+    public ?int    $csvSourceId       = null;
+    public $csvFile                   = null;
+    public string  $importError       = '';
+    public ?array  $csvResult         = null;
+    public ?int    $pushSourceId      = null;
+    public int     $pushEmployeeCount = 0;
+    public ?string $pushSuccessMsg    = null;
 
     public function rules(): array
     {
@@ -192,19 +190,25 @@ new class extends Component {
         $this->assigningSourceId = null;
     }
 
-    // ── Push usuarios Factorial → dispositivo ─────────────────────
+    // ── Modal importar empleados ──────────────────────────────────
 
-    public function openPushModal(int $id): void
+    public function openImportModal(int $id, string $tab = 'factorial'): void
     {
         $source = BiometricSource::findOrFail($id);
 
+        $this->importTab         = $tab;
         $this->pushSourceId      = $source->id;
         $this->pushSuccessMsg    = null;
         $this->pushEmployeeCount = FactorialEmployee::where('client_id', $source->client_id)
             ->where('active', true)
             ->count();
 
-        $this->showPushModal = true;
+        $this->csvSourceId  = $source->id;
+        $this->csvFile      = null;
+        $this->importError  = '';
+        $this->csvResult    = null;
+
+        $this->showImportModal = true;
     }
 
     public function confirmPush(): void
@@ -218,32 +222,16 @@ new class extends Component {
         $this->pushSuccessMsg = "{$this->pushEmployeeCount} usuario(s) encolados. El equipo los recibirá en su próximo ping.";
     }
 
-    public function closePushModal(): void
+    public function closeImportModal(): void
     {
-        $this->showPushModal     = false;
+        $this->showImportModal   = false;
         $this->pushSourceId      = null;
         $this->pushEmployeeCount = 0;
         $this->pushSuccessMsg    = null;
-    }
-
-    // ── CSV Import ────────────────────────────────────────────────
-
-    public function openCsvModal(int $id): void
-    {
-        $this->csvSourceId  = $id;
-        $this->csvFile      = null;
-        $this->importError  = '';
-        $this->csvResult    = null;
-        $this->showCsvModal = true;
-    }
-
-    public function closeCsvModal(): void
-    {
-        $this->showCsvModal = false;
-        $this->csvSourceId  = null;
-        $this->csvFile      = null;
-        $this->importError  = '';
-        $this->csvResult    = null;
+        $this->csvSourceId       = null;
+        $this->csvFile           = null;
+        $this->importError       = '';
+        $this->csvResult         = null;
     }
 
     public function uploadCsv(): void
@@ -468,18 +456,11 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
-                            {{-- Push usuarios Factorial → dispositivo --}}
-                            <button wire:click="openPushModal({{ $device->id }})" title="Enviar empleados de Factorial al dispositivo"
+                            {{-- Importar empleados (Factorial / CSV) --}}
+                            <button wire:click="openImportModal({{ $device->id }})" title="Importar empleados al dispositivo"
                                 class="text-sky-500 hover:text-sky-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                                </svg>
-                            </button>
-                            {{-- Importar CSV --}}
-                            <button wire:click="openCsvModal({{ $device->id }})" title="Importar empleados desde CSV"
-                                class="text-emerald-500 hover:text-emerald-700">
-                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </button>
                             {{-- Editar --}}
@@ -652,21 +633,37 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Modal: Push usuarios → dispositivo ────────────────────────── --}}
-    @if($showPushModal)
-    @php $pushSource = $pushSourceId ? \App\Models\BiometricSource::find($pushSourceId) : null; @endphp
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closePushModal">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+    {{-- ── Modal: Importar empleados al dispositivo ───────────────── --}}
+    @if($showImportModal)
+    @php $importSource = $pushSourceId ? \App\Models\BiometricSource::find($pushSourceId) : null; @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeImportModal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+
+            {{-- Header --}}
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                    <h3 class="text-base font-semibold text-gray-900">Enviar empleados al dispositivo</h3>
-                    @if($pushSource)
-                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $pushSource->name }} · {{ $pushSource->serial_number }}</p>
+                    <h3 class="text-base font-semibold text-gray-900">Importar empleados</h3>
+                    @if($importSource)
+                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $importSource->name }} · {{ $importSource->serial_number }}</p>
                     @endif
                 </div>
-                <button wire:click="closePushModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                <button wire:click="closeImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
 
+            {{-- Tabs --}}
+            <div class="flex border-b border-gray-200">
+                <button wire:click="$set('importTab', 'factorial')"
+                    class="flex-1 py-2.5 text-sm font-medium transition border-b-2 {{ $importTab === 'factorial' ? 'border-sky-500 text-sky-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
+                    Desde Factorial
+                </button>
+                <button wire:click="$set('importTab', 'csv')"
+                    class="flex-1 py-2.5 text-sm font-medium transition border-b-2 {{ $importTab === 'csv' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
+                    Desde CSV
+                </button>
+            </div>
+
+            {{-- Tab: Factorial --}}
+            @if($importTab === 'factorial')
             <div class="px-6 py-5">
                 @if($pushSuccessMsg)
                     <div class="rounded-lg bg-sky-50 border border-sky-200 px-5 py-3 flex items-start gap-3">
@@ -676,30 +673,20 @@ new class extends Component {
                         <p class="text-sm text-sky-800">{{ $pushSuccessMsg }}</p>
                     </div>
                 @else
-                    <div class="flex items-start gap-3">
-                        <svg class="w-10 h-10 text-sky-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                        </svg>
-                        <div>
-                            <p class="text-sm text-gray-700">
-                                Se enviarán <span class="font-semibold text-gray-900">{{ $pushEmployeeCount }} empleado(s) activos</span>
-                                de Factorial al dispositivo.
-                            </p>
-                            <p class="text-xs text-gray-400 mt-1">
-                                El equipo los recibirá en su próximo ping al servidor.
-                            </p>
-                            @if($pushEmployeeCount === 0)
-                                <p class="text-xs text-amber-600 mt-2 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                                    No hay empleados activos con PIN asignado para este cliente.
-                                </p>
-                            @endif
-                        </div>
-                    </div>
+                    <p class="text-sm text-gray-700">
+                        Se enviarán <span class="font-semibold text-gray-900">{{ $pushEmployeeCount }} empleado(s) activos</span>
+                        de Factorial al dispositivo.
+                    </p>
+                    <p class="text-xs text-gray-400 mt-1">El equipo los recibirá en su próximo ping al servidor.</p>
+                    @if($pushEmployeeCount === 0)
+                        <p class="text-xs text-amber-600 mt-3 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                            No hay empleados activos para este cliente.
+                        </p>
+                    @endif
                 @endif
             </div>
-
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button wire:click="closePushModal"
+                <button wire:click="closeImportModal"
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     {{ $pushSuccessMsg ? 'Cerrar' : 'Cancelar' }}
                 </button>
@@ -707,38 +694,17 @@ new class extends Component {
                 <button wire:click="confirmPush" wire:loading.attr="disabled"
                     @disabled($pushEmployeeCount === 0)
                     class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <span wire:loading.remove wire:target="confirmPush">
-                        <svg class="w-4 h-4 inline -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                        </svg>
-                        Enviar empleados
-                    </span>
+                    <span wire:loading.remove wire:target="confirmPush">Enviar empleados</span>
                     <span wire:loading wire:target="confirmPush">Encolando…</span>
                 </button>
                 @endif
             </div>
-        </div>
-    </div>
-    @endif
+            @endif
 
-    {{-- ── Modal: Importar CSV ──────────────────────────────────────── --}}
-    @if($showCsvModal)
-    @php $csvSource = $csvSourceId ? \App\Models\BiometricSource::find($csvSourceId) : null; @endphp
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeCsvModal">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <div>
-                    <h3 class="text-base font-semibold text-gray-900">Importar empleados desde CSV</h3>
-                    @if($csvSource)
-                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $csvSource->name }} · {{ $csvSource->serial_number }}</p>
-                    @endif
-                </div>
-                <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-            </div>
-
+            {{-- Tab: CSV --}}
+            @if($importTab === 'csv')
             <div class="px-6 py-5 space-y-4">
                 @if($csvResult)
-                    {{-- Resultado --}}
                     <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-5 py-3 space-y-1">
                         <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
                         <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios guardados en el dispositivo.</p>
@@ -757,9 +723,8 @@ new class extends Component {
                     </p>
                 @endif
             </div>
-
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button wire:click="closeCsvModal"
+                <button wire:click="closeImportModal"
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     {{ $csvResult ? 'Cerrar' : 'Cancelar' }}
                 </button>
@@ -771,6 +736,8 @@ new class extends Component {
                 </button>
                 @endif
             </div>
+            @endif
+
         </div>
     </div>
     @endif

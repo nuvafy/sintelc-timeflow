@@ -321,7 +321,7 @@ new class extends Component {
                 class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todas las empresas</option>
                 @foreach($clients as $c)
-                    <option value="{{ $c->id }}">{{ mb_substr(ucwords(mb_strtolower($c->name)), 0, 30) }}</option>
+                    <option value="{{ $c->id }}">{{ mb_substr($c->name, 0, 30) }}</option>
                 @endforeach
             </select>
             <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">

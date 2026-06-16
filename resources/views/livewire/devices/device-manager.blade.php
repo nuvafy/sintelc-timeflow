@@ -63,16 +63,28 @@ new class extends Component {
 
     public function with(): array
     {
+        $devices = BiometricSource::with(['client', 'location'])
+            ->whereNotNull('client_id')
+            ->withCount('attendanceLogs')
+            ->when($this->statusFilter === 'online',   fn($q) => $q->where('status', 'active')->where('last_ping_at', '>=', now()->subMinutes(15)))
+            ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subHour(), now()->subMinutes(15)]))
+            ->when($this->statusFilter === 'offline',  fn($q) => $q->where('status', 'active')->where(fn($q2) => $q2->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subHour())))
+            ->when($this->statusFilter === 'inactive', fn($q) => $q->where('status', 'inactive'))
+            ->when($this->clientFilter,                fn($q) => $q->where('client_id', $this->clientFilter))
+            ->paginate(10);
+
+        $sourceIds = $devices->pluck('id');
+        $pushStatus = DeviceCommand::whereIn('biometric_source_id', $sourceIds)
+            ->where('command_type', 'set_user')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('biometric_source_id')
+            ->keyBy('biometric_source_id')
+            ->map(fn($cmd) => $cmd->status);
+
         return [
-            'devices'            => BiometricSource::with(['client', 'location'])
-                ->whereNotNull('client_id')
-                ->withCount('attendanceLogs')
-                ->when($this->statusFilter === 'online',   fn($q) => $q->where('status', 'active')->where('last_ping_at', '>=', now()->subMinutes(15)))
-                ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subHour(), now()->subMinutes(15)]))
-                ->when($this->statusFilter === 'offline',  fn($q) => $q->where('status', 'active')->where(fn($q2) => $q2->whereNull('last_ping_at')->orWhere('last_ping_at', '<', now()->subHour())))
-                ->when($this->statusFilter === 'inactive', fn($q) => $q->where('status', 'inactive'))
-                ->when($this->clientFilter,                fn($q) => $q->where('client_id', $this->clientFilter))
-                ->paginate(10),
+            'devices'    => $devices,
+            'pushStatus' => $pushStatus,
             'unassigned'         => BiometricSource::whereNull('client_id')
                 ->orderByDesc('last_ping_at')
                 ->get(),
@@ -418,7 +430,10 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
                     <td class="px-5 py-3 whitespace-nowrap">
-                        @php $deviceUsers = $device->device_users ?? []; @endphp
+                        @php
+                            $deviceUsers = $device->device_users ?? [];
+                            $ps = $pushStatus[$device->id] ?? null;
+                        @endphp
                         @if(count($deviceUsers) > 0)
                             <span class="text-sm font-medium text-gray-700">{{ count($deviceUsers) }}</span>
                             @if($device->device_users_fetched_at)
@@ -426,6 +441,13 @@ new class extends Component {
                             @endif
                         @else
                             <span class="text-xs text-gray-400">—</span>
+                        @endif
+                        @if($ps === 'acknowledged')
+                            <p class="text-xs text-green-600 font-medium">✓ Push aceptado</p>
+                        @elseif($ps === 'failed')
+                            <p class="text-xs text-red-500 font-medium">✗ Push rechazado</p>
+                        @elseif($ps === 'sent' || $ps === 'pending')
+                            <p class="text-xs text-amber-500 font-medium">· Push pendiente</p>
                         @endif
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">

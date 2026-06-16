@@ -84,6 +84,10 @@ class IclockController extends Controller
             return $this->handleAttlog($request, $sn);
         }
 
+        if ($table === 'rtlog') {
+            return $this->handleRtlog($request, $sn);
+        }
+
         if ($table === 'USERINFO' || $table === 'user') {
             return $this->handleUserInfo($request, $sn, $table);
         }
@@ -314,6 +318,77 @@ class IclockController extends Controller
         Log::info('ZKTeco ATTLOG procesado', ['sn' => $sn, 'count' => count($records)]);
 
         return $this->plainResponse('OK: ' . count($records));
+    }
+
+    private function handleRtlog(Request $request, ?string $sn): Response
+    {
+        $source = BiometricSource::where('serial_number', $sn)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$source) {
+            return $this->plainResponse('OK');
+        }
+
+        // rtlog format: time=Y-m-d H:i:s\tpin=X\tinoutstatus=X\t...
+        $fields = [];
+        foreach (explode("\t", trim($request->getContent())) as $part) {
+            [$key, $val] = array_pad(explode('=', $part, 2), 2, '');
+            $fields[trim($key)] = trim($val);
+        }
+
+        $pin    = $fields['pin'] ?? null;
+        $time   = $fields['time'] ?? null;
+        $status = $fields['inoutstatus'] ?? null;
+
+        // pin=0 son eventos de sistema (puerta, alarma), no marcajes de empleados
+        if (!$pin || $pin === '0' || !$time) {
+            return $this->plainResponse('OK');
+        }
+
+        try {
+            $occurredAt = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $time, config('app.timezone'));
+        } catch (\Exception $e) {
+            return $this->plainResponse('OK');
+        }
+
+        $attendanceConfig = \App\Models\ClientAttendanceConfig::where('client_id', $source->client_id)->first();
+
+        if (!$attendanceConfig) {
+            return $this->plainResponse('OK');
+        }
+
+        $key = $pin . '|' . $occurredAt->format('Y-m-d H:i:s');
+        $exists = AttendanceLog::where('biometric_source_id', $source->id)
+            ->whereRaw("CONCAT(employee_code, '|', occurred_at) = ?", [$key])
+            ->exists();
+
+        if ($exists) {
+            return $this->plainResponse('OK');
+        }
+
+        $employeeId = \App\Models\BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->where('external_employee_code', $pin)
+            ->value('factorial_employee_id');
+
+        $log = AttendanceLog::create([
+            'client_id'             => $source->client_id,
+            'biometric_source_id'   => $source->id,
+            'factorial_employee_id' => $employeeId,
+            'employee_code'         => $pin,
+            'check_type'            => $attendanceConfig->resolveCheckType($status) ?? 'unknown',
+            'occurred_at'           => $occurredAt,
+            'raw_payload'           => json_encode($fields),
+            'sync_status'           => $employeeId ? 'resolved' : 'pending',
+        ]);
+
+        if ($employeeId) {
+            SyncAttendanceToFactorial::dispatch($log->id);
+        }
+
+        Log::info('ZKTeco rtlog procesado', ['sn' => $sn, 'pin' => $pin, 'time' => $time]);
+
+        return $this->plainResponse('OK');
     }
 
     // ─── Private: Builders ───────────────────────────────────────────

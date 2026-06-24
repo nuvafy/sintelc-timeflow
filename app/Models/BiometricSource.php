@@ -22,6 +22,7 @@ class BiometricSource extends Model
         'last_ping_at',
         'device_users',
         'device_users_fetched_at',
+        'push_version',
     ];
 
     protected $casts = [

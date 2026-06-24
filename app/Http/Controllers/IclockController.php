@@ -80,6 +80,15 @@ class IclockController extends Controller
             return $this->plainResponse($this->buildInitResponse($sn));
         }
 
+        if ($table === 'options' && $sn) {
+            $body = $request->getContent();
+            preg_match('/PushVersion=([^\s,]+)/i', $body, $m);
+            if (!empty($m[1])) {
+                BiometricSource::where('serial_number', $sn)
+                    ->update(['push_version' => $m[1]]);
+            }
+        }
+
         if ($table === 'ATTLOG') {
             return $this->handleAttlog($request, $sn);
         }

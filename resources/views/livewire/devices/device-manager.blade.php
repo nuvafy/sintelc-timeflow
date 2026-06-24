@@ -38,16 +38,18 @@ new class extends Component {
     public ?int $assign_provider_id = null;
     public ?int $assign_location_id = null;
 
-    // Modal importar empleados (tabbed: Factorial / CSV)
+    // Modal importar empleados (Factorial)
     public bool    $showImportModal   = false;
-    public string  $importTab         = 'factorial';
-    public ?int    $csvSourceId       = null;
-    public $csvFile                   = null;
-    public string  $importError       = '';
-    public ?array  $csvResult         = null;
     public ?int    $pushSourceId      = null;
     public int     $pushEmployeeCount = 0;
     public ?string $pushSuccessMsg    = null;
+
+    // Modal CSV
+    public bool    $showCsvModal = false;
+    public ?int    $csvSourceId  = null;
+    public $csvFile              = null;
+    public string  $importError  = '';
+    public ?array  $csvResult    = null;
 
     public function rules(): array
     {
@@ -204,23 +206,35 @@ new class extends Component {
 
     // ── Modal importar empleados ──────────────────────────────────
 
-    public function openImportModal(int $id, string $tab = 'factorial'): void
+    public function openImportModal(int $id): void
     {
         $source = BiometricSource::findOrFail($id);
 
-        $this->importTab         = $tab;
         $this->pushSourceId      = $source->id;
         $this->pushSuccessMsg    = null;
         $this->pushEmployeeCount = FactorialEmployee::where('client_id', $source->client_id)
             ->where('active', true)
             ->count();
 
-        $this->csvSourceId  = $source->id;
+        $this->showImportModal = true;
+    }
+
+    public function openCsvModal(int $id): void
+    {
+        $this->csvSourceId = $id;
+        $this->csvFile     = null;
+        $this->importError = '';
+        $this->csvResult   = null;
+        $this->showCsvModal = true;
+    }
+
+    public function closeCsvModal(): void
+    {
+        $this->showCsvModal = false;
+        $this->csvSourceId  = null;
         $this->csvFile      = null;
         $this->importError  = '';
         $this->csvResult    = null;
-
-        $this->showImportModal = true;
     }
 
     public function confirmPush(): void
@@ -240,10 +254,6 @@ new class extends Component {
         $this->pushSourceId      = null;
         $this->pushEmployeeCount = 0;
         $this->pushSuccessMsg    = null;
-        $this->csvSourceId       = null;
-        $this->csvFile           = null;
-        $this->importError       = '';
-        $this->csvResult         = null;
     }
 
     public function uploadCsv(): void
@@ -478,11 +488,18 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
-                            {{-- Importar empleados (Factorial / CSV) --}}
-                            <button wire:click="openImportModal({{ $device->id }})" title="Importar empleados al dispositivo"
+                            {{-- Importar desde Factorial --}}
+                            <button wire:click="openImportModal({{ $device->id }})" title="Importar empleados desde Factorial"
                                 class="text-sky-500 hover:text-sky-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </button>
+                            {{-- Importar desde CSV --}}
+                            <button wire:click="openCsvModal({{ $device->id }})" title="Importar usuarios desde CSV"
+                                class="text-emerald-500 hover:text-emerald-700">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/>
                                 </svg>
                             </button>
                             {{-- Editar --}}
@@ -655,37 +672,20 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Modal: Importar empleados al dispositivo ───────────────── --}}
+    {{-- ── Modal: Importar desde Factorial ───────────────────────── --}}
     @if($showImportModal)
     @php $importSource = $pushSourceId ? \App\Models\BiometricSource::find($pushSourceId) : null; @endphp
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeImportModal">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-
-            {{-- Header --}}
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                    <h3 class="text-base font-semibold text-gray-900">Importar empleados</h3>
+                    <h3 class="text-base font-semibold text-gray-900">Importar empleados desde Factorial</h3>
                     @if($importSource)
                         <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $importSource->name }} · {{ $importSource->serial_number }}</p>
                     @endif
                 </div>
                 <button wire:click="closeImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
-
-            {{-- Tabs --}}
-            <div class="flex border-b border-gray-200">
-                <button wire:click="$set('importTab', 'factorial')"
-                    class="flex-1 py-2.5 text-sm font-medium transition border-b-2 {{ $importTab === 'factorial' ? 'border-sky-500 text-sky-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
-                    Desde Factorial
-                </button>
-                <button wire:click="$set('importTab', 'csv')"
-                    class="flex-1 py-2.5 text-sm font-medium transition border-b-2 {{ $importTab === 'csv' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
-                    Desde CSV
-                </button>
-            </div>
-
-            {{-- Tab: Factorial --}}
-            @if($importTab === 'factorial')
             <div class="px-6 py-5">
                 @if($pushSuccessMsg)
                     <div class="rounded-lg bg-sky-50 border border-sky-200 px-5 py-3 flex items-start gap-3">
@@ -721,10 +721,24 @@ new class extends Component {
                 </button>
                 @endif
             </div>
-            @endif
+        </div>
+    </div>
+    @endif
 
-            {{-- Tab: CSV --}}
-            @if($importTab === 'csv')
+    {{-- ── Modal: Importar desde CSV ───────────────────────────────── --}}
+    @if($showCsvModal)
+    @php $csvSource = $csvSourceId ? \App\Models\BiometricSource::find($csvSourceId) : null; @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeCsvModal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Importar usuarios desde CSV</h3>
+                    @if($csvSource)
+                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $csvSource->name }} · {{ $csvSource->serial_number }}</p>
+                    @endif
+                </div>
+                <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
             <div class="px-6 py-5 space-y-4">
                 @if($csvResult)
                     <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-5 py-3 space-y-1">
@@ -746,7 +760,7 @@ new class extends Component {
                 @endif
             </div>
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button wire:click="closeImportModal"
+                <button wire:click="closeCsvModal"
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     {{ $csvResult ? 'Cerrar' : 'Cancelar' }}
                 </button>
@@ -758,8 +772,6 @@ new class extends Component {
                 </button>
                 @endif
             </div>
-            @endif
-
         </div>
     </div>
     @endif

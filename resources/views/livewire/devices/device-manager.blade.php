@@ -10,11 +10,10 @@ use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Models\FactorialLocation;
 use Livewire\Volt\Component;
-use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new class extends Component {
-    use WithPagination, WithFileUploads;
+    use WithPagination;
 
     public bool $showModal = false;
     public bool $editing = false;
@@ -47,12 +46,6 @@ new class extends Component {
     public int     $pushSintelcCount      = 0; // mapeados en Sintelc con PIN real
     public ?string $pushSuccessMsg        = null;
 
-    // Modal CSV
-    public bool    $showCsvModal = false;
-    public ?int    $csvSourceId  = null;
-    public $csvFile              = null;
-    public string  $importError  = '';
-    public ?array  $csvResult    = null;
 
     public function rules(): array
     {
@@ -244,23 +237,6 @@ new class extends Component {
         $this->showImportModal = true;
     }
 
-    public function openCsvModal(int $id): void
-    {
-        $this->csvSourceId = $id;
-        $this->csvFile     = null;
-        $this->importError = '';
-        $this->csvResult   = null;
-        $this->showCsvModal = true;
-    }
-
-    public function closeCsvModal(): void
-    {
-        $this->showCsvModal = false;
-        $this->csvSourceId  = null;
-        $this->csvFile      = null;
-        $this->importError  = '';
-        $this->csvResult    = null;
-    }
 
     public function confirmPush(): void
     {
@@ -417,71 +393,6 @@ new class extends Component {
         $this->pushSuccessMsg    = null;
     }
 
-    public function uploadCsv(): void
-    {
-        $this->importError = '';
-        $this->csvResult   = null;
-
-        $source = $this->csvSourceId ? BiometricSource::find($this->csvSourceId) : null;
-        if (!$source) { $this->importError = 'Dispositivo no encontrado.'; return; }
-
-        try {
-            $this->validate(['csvFile' => 'required|file|max:2048']);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            $this->importError = collect($e->errors())->flatten()->first() ?? 'Archivo inválido.';
-            return;
-        }
-
-        if (!in_array(strtolower($this->csvFile->getClientOriginalExtension()), ['csv', 'txt'])) {
-            $this->importError = 'Solo se aceptan archivos .csv o .txt';
-            return;
-        }
-
-        $path = $this->csvFile->getRealPath();
-        $rows = [];
-
-        if (($handle = fopen($path, 'r')) === false) {
-            $this->importError = 'No se pudo leer el archivo.';
-            return;
-        }
-
-        $header = null;
-        while (($line = fgetcsv($handle, 1000, ',')) !== false) {
-            if (!$header) {
-                $header = array_map('strtolower', array_map('trim', $line));
-                continue;
-            }
-            if (count($line) < count($header)) continue;
-            $row  = array_combine($header, array_slice($line, 0, count($header)));
-            $pin  = trim($row['pin'] ?? '');
-            $name = trim($row['nombre'] ?? $row['name'] ?? '');
-            if ($pin === '') continue;
-            $rows[] = [
-                'pin'  => mb_convert_encoding($pin,  'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
-                'name' => mb_convert_encoding($name, 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
-            ];
-        }
-        fclose($handle);
-
-        if (empty($rows)) {
-            $this->importError = 'Sin registros válidos. Columnas requeridas: pin, nombre.';
-            return;
-        }
-
-        // Guardar device_users en este dispositivo
-        $source->update([
-            'device_users' => array_map(
-                fn($r) => ['pin' => $r['pin'], 'name' => $r['name'], 'card' => '', 'role' => '0'],
-                $rows
-            ),
-        ]);
-
-        $this->csvResult = [
-            'total'   => count($rows),
-            'message' => 'Usuarios cargados. Ve a Mapeo de empleados para asignarlos.',
-        ];
-        $this->csvFile = null;
-    }
 
     private function resetForm(): void
     {
@@ -656,14 +567,7 @@ new class extends Component {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </button>
-                            {{-- Importar desde CSV --}}
-                            <button wire:click="openCsvModal({{ $device->id }})" title="Importar usuarios desde CSV"
-                                class="text-emerald-500 hover:text-emerald-700">
-                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/>
-                                </svg>
-                            </button>
-                            {{-- Editar --}}
+{{-- Editar --}}
                             <button wire:click="openEdit({{ $device->id }})" title="Editar"
                                 class="text-indigo-500 hover:text-indigo-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -926,54 +830,4 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Modal: Importar desde CSV ───────────────────────────────── --}}
-    @if($showCsvModal)
-    @php $csvSource = $csvSourceId ? \App\Models\BiometricSource::find($csvSourceId) : null; @endphp
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeCsvModal">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <div>
-                    <h3 class="text-base font-semibold text-gray-900">Importar usuarios desde CSV</h3>
-                    @if($csvSource)
-                        <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $csvSource->name }} · {{ $csvSource->serial_number }}</p>
-                    @endif
-                </div>
-                <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-            </div>
-            <div class="px-6 py-5 space-y-4">
-                @if($csvResult)
-                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-5 py-3 space-y-1">
-                        <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
-                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios guardados en el dispositivo.</p>
-                        <p class="text-xs text-emerald-600 mt-1">{{ $csvResult['message'] }}</p>
-                    </div>
-                @else
-                    <input wire:model="csvFile" type="file" accept=".csv,.txt"
-                        class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"/>
-                    @if($importError)
-                        <p class="text-xs text-red-600">{{ $importError }}</p>
-                    @endif
-                    <p class="text-xs text-gray-400">
-                        Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>
-                        &nbsp;·&nbsp;
-                        <a href="{{ route('templates.empleados') }}" class="text-emerald-600 hover:text-emerald-800 underline">Descargar plantilla</a>
-                    </p>
-                @endif
-            </div>
-            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button wire:click="closeCsvModal"
-                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                    {{ $csvResult ? 'Cerrar' : 'Cancelar' }}
-                </button>
-                @if(!$csvResult)
-                <button wire:click="uploadCsv" wire:loading.attr="disabled"
-                    class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50">
-                    <span wire:loading.remove wire:target="uploadCsv">Importar usuarios</span>
-                    <span wire:loading wire:target="uploadCsv">Importando…</span>
-                </button>
-                @endif
-            </div>
-        </div>
-    </div>
-    @endif
 </div>

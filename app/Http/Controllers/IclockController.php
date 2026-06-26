@@ -82,7 +82,8 @@ class IclockController extends Controller
 
         if ($table === 'options' && $sn) {
             $body = $request->getContent();
-            preg_match('/PushVersion=([^\s,]+)/i', $body, $m);
+            preg_match('/PushVersion=([^\r\n,]+)/i', $body, $m);
+            if (!empty($m[1])) $m[1] = trim($m[1]);
             if (!empty($m[1])) {
                 BiometricSource::where('serial_number', $sn)
                     ->update(['push_version' => $m[1]]);

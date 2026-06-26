@@ -399,8 +399,9 @@ new class extends Component {
 
         DeviceCommand::insert($inserts);
 
+        $existing = collect($source->device_users ?? []);
         $source->update([
-            'device_users'            => collect($users)->unique('pin')->values()->toArray(),
+            'device_users'            => $existing->concat($users)->unique('pin')->values()->toArray(),
             'device_users_fetched_at' => $now,
         ]);
 

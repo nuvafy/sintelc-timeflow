@@ -38,11 +38,14 @@ new class extends Component {
     public ?int $assign_provider_id = null;
     public ?int $assign_location_id = null;
 
-    // Modal importar empleados (Factorial)
-    public bool    $showImportModal   = false;
-    public ?int    $pushSourceId      = null;
-    public int     $pushEmployeeCount = 0;
-    public ?string $pushSuccessMsg    = null;
+    // Modal importar empleados
+    public bool    $showImportModal       = false;
+    public ?int    $pushSourceId          = null;
+    public string  $importMode            = 'factorial'; // 'factorial' | 'sintelc'
+    public int     $pushEmployeeCount     = 0; // total activos en Factorial
+    public int     $pushNewCount          = 0; // solo los no mapeados/no en device
+    public int     $pushSintelcCount      = 0; // mapeados en Sintelc con PIN real
+    public ?string $pushSuccessMsg        = null;
 
     // Modal CSV
     public bool    $showCsvModal = false;
@@ -210,10 +213,32 @@ new class extends Component {
     {
         $source = BiometricSource::findOrFail($id);
 
-        $this->pushSourceId      = $source->id;
-        $this->pushSuccessMsg    = null;
+        $this->pushSourceId   = $source->id;
+        $this->pushSuccessMsg = null;
+        $this->importMode     = 'factorial';
+
+        // Empleados ya mapeados en este proveedor
+        $mappedFactorialIds = BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->pluck('factorial_employee_id')
+            ->toArray();
+
+        // PINs ya presentes en el dispositivo
+        $devicePins = collect($source->device_users ?? [])->pluck('pin')->map(fn($p) => (string)$p)->toArray();
+
         $this->pushEmployeeCount = FactorialEmployee::where('client_id', $source->client_id)
+            ->where('active', true)->count();
+
+        // Solo los que no están mapeados y no están en el dispositivo
+        $this->pushNewCount = FactorialEmployee::where('client_id', $source->client_id)
             ->where('active', true)
+            ->whereNotIn('id', $mappedFactorialIds)
+            ->get()
+            ->filter(fn($e) => !in_array((string)$e->factorial_id, $devicePins, true))
+            ->count();
+
+        // Mapeados en Sintelc (todos, independientemente del PIN)
+        $this->pushSintelcCount = BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->whereNotNull('factorial_employee_id')
             ->count();
 
         $this->showImportModal = true;
@@ -241,11 +266,146 @@ new class extends Component {
     {
         $source = BiometricSource::findOrFail($this->pushSourceId);
 
-        \Illuminate\Support\Facades\Artisan::call('biometric:push-users', [
-            'sourceId' => $source->id,
+        $pushVersion  = $source->push_version ?? '';
+        $isAttendance = str_starts_with($pushVersion, 'Ver 3.0') || str_starts_with($pushVersion, '3.0');
+
+        if ($this->importMode === 'sintelc') {
+            $this->_pushFromSintelc($source, $isAttendance);
+        } else {
+            $this->_pushFromFactorial($source, $isAttendance);
+        }
+    }
+
+    private function _pushFromFactorial(BiometricSource $source, bool $isAttendance): void
+    {
+        $mappedFactorialIds = BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->pluck('factorial_employee_id')
+            ->toArray();
+
+        $devicePins = collect($source->device_users ?? [])->pluck('pin')->map(fn($p) => (string)$p)->toArray();
+
+        $employees = FactorialEmployee::where('client_id', $source->client_id)
+            ->where('active', true)
+            ->whereNotIn('id', $mappedFactorialIds)
+            ->get()
+            ->filter(fn($e) => !in_array((string)$e->factorial_id, $devicePins, true));
+
+        if ($employees->isEmpty()) {
+            $this->pushSuccessMsg = 'No hay empleados nuevos para enviar.';
+            return;
+        }
+
+        $maxSeq  = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
+        $now     = now();
+        $inserts = [];
+
+        foreach ($employees->values() as $i => $employee) {
+            $pin     = $employee->factorial_id;
+            $name    = mb_substr($employee->full_name, 0, 24);
+            $payload = $isAttendance
+                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
+                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
+
+            $inserts[] = [
+                'biometric_source_id' => $source->id,
+                'command_seq'         => $maxSeq + $i + 1,
+                'command_type'        => 'set_user',
+                'payload'             => $payload,
+                'status'              => 'pending',
+                'created_at'          => $now,
+                'updated_at'          => $now,
+            ];
+        }
+
+        DeviceCommand::insert($inserts);
+
+        // Añadir al device_users existente (no reemplazar)
+        $existing = collect($source->device_users ?? []);
+        $newUsers = $employees->values()->map(fn($e) => [
+            'pin'  => (string)$e->factorial_id,
+            'name' => mb_substr($e->full_name, 0, 24),
+        ]);
+        $source->update([
+            'device_users'            => $existing->concat($newUsers)->unique('pin')->values()->toArray(),
+            'device_users_fetched_at' => $now,
         ]);
 
-        $this->pushSuccessMsg = "{$this->pushEmployeeCount} usuario(s) encolados. El equipo los recibirá en su próximo ping.";
+        // Crear mapeos solo para los enviados
+        $mappings = $employees->values()->map(fn($e) => [
+            'biometric_provider_id'  => $source->biometric_provider_id,
+            'factorial_employee_id'  => $e->id,
+            'client_id'              => $source->client_id,
+            'external_employee_code' => (string)$e->factorial_id,
+            'sync_status'            => 'synced',
+            'created_at'             => $now,
+            'updated_at'             => $now,
+        ])->toArray();
+
+        BiometricUserSync::upsert(
+            $mappings,
+            ['biometric_provider_id', 'factorial_employee_id'],
+            ['external_employee_code', 'sync_status', 'updated_at']
+        );
+
+        $count = $employees->count();
+        $this->pushSuccessMsg = "{$count} empleado(s) nuevos encolados. El equipo los recibirá en su próximo ping.";
+    }
+
+    private function _pushFromSintelc(BiometricSource $source, bool $isAttendance): void
+    {
+        $syncs = BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->whereNotNull('factorial_employee_id')
+            ->with('factorialEmployee')
+            ->get();
+
+        if ($syncs->isEmpty()) {
+            $this->pushSuccessMsg = 'No hay empleados mapeados en Sintelc para enviar.';
+            return;
+        }
+
+        $maxSeq  = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
+        $now     = now();
+        $inserts = [];
+        $users   = [];
+
+        foreach ($syncs as $i => $sync) {
+            $employee = $sync->factorialEmployee;
+            if (!$employee) continue;
+
+            $pin  = $sync->external_employee_code; // PIN real del dispositivo
+            $name = mb_substr($employee->full_name, 0, 24);
+
+            $payload = $isAttendance
+                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
+                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
+
+            $inserts[] = [
+                'biometric_source_id' => $source->id,
+                'command_seq'         => $maxSeq + $i + 1,
+                'command_type'        => 'set_user',
+                'payload'             => $payload,
+                'status'              => 'pending',
+                'created_at'          => $now,
+                'updated_at'          => $now,
+            ];
+
+            $users[] = ['pin' => $pin, 'name' => $name];
+        }
+
+        if (empty($inserts)) {
+            $this->pushSuccessMsg = 'No se pudo generar comandos.';
+            return;
+        }
+
+        DeviceCommand::insert($inserts);
+
+        $source->update([
+            'device_users'            => collect($users)->unique('pin')->values()->toArray(),
+            'device_users_fetched_at' => $now,
+        ]);
+
+        $count = count($inserts);
+        $this->pushSuccessMsg = "{$count} empleado(s) mapeados encolados con su PIN de Sintelc. El equipo los recibirá en su próximo ping.";
     }
 
     public function closeImportModal(): void
@@ -672,21 +832,21 @@ new class extends Component {
     </div>
     @endif
 
-    {{-- ── Modal: Importar desde Factorial ───────────────────────── --}}
+    {{-- ── Modal: Importar empleados al dispositivo ──────────────────── --}}
     @if($showImportModal)
     @php $importSource = $pushSourceId ? \App\Models\BiometricSource::find($pushSourceId) : null; @endphp
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeImportModal">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                    <h3 class="text-base font-semibold text-gray-900">Importar empleados desde Factorial</h3>
+                    <h3 class="text-base font-semibold text-gray-900">Enviar empleados al dispositivo</h3>
                     @if($importSource)
                         <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $importSource->name }} · {{ $importSource->serial_number }}</p>
                     @endif
                 </div>
                 <button wire:click="closeImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
-            <div class="px-6 py-5">
+            <div class="px-6 py-5 space-y-4">
                 @if($pushSuccessMsg)
                     <div class="rounded-lg bg-sky-50 border border-sky-200 px-5 py-3 flex items-start gap-3">
                         <svg class="w-5 h-5 text-sky-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -695,15 +855,53 @@ new class extends Component {
                         <p class="text-sm text-sky-800">{{ $pushSuccessMsg }}</p>
                     </div>
                 @else
-                    <p class="text-sm text-gray-700">
-                        Se enviarán <span class="font-semibold text-gray-900">{{ $pushEmployeeCount }} empleado(s) activos</span>
-                        de Factorial al dispositivo.
-                    </p>
-                    <p class="text-xs text-gray-400 mt-1">El equipo los recibirá en su próximo ping al servidor.</p>
-                    @if($pushEmployeeCount === 0)
-                        <p class="text-xs text-amber-600 mt-3 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                            No hay empleados activos para este cliente.
-                        </p>
+                    {{-- Tabs --}}
+                    <div class="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-medium">
+                        <button wire:click="$set('importMode', 'factorial')"
+                            class="flex-1 py-2 px-3 text-center transition-colors
+                                {{ $importMode === 'factorial' ? 'bg-sky-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }}">
+                            Desde Factorial
+                        </button>
+                        <button wire:click="$set('importMode', 'sintelc')"
+                            class="flex-1 py-2 px-3 text-center border-l border-gray-200 transition-colors
+                                {{ $importMode === 'sintelc' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }}">
+                            Desde Sintelc
+                        </button>
+                    </div>
+
+                    @if($importMode === 'factorial')
+                        <div class="space-y-2">
+                            <p class="text-sm text-gray-700">
+                                Se enviarán <span class="font-semibold text-gray-900">{{ $pushNewCount }} empleado(s) nuevos</span>
+                                — los que aún no están mapeados ni en el dispositivo.
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                Total activos en Factorial: {{ $pushEmployeeCount }}.
+                                Ya mapeados: {{ $pushEmployeeCount - $pushNewCount }}.
+                            </p>
+                            <p class="text-xs text-gray-400">El PIN asignado será el ID de Factorial de cada empleado.</p>
+                            @if($pushNewCount === 0)
+                                <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                    Todos los empleados ya están mapeados o registrados en el dispositivo.
+                                </p>
+                            @endif
+                        </div>
+                    @else
+                        <div class="space-y-2">
+                            <p class="text-sm text-gray-700">
+                                Se enviarán <span class="font-semibold text-gray-900">{{ $pushSintelcCount }} empleado(s) mapeados</span>
+                                en Sintelc con su PIN real del dispositivo.
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                Usa los PINs que Sintelc ya tiene registrados para cada empleado.
+                                Ideal para restaurar o sincronizar dispositivos configurados manualmente.
+                            </p>
+                            @if($pushSintelcCount === 0)
+                                <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                    No hay empleados mapeados en Sintelc para este proveedor.
+                                </p>
+                            @endif
+                        </div>
                     @endif
                 @endif
             </div>
@@ -713,9 +911,11 @@ new class extends Component {
                     {{ $pushSuccessMsg ? 'Cerrar' : 'Cancelar' }}
                 </button>
                 @if(!$pushSuccessMsg)
+                @php $canPush = $importMode === 'factorial' ? $pushNewCount > 0 : $pushSintelcCount > 0; @endphp
                 <button wire:click="confirmPush" wire:loading.attr="disabled"
-                    @disabled($pushEmployeeCount === 0)
-                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    @disabled(!$canPush)
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                        {{ $importMode === 'factorial' ? 'bg-sky-600 hover:bg-sky-700' : 'bg-indigo-600 hover:bg-indigo-700' }}">
                     <span wire:loading.remove wire:target="confirmPush">Enviar empleados</span>
                     <span wire:loading wire:target="confirmPush">Encolando…</span>
                 </button>

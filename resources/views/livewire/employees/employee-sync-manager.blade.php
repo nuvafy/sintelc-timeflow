@@ -447,6 +447,8 @@ new class extends Component {
         while (($line = fgetcsv($handle, 1000, ',')) !== false) {
             if (!$header) {
                 $header = array_map('strtolower', array_map('trim', $line));
+                // Strip UTF-8 BOM from first field if present
+                $header[0] = ltrim($header[0], "\xEF\xBB\xBF");
                 continue;
             }
             if (count($line) < count($header)) continue;

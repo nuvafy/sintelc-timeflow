@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'iclock/*',
         ]);
         $middleware->group('iclock', []);
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\EnsureAdmin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

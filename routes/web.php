@@ -7,34 +7,37 @@ use App\Models\Client;
 
 Route::redirect('/', '/login');
 
-Route::view('dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
+// ── Rutas solo admin ─────────────────────────────────────────────────────────
+Route::middleware(['auth', 'verified', 'admin'])->group(function () {
+    Route::view('dashboard',  'dashboard')->name('dashboard');
+    Route::view('clients',    'clients')->name('clients');
+    Route::view('employees',  'employees')->name('employees');
+    Route::view('devices',    'devices')->name('devices');
+    Route::get('clients/{client}', fn(Client $client) => view('clients.show', compact('client')))->name('clients.show');
+    Route::get('clients/{client}/records', fn(Client $client) => view('clients.records', compact('client')))->name('clients.records');
+});
 
-Route::view('profile', 'profile')
-    ->middleware(['auth'])
-    ->name('profile');
+// ── Rutas compartidas (auth) ──────────────────────────────────────────────────
+Route::middleware(['auth'])->group(function () {
+    Route::view('profile', 'profile')->name('profile');
 
-Route::view('devices', 'devices')
-    ->middleware(['auth'])
-    ->name('devices');
+    // Cliente: aterrizaje post-login → sus registros de asistencia
+    Route::get('mis-registros', function () {
+        $user = auth()->user();
+        if ($user->isAdmin()) return redirect()->route('dashboard');
+        abort_if(!$user->client_id, 403);
+        $client = Client::findOrFail($user->client_id);
+        return view('clients.records', compact('client'));
+    })->name('client.records');
 
-Route::view('clients', 'clients')
-    ->middleware(['auth'])
-    ->name('clients');
-
-Route::get('clients/{client}', fn(Client $client) => view('clients.show', compact('client')))
-    ->middleware(['auth', 'verified'])
-    ->name('clients.show');
-
-Route::get('clients/{client}/records', fn(Client $client) => view('clients.records', compact('client')))
-    ->middleware(['auth', 'verified'])
-    ->name('clients.records');
-
-
-Route::view('employees', 'employees')
-    ->middleware(['auth'])
-    ->name('employees');
+    // Cliente: sus dispositivos
+    Route::get('mis-dispositivos', function () {
+        $user = auth()->user();
+        if ($user->isAdmin()) return redirect()->route('devices');
+        abort_if(!$user->client_id, 403);
+        return view('devices');
+    })->name('client.devices');
+});
 
 Route::get('templates/empleados.csv', function () {
     $bom  = "\xEF\xBB\xBF";
@@ -45,20 +48,18 @@ Route::get('templates/empleados.csv', function () {
     ]);
 })->middleware(['auth'])->name('templates.empleados');
 
-// Factorial OAuth
+// ── Factorial OAuth ───────────────────────────────────────────────────────────
 Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect'])->name('oauth.factorial.redirect');
-Route::get('/oauth/factorial/callback', [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');
+Route::get('/oauth/factorial/callback',  [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');
 
-// Biometric devices (ZKTeco) - no auth required
-Route::prefix('iclock')
-    ->middleware('iclock')
-    ->group(function () {
-        Route::match(['GET', 'POST'], '/ping', [IclockController::class, 'ping']);
-        Route::match(['GET', 'POST'], '/getrequest', [IclockController::class, 'getRequest']);
-        Route::match(['GET', 'POST'], '/cdata', [IclockController::class, 'cdata']);
-        Route::match(['GET', 'POST'], '/registry', [IclockController::class, 'registry']);
-        Route::match(['GET', 'POST'], '/push', [IclockController::class, 'push']);
-        Route::match(['GET', 'POST'], '/devicecmd', [IclockController::class, 'devicecmd']);
-    });
+// ── Biometric devices (ZKTeco) — sin auth ────────────────────────────────────
+Route::prefix('iclock')->middleware('iclock')->group(function () {
+    Route::match(['GET', 'POST'], '/ping',       [IclockController::class, 'ping']);
+    Route::match(['GET', 'POST'], '/getrequest', [IclockController::class, 'getRequest']);
+    Route::match(['GET', 'POST'], '/cdata',      [IclockController::class, 'cdata']);
+    Route::match(['GET', 'POST'], '/registry',   [IclockController::class, 'registry']);
+    Route::match(['GET', 'POST'], '/push',       [IclockController::class, 'push']);
+    Route::match(['GET', 'POST'], '/devicecmd',  [IclockController::class, 'devicecmd']);
+});
 
 require __DIR__.'/auth.php';

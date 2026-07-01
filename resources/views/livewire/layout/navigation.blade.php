@@ -12,12 +12,14 @@ new class extends Component
 
     public function mount(): void
     {
-        $this->unassignedDevices   = Cache::remember('nav.unassigned_devices', 60, fn() =>
-            BiometricSource::whereNull('client_id')->count()
-        );
-        $this->unresolvedEmployees = Cache::remember('nav.unresolved_employees', 60, fn() =>
-            \App\Models\BiometricUserSync::whereNull('factorial_employee_id')->count()
-        );
+        if (auth()->user()->isAdmin()) {
+            $this->unassignedDevices   = Cache::remember('nav.unassigned_devices', 60, fn() =>
+                BiometricSource::whereNull('client_id')->count()
+            );
+            $this->unresolvedEmployees = Cache::remember('nav.unresolved_employees', 60, fn() =>
+                \App\Models\BiometricUserSync::whereNull('factorial_employee_id')->count()
+            );
+        }
     }
 
     public function logout(Logout $logout): void
@@ -42,31 +44,37 @@ new class extends Component
 
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
-                        {{ __('Dashboard') }}
-                    </x-nav-link>
-
-                    <x-nav-link :href="route('clients')" :active="request()->routeIs('clients', 'clients.*')" wire:navigate>
-                        Empresas
-                    </x-nav-link>
-
-                    <x-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
-                        Empleados
-                        @if($unresolvedEmployees > 0)
-                            <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
-                                {{ $unresolvedEmployees }}
-                            </span>
-                        @endif
-                    </x-nav-link>
-
-                    <x-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
-                        Dispositivos
-                        @if($unassignedDevices > 0)
-                            <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-indigo-500 rounded-full">
-                                {{ $unassignedDevices }}
-                            </span>
-                        @endif
-                    </x-nav-link>
+                    @if(auth()->user()->isAdmin())
+                        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
+                            Dashboard
+                        </x-nav-link>
+                        <x-nav-link :href="route('clients')" :active="request()->routeIs('clients', 'clients.*')" wire:navigate>
+                            Empresas
+                        </x-nav-link>
+                        <x-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
+                            Empleados
+                            @if($unresolvedEmployees > 0)
+                                <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
+                                    {{ $unresolvedEmployees }}
+                                </span>
+                            @endif
+                        </x-nav-link>
+                        <x-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
+                            Dispositivos
+                            @if($unassignedDevices > 0)
+                                <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-indigo-500 rounded-full">
+                                    {{ $unassignedDevices }}
+                                </span>
+                            @endif
+                        </x-nav-link>
+                    @else
+                        <x-nav-link :href="route('client.records')" :active="request()->routeIs('client.records')" wire:navigate>
+                            Mis registros
+                        </x-nav-link>
+                        <x-nav-link :href="route('client.devices')" :active="request()->routeIs('client.devices')" wire:navigate>
+                            Mis dispositivos
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -114,24 +122,33 @@ new class extends Component
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
-                Dashboard
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('clients')" :active="request()->routeIs('clients', 'clients.*')" wire:navigate>
-                Empresas
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
-                Empleados
-                @if($unresolvedEmployees > 0)
-                    <span class="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">{{ $unresolvedEmployees }}</span>
-                @endif
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
-                Dispositivos
-                @if($unassignedDevices > 0)
-                    <span class="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-indigo-500 rounded-full">{{ $unassignedDevices }}</span>
-                @endif
-            </x-responsive-nav-link>
+            @if(auth()->user()->isAdmin())
+                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
+                    Dashboard
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('clients')" :active="request()->routeIs('clients', 'clients.*')" wire:navigate>
+                    Empresas
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
+                    Empleados
+                    @if($unresolvedEmployees > 0)
+                        <span class="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">{{ $unresolvedEmployees }}</span>
+                    @endif
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('devices')" :active="request()->routeIs('devices')" wire:navigate>
+                    Dispositivos
+                    @if($unassignedDevices > 0)
+                        <span class="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-indigo-500 rounded-full">{{ $unassignedDevices }}</span>
+                    @endif
+                </x-responsive-nav-link>
+            @else
+                <x-responsive-nav-link :href="route('client.records')" :active="request()->routeIs('client.records')" wire:navigate>
+                    Mis registros
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('client.devices')" :active="request()->routeIs('client.devices')" wire:navigate>
+                    Mis dispositivos
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->

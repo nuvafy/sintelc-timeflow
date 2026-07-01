@@ -61,8 +61,12 @@ new class extends Component {
 
     public function with(): array
     {
+        $user    = auth()->user();
+        $isAdmin = $user->isAdmin();
+
         $devices = BiometricSource::with(['client', 'location'])
             ->whereNotNull('client_id')
+            ->when(!$isAdmin, fn($q) => $q->where('client_id', $user->client_id))
             ->withCount('attendanceLogs')
             ->when($this->statusFilter === 'online',   fn($q) => $q->where('status', 'active')->where('last_ping_at', '>=', now()->subMinutes(15)))
             ->when($this->statusFilter === 'recent',   fn($q) => $q->where('status', 'active')->whereBetween('last_ping_at', [now()->subHour(), now()->subMinutes(15)]))
@@ -83,9 +87,10 @@ new class extends Component {
         return [
             'devices'    => $devices,
             'pushStatus' => $pushStatus,
-            'unassigned'         => BiometricSource::whereNull('client_id')
-                ->orderByDesc('last_ping_at')
-                ->get(),
+            'isAdmin'            => $isAdmin,
+            'unassigned'         => $isAdmin
+                ? BiometricSource::whereNull('client_id')->orderByDesc('last_ping_at')->get()
+                : collect(),
             'clients'            => Client::orderBy('name')->get(),
             'locations'          => FactorialLocation::orderBy('name')->get(),
             'providers'          => $this->client_id
@@ -132,6 +137,40 @@ new class extends Component {
 
     public function save(): void
     {
+        $user = auth()->user();
+
+        if ($user->isClient()) {
+            $this->validate(['name' => 'nullable|string|max:255', 'serial_number' => 'required|string|max:255']);
+
+            $source = BiometricSource::where('serial_number', $this->serial_number)
+                ->whereNull('client_id')
+                ->first();
+
+            if (!$source) {
+                $assigned = BiometricSource::where('serial_number', $this->serial_number)->exists();
+                $this->addError('serial_number', $assigned
+                    ? 'Este dispositivo ya está registrado en otra empresa.'
+                    : 'El dispositivo aún no se ha conectado al servidor. Verifica la configuración e intenta de nuevo.');
+                return;
+            }
+
+            $provider = BiometricProvider::firstOrCreate(
+                ['client_id' => $user->client_id],
+                ['vendor' => 'zkteco', 'status' => 'active']
+            );
+
+            $source->update([
+                'name'                  => $this->name ?: $this->serial_number,
+                'client_id'             => $user->client_id,
+                'biometric_provider_id' => $provider->id,
+                'status'                => 'active',
+            ]);
+
+            $this->showModal = false;
+            $this->resetForm();
+            return;
+        }
+
         $data = $this->validate();
 
         if ($this->editing) {
@@ -411,6 +450,7 @@ new class extends Component {
     {{-- ── Tarjeta filtros ─────────────────────────────────────────── --}}
     <div class="bg-white shadow rounded-lg px-5 py-3 mb-4">
         <div class="flex items-center justify-between gap-3">
+            @if($isAdmin)
             <select wire:model.live="clientFilter"
                 class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <option value="">Todas las empresas</option>
@@ -418,11 +458,14 @@ new class extends Component {
                     <option value="{{ $c->id }}">{{ mb_substr($c->name, 0, 30) }}</option>
                 @endforeach
             </select>
+            @else
+            <span class="text-sm text-gray-500">Mis dispositivos</span>
+            @endif
             <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
                 <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                 </svg>
-                Nuevo dispositivo
+                {{ $isAdmin ? 'Nuevo dispositivo' : 'Agregar dispositivo' }}
             </button>
         </div>
         <div class="border-t border-gray-100 mt-4 pt-3 flex items-center justify-between">
@@ -443,8 +486,8 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- ── Equipos descubiertos (sin asignar) ───────────────────────── --}}
-    @if($unassigned->isNotEmpty())
+    {{-- ── Equipos descubiertos (sin asignar) — solo admin ─────────── --}}
+    @if($isAdmin && $unassigned->isNotEmpty())
     <div class="mb-4 bg-white shadow rounded-lg overflow-hidden border-l-4 border-amber-400">
         <div class="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
             <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -560,6 +603,7 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
+                            @if($isAdmin)
                             {{-- Importar desde Factorial --}}
                             <button wire:click="openImportModal({{ $device->id }})" title="Importar empleados desde Factorial"
                                 class="text-sky-500 hover:text-sky-700">
@@ -567,7 +611,7 @@ new class extends Component {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </button>
-{{-- Editar --}}
+                            {{-- Editar --}}
                             <button wire:click="openEdit({{ $device->id }})" title="Editar"
                                 class="text-indigo-500 hover:text-indigo-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -581,6 +625,7 @@ new class extends Component {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                 </svg>
                             </button>
+                            @endif
                         </div>
                     </td>
                 </tr>
@@ -604,7 +649,9 @@ new class extends Component {
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 class="text-lg font-medium text-gray-900">{{ $editing ? 'Editar dispositivo' : 'Nuevo dispositivo' }}</h3>
+                <h3 class="text-lg font-medium text-gray-900">
+                    {{ $editing ? 'Editar dispositivo' : ($isAdmin ? 'Nuevo dispositivo' : 'Agregar dispositivo') }}
+                </h3>
                 <button wire:click="$set('showModal', false)" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -621,10 +668,15 @@ new class extends Component {
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Número de serie</label>
-                    <input wire:model="serial_number" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                    <input wire:model="serial_number" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"
+                        placeholder="{{ !$isAdmin ? 'Ej: CGXD230900001' : '' }}"/>
                     @error('serial_number') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    @if(!$isAdmin && !$editing)
+                    <p class="mt-1 text-xs text-gray-400">Ingresa el número de serie tal como aparece en el dispositivo. Solo se puede agregar si ya está conectado al servidor.</p>
+                    @endif
                 </div>
 
+                @if($isAdmin)
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">
@@ -638,7 +690,6 @@ new class extends Component {
                         </select>
                         @error('client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                     </div>
-
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Estado</label>
                         <select wire:model="status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -652,7 +703,6 @@ new class extends Component {
                     Sin cliente asignado, el equipo aparecerá en el panel de dispositivos detectados para asignarlo después.
                 </p>
                 @endif
-
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Proveedor biométrico</label>
                     <select wire:model="biometric_provider_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -663,7 +713,6 @@ new class extends Component {
                         @endforeach
                     </select>
                 </div>
-
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Ubicación Factorial</label>
                     <select wire:model="factorial_location_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -673,6 +722,7 @@ new class extends Component {
                         @endforeach
                     </select>
                 </div>
+                @endif
             </div>
 
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
@@ -680,7 +730,7 @@ new class extends Component {
                     Cancelar
                 </button>
                 <button wire:click="save" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
-                    {{ $editing ? 'Guardar cambios' : 'Crear dispositivo' }}
+                    {{ $editing ? 'Guardar cambios' : ($isAdmin ? 'Crear dispositivo' : 'Agregar dispositivo') }}
                 </button>
             </div>
         </div>

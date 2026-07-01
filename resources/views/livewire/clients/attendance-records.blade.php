@@ -18,7 +18,12 @@ new class extends Component {
 
     public function mount(Client $client): void
     {
-        $this->client = $client;
+        $user = auth()->user();
+        if ($user->isClient()) {
+            abort_if($user->client_id !== $client->id, 403);
+        }
+
+        $this->client   = $client;
         $this->dateFrom = today()->format('Y-m-d');
         $this->dateTo   = today()->format('Y-m-d');
     }

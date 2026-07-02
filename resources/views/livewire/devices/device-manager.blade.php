@@ -660,7 +660,7 @@ new class extends Component {
                             </button>
                             {{-- Clonar biométricos desde otro dispositivo --}}
                             <button wire:click="openCloneModal({{ $device->id }})" title="Clonar biométricos desde otro dispositivo"
-                                class="text-violet-500 hover:text-violet-700">
+                                class="text-yellow-500 hover:text-yellow-600">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                 </svg>
@@ -949,11 +949,11 @@ new class extends Component {
             </div>
             <div class="px-6 py-5 space-y-4">
                 @if($cloneSuccessMsg)
-                    <div class="rounded-lg bg-violet-50 border border-violet-200 px-5 py-4 flex items-start gap-3">
-                        <svg class="w-5 h-5 text-violet-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="rounded-lg bg-yellow-50 border border-yellow-200 px-5 py-4 flex items-start gap-3">
+                        <svg class="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                         </svg>
-                        <p class="text-sm text-violet-800">{{ $cloneSuccessMsg }}</p>
+                        <p class="text-sm text-yellow-800">{{ $cloneSuccessMsg }}</p>
                     </div>
                 @else
                     <p class="text-sm text-gray-600">
@@ -977,7 +977,7 @@ new class extends Component {
                             </p>
                         @else
                             <select wire:model="cloneSourceId"
-                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-violet-500 focus:ring-violet-500">
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500">
                                 <option value="">— Selecciona dispositivo origen —</option>
                                 @foreach($siblingDevices as $sibling)
                                     <option value="{{ $sibling->id }}">
@@ -998,7 +998,7 @@ new class extends Component {
                 </button>
                 @if(!$cloneSuccessMsg && !$siblingDevices->isEmpty())
                 <button wire:click="startClone" wire:loading.attr="disabled" @disabled(!$cloneSourceId)
-                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-md hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-yellow-500 rounded-md hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                     <span wire:loading.remove wire:target="startClone">Iniciar clonación</span>
                     <span wire:loading wire:target="startClone">Enviando…</span>
                 </button>

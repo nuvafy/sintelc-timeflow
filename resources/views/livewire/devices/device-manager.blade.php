@@ -533,11 +533,11 @@ new class extends Component {
                 <tr>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios en equipo</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios en equipo</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -553,8 +553,8 @@ new class extends Component {
                         <p class="text-sm text-gray-700">{{ $device->client?->name ?? '—' }}</p>
                         <p class="text-xs text-gray-400">{{ $device->location?->name ?? 'Sin ubicación' }}</p>
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-600">{{ $device->attendance_logs_count }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-600 text-center">{{ $device->attendance_logs_count }}</td>
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
                         @php
                             $deviceUsers = $device->device_users ?? [];
                             $ps = $pushStatus[$device->id] ?? null;
@@ -575,10 +575,10 @@ new class extends Component {
                             <p class="text-xs text-amber-500 font-medium">· Push pendiente</p>
                         @endif
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
+                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         {{ $device->last_ping_at?->diffForHumans() ?? '—' }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
                         @if($device->status !== 'active')
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500">
                                 Deshabilitado
@@ -601,8 +601,8 @@ new class extends Component {
                             </span>
                         @endif
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap text-right">
-                        <div class="flex items-center justify-end gap-3">
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
+                        <div class="flex items-center justify-center gap-3">
                             {{-- Enviar empleados al dispositivo (admin y cliente) --}}
                             <button wire:click="openImportModal({{ $device->id }})" title="Enviar empleados al dispositivo"
                                 class="text-sky-500 hover:text-sky-700">

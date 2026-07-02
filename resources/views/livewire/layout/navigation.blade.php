@@ -71,6 +71,9 @@ new class extends Component
                         <x-nav-link :href="route('client.records')" :active="request()->routeIs('client.records')" wire:navigate>
                             Mis registros
                         </x-nav-link>
+                        <x-nav-link :href="route('client.employees')" :active="request()->routeIs('client.employees')" wire:navigate>
+                            Mis empleados
+                        </x-nav-link>
                         <x-nav-link :href="route('client.devices')" :active="request()->routeIs('client.devices')" wire:navigate>
                             Mis dispositivos
                         </x-nav-link>
@@ -144,6 +147,9 @@ new class extends Component
             @else
                 <x-responsive-nav-link :href="route('client.records')" :active="request()->routeIs('client.records')" wire:navigate>
                     Mis registros
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('client.employees')" :active="request()->routeIs('client.employees')" wire:navigate>
+                    Mis empleados
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('client.devices')" :active="request()->routeIs('client.devices')" wire:navigate>
                     Mis dispositivos

@@ -603,14 +603,14 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-right">
                         <div class="flex items-center justify-end gap-3">
-                            @if($isAdmin)
-                            {{-- Importar desde Factorial --}}
-                            <button wire:click="openImportModal({{ $device->id }})" title="Importar empleados desde Factorial"
+                            {{-- Enviar empleados al dispositivo (admin y cliente) --}}
+                            <button wire:click="openImportModal({{ $device->id }})" title="Enviar empleados al dispositivo"
                                 class="text-sky-500 hover:text-sky-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </button>
+                            @if($isAdmin)
                             {{-- Editar --}}
                             <button wire:click="openEdit({{ $device->id }})" title="Editar"
                                 class="text-indigo-500 hover:text-indigo-700">

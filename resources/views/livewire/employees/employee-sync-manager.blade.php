@@ -14,7 +14,8 @@ use Livewire\WithPagination;
 new class extends Component {
     use WithPagination, WithFileUploads;
 
-    public ?int    $client_id = null;
+    public ?int    $client_id  = null;
+    public bool    $clientLocked = false; // true cuando el usuario es cliente (no puede cambiar empresa)
     public string  $search    = '';
     public string  $tab         = 'biometric'; // 'biometric' | 'factorial' | 'mapping' | 'unresolved'
     public string  $scoreFilter  = 'all';       // 'all' | 'perfect' | 'good' | 'low'
@@ -28,6 +29,17 @@ new class extends Component {
     public $csvFile              = null;
     public string  $importError  = '';
     public ?array  $csvResult    = null;
+
+    public function mount(): void
+    {
+        $user = auth()->user();
+        if ($user->isClient()) {
+            abort_if(!$user->client_id, 403);
+            $this->client_id    = $user->client_id;
+            $this->clientLocked = true;
+            $this->tab          = 'mapping';
+        }
+    }
 
     public function updatedSearch(): void      { $this->resetPage(); }
     public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; }
@@ -526,6 +538,11 @@ new class extends Component {
 
         {{-- Fila 1: empresa + búsqueda --}}
         <div class="flex gap-3">
+            @if($clientLocked)
+            <div class="shrink-0 flex items-center">
+                <span class="text-sm font-medium text-gray-700">{{ $clients->firstWhere('id', $client_id)?->name ?? '' }}</span>
+            </div>
+            @else
             <div class="{{ $client_id ? 'w-56' : 'w-full sm:w-72' }} shrink-0">
                 <select wire:model.live="client_id" class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                     <option value="">— Selecciona una empresa —</option>
@@ -534,6 +551,7 @@ new class extends Component {
                     @endforeach
                 </select>
             </div>
+            @endif
             @if($client_id)
             <div class="flex-1">
                 <input

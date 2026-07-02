@@ -37,6 +37,14 @@ Route::middleware(['auth'])->group(function () {
         abort_if(!$user->client_id, 403);
         return view('devices');
     })->name('client.devices');
+
+    // Cliente: sus empleados / mapeo
+    Route::get('mis-empleados', function () {
+        $user = auth()->user();
+        if ($user->isAdmin()) return redirect()->route('employees');
+        abort_if(!$user->client_id, 403);
+        return view('employees');
+    })->name('client.employees');
 });
 
 Route::get('templates/empleados.csv', function () {

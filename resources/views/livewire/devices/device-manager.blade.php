@@ -532,7 +532,9 @@ new class extends Component {
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    @if($isAdmin && !$clientFilter)
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                    @endif
                     <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Registros</th>
                     <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios en equipo</th>
                     <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Último ping</th>
@@ -549,10 +551,12 @@ new class extends Component {
                         <div class="text-sm font-medium text-gray-900">{{ $device->name }}</div>
                         <div class="text-xs text-gray-400 font-mono">{{ $device->serial_number }}</div>
                     </td>
+                    @if($isAdmin && !$clientFilter)
                     <td class="px-5 py-3 whitespace-nowrap">
                         <p class="text-sm text-gray-700">{{ $device->client?->name ?? '—' }}</p>
                         <p class="text-xs text-gray-400">{{ $device->location?->name ?? 'Sin ubicación' }}</p>
                     </td>
+                    @endif
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-600 text-center">{{ $device->attendance_logs_count }}</td>
                     <td class="px-5 py-3 whitespace-nowrap text-center">
                         @php
@@ -629,7 +633,7 @@ new class extends Component {
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500">No hay dispositivos registrados.</td>
+                    <td colspan="{{ ($isAdmin && !$clientFilter) ? 7 : 6 }}" class="px-6 py-10 text-center text-sm text-gray-500">No hay dispositivos registrados.</td>
                 </tr>
                 @endforelse
             </tbody>

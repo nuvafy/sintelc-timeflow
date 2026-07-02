@@ -102,6 +102,10 @@ class IclockController extends Controller
             return $this->handleUserInfo($request, $sn, $table);
         }
 
+        if ($table === 'BIODATA') {
+            return $this->handleBiodata($request, $sn);
+        }
+
         return $this->plainResponse('OK');
     }
 
@@ -328,6 +332,59 @@ class IclockController extends Controller
         Log::info('ZKTeco ATTLOG procesado', ['sn' => $sn, 'count' => count($records)]);
 
         return $this->plainResponse('OK: ' . count($records));
+    }
+
+    private function handleBiodata(Request $request, ?string $sn): Response
+    {
+        if (!$sn) return $this->plainResponse('OK');
+
+        $source = BiometricSource::where('serial_number', $sn)->first();
+        if (!$source) return $this->plainResponse('OK');
+
+        $body = $request->getContent();
+        if (empty(trim($body))) return $this->plainResponse('OK');
+
+        // Parsear líneas: cada línea es un registro biométrico de un usuario
+        $records = [];
+        foreach (explode("\n", $body) as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+            $records[] = $line;
+        }
+
+        if (empty($records)) return $this->plainResponse('OK');
+
+        $source->update([
+            'biodata_cache'     => $records,
+            'biodata_cached_at' => now(),
+        ]);
+
+        Log::info('ZKTeco BIODATA capturado', ['sn' => $sn, 'records' => count($records)]);
+
+        // Si hay un clon pendiente, encolar UPDATE BIODATA al target
+        if ($source->clone_target_id) {
+            $target = BiometricSource::find($source->clone_target_id);
+            if ($target) {
+                $seq = DeviceCommand::where('biometric_source_id', $target->id)->max('command_seq') + 1;
+                foreach ($records as $i => $record) {
+                    DeviceCommand::create([
+                        'biometric_source_id' => $target->id,
+                        'command_seq'         => $seq + $i,
+                        'command_type'        => 'push_biodata',
+                        'payload'             => 'DATA UPDATE BIODATA ' . $record,
+                        'status'              => 'pending',
+                    ]);
+                }
+                Log::info('ZKTeco BIODATA clone encolado', [
+                    'source' => $sn,
+                    'target' => $target->serial_number,
+                    'count'  => count($records),
+                ]);
+            }
+            $source->update(['clone_target_id' => null]);
+        }
+
+        return $this->plainResponse('OK');
     }
 
     private function handleRtlog(Request $request, ?string $sn): Response

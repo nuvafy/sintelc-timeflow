@@ -37,6 +37,12 @@ new class extends Component {
     public ?int $assign_provider_id = null;
     public ?int $assign_location_id = null;
 
+    // Modal clonar biométricos
+    public bool    $showCloneModal        = false;
+    public ?int    $cloneTargetId         = null;
+    public ?int    $cloneSourceId         = null;
+    public ?string $cloneSuccessMsg       = null;
+
     // Modal importar empleados
     public bool    $showImportModal       = false;
     public ?int    $pushSourceId          = null;
@@ -432,6 +438,44 @@ new class extends Component {
         $this->pushSuccessMsg    = null;
     }
 
+    public function openCloneModal(int $id): void
+    {
+        $this->cloneTargetId   = $id;
+        $this->cloneSourceId   = null;
+        $this->cloneSuccessMsg = null;
+        $this->showCloneModal  = true;
+    }
+
+    public function startClone(): void
+    {
+        if (!$this->cloneTargetId || !$this->cloneSourceId) return;
+
+        $target = BiometricSource::findOrFail($this->cloneTargetId);
+        $source = BiometricSource::findOrFail($this->cloneSourceId);
+
+        // Marcar el source con el target para cuando llegue el BIODATA
+        $source->update(['clone_target_id' => $target->id]);
+
+        // Encolar QUERY BIODATA al source
+        $seq = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
+        DeviceCommand::create([
+            'biometric_source_id' => $source->id,
+            'command_seq'         => $seq,
+            'command_type'        => 'query_biodata',
+            'payload'             => 'DATA QUERY BIODATA',
+            'status'              => 'pending',
+        ]);
+
+        $this->cloneSuccessMsg = "Solicitud enviada a {$source->name}. Los biométricos se copiarán a {$target->name} automáticamente cuando el equipo responda.";
+    }
+
+    public function closeCloneModal(): void
+    {
+        $this->showCloneModal  = false;
+        $this->cloneTargetId   = null;
+        $this->cloneSourceId   = null;
+        $this->cloneSuccessMsg = null;
+    }
 
     private function resetForm(): void
     {
@@ -607,11 +651,18 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-center">
                         <div class="flex items-center justify-center gap-3">
-                            {{-- Enviar empleados al dispositivo (admin y cliente) --}}
+                            {{-- Enviar empleados al dispositivo --}}
                             <button wire:click="openImportModal({{ $device->id }})" title="Enviar empleados al dispositivo"
                                 class="text-sky-500 hover:text-sky-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </button>
+                            {{-- Clonar biométricos desde otro dispositivo --}}
+                            <button wire:click="openCloneModal({{ $device->id }})" title="Clonar biométricos desde otro dispositivo"
+                                class="text-violet-500 hover:text-violet-700">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                 </svg>
                             </button>
                             {{-- Editar --}}
@@ -875,6 +926,81 @@ new class extends Component {
                         {{ $importMode === 'factorial' ? 'bg-sky-600 hover:bg-sky-700' : 'bg-indigo-600 hover:bg-indigo-700' }}">
                     <span wire:loading.remove wire:target="confirmPush">Enviar empleados</span>
                     <span wire:loading wire:target="confirmPush">Encolando…</span>
+                </button>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Modal: Clonar biométricos ──────────────────────────────────── --}}
+    @if($showCloneModal)
+    @php $cloneTarget = $cloneTargetId ? \App\Models\BiometricSource::find($cloneTargetId) : null; @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" wire:click.self="closeCloneModal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Clonar biométricos</h3>
+                    @if($cloneTarget)
+                        <p class="text-xs text-gray-400 font-mono mt-0.5">Destino: {{ $cloneTarget->name }} · {{ $cloneTarget->serial_number }}</p>
+                    @endif
+                </div>
+                <button wire:click="closeCloneModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div class="px-6 py-5 space-y-4">
+                @if($cloneSuccessMsg)
+                    <div class="rounded-lg bg-violet-50 border border-violet-200 px-5 py-4 flex items-start gap-3">
+                        <svg class="w-5 h-5 text-violet-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <p class="text-sm text-violet-800">{{ $cloneSuccessMsg }}</p>
+                    </div>
+                @else
+                    <p class="text-sm text-gray-600">
+                        Selecciona el dispositivo <span class="font-medium">origen</span> del que se copiarán las huellas dactilares.
+                        El proceso es automático: el equipo origen enviará sus plantillas biométricas al servidor y las reenviará al destino.
+                    </p>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Copiar desde</label>
+                        @php
+                            $siblingDevices = $cloneTarget
+                                ? \App\Models\BiometricSource::where('client_id', $cloneTarget->client_id)
+                                    ->where('id', '!=', $cloneTarget->id)
+                                    ->where('status', 'active')
+                                    ->orderBy('name')
+                                    ->get()
+                                : collect();
+                        @endphp
+                        @if($siblingDevices->isEmpty())
+                            <p class="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                No hay otros dispositivos activos en la misma empresa.
+                            </p>
+                        @else
+                            <select wire:model="cloneSourceId"
+                                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-violet-500 focus:ring-violet-500">
+                                <option value="">— Selecciona dispositivo origen —</option>
+                                @foreach($siblingDevices as $sibling)
+                                    <option value="{{ $sibling->id }}">
+                                        {{ $sibling->name }} ({{ $sibling->serial_number }})
+                                        @if($sibling->last_ping_at?->gt(now()->subMinutes(15))) · En línea @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-1 text-xs text-gray-400">Se recomienda elegir un dispositivo en línea para que la respuesta sea inmediata.</p>
+                        @endif
+                    </div>
+                @endif
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button wire:click="closeCloneModal"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    {{ $cloneSuccessMsg ? 'Cerrar' : 'Cancelar' }}
+                </button>
+                @if(!$cloneSuccessMsg && !$siblingDevices->isEmpty())
+                <button wire:click="startClone" wire:loading.attr="disabled" @disabled(!$cloneSourceId)
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-md hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    <span wire:loading.remove wire:target="startClone">Iniciar clonación</span>
+                    <span wire:loading wire:target="startClone">Enviando…</span>
                 </button>
                 @endif
             </div>

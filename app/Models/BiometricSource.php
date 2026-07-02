@@ -23,6 +23,9 @@ class BiometricSource extends Model
         'device_users',
         'device_users_fetched_at',
         'push_version',
+        'biodata_cache',
+        'biodata_cached_at',
+        'clone_target_id',
     ];
 
     protected $casts = [
@@ -30,6 +33,8 @@ class BiometricSource extends Model
         'device_users'            => 'array',
         'last_ping_at'            => 'datetime',
         'device_users_fetched_at' => 'datetime',
+        'biodata_cache'           => 'array',
+        'biodata_cached_at'       => 'datetime',
     ];
 
     public function client(): BelongsTo

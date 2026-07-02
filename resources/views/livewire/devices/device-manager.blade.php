@@ -957,8 +957,8 @@ new class extends Component {
                     </div>
                 @else
                     <p class="text-sm text-gray-600">
-                        Selecciona el dispositivo <span class="font-medium">origen</span> del que se copiarán las huellas dactilares.
-                        El proceso es automático: el equipo origen enviará sus plantillas biométricas al servidor y las reenviará al destino.
+                        Selecciona el dispositivo <span class="font-medium">origen</span> del que se copiarán las plantillas biométricas.
+                        El proceso es automático: el equipo origen enviará sus plantillas al servidor y las reenviará al destino.
                     </p>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Copiar desde</label>

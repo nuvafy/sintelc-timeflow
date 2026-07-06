@@ -871,7 +871,7 @@ new class extends Component {
                         : ($sourceCount > 1 ? 'Varios'
                         : $sourceNames->first()));
                 @endphp
-                <tr class="hover:bg-gray-50">
+                <tr class="hover:bg-gray-50" wire:key="emp-row-{{ $employee->id }}" x-data="{ pin: '' }">
                     <td class="px-5 py-3 whitespace-nowrap font-mono text-sm font-semibold text-gray-900">
                         {{ $employee->factorial_id }}
                     </td>
@@ -884,19 +884,27 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap">
                         <div class="flex items-center h-full">
+                        @if($isMapped)
                         <button type="button" disabled
-                            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
-                                {{ $isMapped ? 'bg-green-500' : 'bg-gray-200' }}">
-                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200
-                                {{ $isMapped ? 'translate-x-4' : 'translate-x-0' }}"></span>
+                            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default bg-green-500">
+                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 translate-x-4"></span>
                         </button>
+                        @else
+                        <button type="button"
+                            @click="pin = pin === '{{ $employee->factorial_id }}' ? '' : '{{ $employee->factorial_id }}'"
+                            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer"
+                            :class="pin === '{{ $employee->factorial_id }}' ? 'bg-indigo-400' : 'bg-gray-200'">
+                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200"
+                                :class="pin === '{{ $employee->factorial_id }}' ? 'translate-x-4' : 'translate-x-0'"></span>
+                        </button>
+                        @endif
                         </div>
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap font-mono text-sm text-gray-700">
                         @if($isMapped)
                             {{ $biometricIds[$employee->id] }}
                         @else
-                            <div x-data="{ pin: '' }" wire:key="pin-input-{{ $employee->id }}" class="flex items-center gap-1">
+                            <div class="flex items-center gap-1">
                                 <input
                                     x-model="pin"
                                     type="text"

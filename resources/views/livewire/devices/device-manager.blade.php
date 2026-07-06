@@ -287,8 +287,7 @@ new class extends Component {
     {
         $source = BiometricSource::findOrFail($this->pushSourceId);
 
-        $pushVersion  = $source->push_version ?? '';
-        $isAttendance = str_starts_with($pushVersion, 'Ver 3.0') || str_starts_with($pushVersion, '3.0');
+        $isAttendance = true; // SDK recomienda Attendance PUSH (DATA UPDATE USERINFO) para todos los modelos
 
         if ($this->importMode === 'sintelc') {
             $this->_pushFromSintelc($source, $isAttendance);

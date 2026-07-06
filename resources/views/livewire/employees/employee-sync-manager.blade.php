@@ -896,7 +896,7 @@ new class extends Component {
                         @if($isMapped)
                             {{ $biometricIds[$employee->id] }}
                         @else
-                            <div x-data="{ pin: '' }" class="flex items-center gap-1">
+                            <div x-data="{ pin: '' }" wire:key="pin-input-{{ $employee->id }}" class="flex items-center gap-1">
                                 <input
                                     x-model="pin"
                                     type="text"

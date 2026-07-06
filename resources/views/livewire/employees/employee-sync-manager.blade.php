@@ -30,6 +30,31 @@ new class extends Component {
     public string  $importError  = '';
     public ?array  $csvResult    = null;
 
+    public function syncFromDevices(): void
+    {
+        if (!$this->client_id) return;
+
+        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
+        if (!$provider) return;
+
+        $sources = BiometricSource::where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($sources as $source) {
+            $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
+            \App\Models\DeviceCommand::create([
+                'biometric_source_id' => $source->id,
+                'command_seq'         => $seq,
+                'command_type'        => 'query_users',
+                'payload'             => 'DATA QUERY USERINFO',
+                'status'              => 'pending',
+            ]);
+        }
+
+        $this->dispatch('notify', message: 'Solicitud enviada a ' . $sources->count() . ' dispositivo(s). La lista se actualizará en unos segundos.');
+    }
+
     public function mount(): void
     {
         $user = auth()->user();
@@ -638,6 +663,16 @@ new class extends Component {
                     </span>
                     @endif
                 @elseif($tab === 'biometric')
+                    <button wire:click="syncFromDevices" wire:loading.attr="disabled" title="Solicitar lista actualizada de usuarios a los dispositivos"
+                        class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition">
+                        <svg wire:loading.remove wire:target="syncFromDevices" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <svg wire:loading wire:target="syncFromDevices" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Sync
+                    </button>
                     <span class="text-xs text-gray-400">{{ $biometricMappedCount }} de {{ $biometricTotalCount }} empleado(s) mapeados</span>
                 @elseif($tab === 'factorial')
                     <span class="text-xs text-gray-400">

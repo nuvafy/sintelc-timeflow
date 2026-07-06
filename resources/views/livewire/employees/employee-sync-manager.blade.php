@@ -385,9 +385,9 @@ new class extends Component {
         $sourcesPerProvider = $allSources->groupBy('biometric_provider_id')->map(fn($s) => $s->pluck('name'));
 
         if ($this->statusFilter === 'mapped') {
-            $query->whereIn('id', $mappedEmployeeIds->keys()->all());
+            $query->whereIn('id', $biometricIds->keys()->all());
         } elseif ($this->statusFilter === 'unmapped') {
-            $query->whereNotIn('id', $mappedEmployeeIds->keys()->all());
+            $query->whereNotIn('id', $biometricIds->keys()->all());
         }
 
         return [

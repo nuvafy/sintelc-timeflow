@@ -109,14 +109,12 @@ class AttendanceReportExport
         $rows[] = ['type' => 'subtitle','values' => [trim(($this->dateFrom ?? '') . ' — ' . ($this->dateTo ?? ''))]];
         $rows[] = ['type' => 'blank',   'values' => []];
 
-        // Header
-        $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
-
         foreach ($byEmployee as $empData) {
             $rows[] = [
                 'type'   => $empData['local'] ? 'emp_local' : 'emp_header',
                 'values' => [$empData['name'] . ($empData['local'] ? ' [Local]' : ''), '', '', '', '', ''],
             ];
+            $rows[] = ['type' => 'header', 'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
             $days      = $empData['days'];
             $totalMins = 0;
@@ -360,8 +358,8 @@ class AttendanceReportExport
     <font><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/></font>
     <font><b/><sz val="14"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
     <font><sz val="12"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
-    <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FF3730A3"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FF92400E"/><name val="Calibri"/></font>
     <font><sz val="12"/><color rgb="FF111827"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FF4338CA"/><name val="Calibri"/></font>
@@ -371,8 +369,8 @@ class AttendanceReportExport
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF4F46E5"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFF1F0FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1E1B4B"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
   </fills>
@@ -386,7 +384,7 @@ class AttendanceReportExport
     <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" indent="1"/></xf>
     <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" indent="1"/></xf>
     <xf numFmtId="0" fontId="3" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" horizontal="left" indent="1"/></xf>
-    <xf numFmtId="0" fontId="4" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" indent="1"/></xf>
     <xf numFmtId="0" fontId="5" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
     <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment vertical="center" indent="2"/></xf>
     <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>

@@ -358,24 +358,24 @@ class AttendanceReportExport
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="9">
-    <font><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/></font>
-    <font><b/><sz val="14"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
+    <font><sz val="12"/><color rgb="FF111827"/><name val="Calibri"/></font>
+    <font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><sz val="12"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
-    <font><b/><sz val="12"/><color rgb="FF3730A3"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FF92400E"/><name val="Calibri"/></font>
     <font><sz val="12"/><color rgb="FF111827"/><name val="Calibri"/></font>
-    <font><b/><sz val="12"/><color rgb="FF4338CA"/><name val="Calibri"/></font>
-    <font><b/><sz val="12"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FF003D73"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FF003D73"/><name val="Calibri"/></font>
   </fonts>
   <fills count="7">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFF1F0FF"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF1E1B4B"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF003D73"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF0388C8"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF003D73"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE8F4FB"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>

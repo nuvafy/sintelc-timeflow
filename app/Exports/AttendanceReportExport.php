@@ -110,7 +110,7 @@ class AttendanceReportExport
         $rows[] = ['type' => 'blank',   'values' => []];
 
         // Header
-        $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Empleado', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
+        $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
         foreach ($byEmployee as $empData) {
             // Employee group header
@@ -201,7 +201,7 @@ class AttendanceReportExport
                 $rows[] = [
                     'type'   => 'day',
                     'estado' => $estado,
-                    'values' => [$dateLabel, '', $inTime ?? '—', $outTime ?? '—', $breakStr, $area, $estado],
+                    'values' => [$dateLabel, $inTime ?? '—', $outTime ?? '—', $breakStr, $area, $estado],
                 ];
             }
 
@@ -213,7 +213,7 @@ class AttendanceReportExport
 
             $rows[] = [
                 'type'   => 'total',
-                'values' => ['', '', '', '', '', 'Total horas laboradas', "{$totalStr}  {$naNote}"],
+                'values' => ['', '', '', '', 'Total horas laboradas', "{$totalStr}  {$naNote}"],
             ];
             $rows[] = ['type' => 'blank', 'values' => []];
         }
@@ -230,13 +230,12 @@ class AttendanceReportExport
         $xml .= '<sheetViews><sheetView workbookViewId="0"><selection activeCell="A1"/></sheetView></sheetViews>';
         $xml .= '<sheetFormatPr defaultRowHeight="16"/>';
         $xml .= '<cols>';
-        $xml .= '<col min="1" max="1" width="16" customWidth="1"/>';
-        $xml .= '<col min="2" max="2" width="30" customWidth="1"/>';
+        $xml .= '<col min="1" max="1" width="18" customWidth="1"/>';
+        $xml .= '<col min="2" max="2" width="10" customWidth="1"/>';
         $xml .= '<col min="3" max="3" width="10" customWidth="1"/>';
-        $xml .= '<col min="4" max="4" width="10" customWidth="1"/>';
-        $xml .= '<col min="5" max="5" width="12" customWidth="1"/>';
-        $xml .= '<col min="6" max="6" width="28" customWidth="1"/>';
-        $xml .= '<col min="7" max="7" width="32" customWidth="1"/>';
+        $xml .= '<col min="4" max="4" width="12" customWidth="1"/>';
+        $xml .= '<col min="5" max="5" width="28" customWidth="1"/>';
+        $xml .= '<col min="6" max="6" width="34" customWidth="1"/>';
         $xml .= '</cols>';
         $xml .= '<sheetData>';
 
@@ -248,12 +247,12 @@ class AttendanceReportExport
 
         $xml .= '</sheetData>';
 
-        // Merges for title/subtitle/emp headers (col A–G = 1–7)
+        // Merges for title/subtitle/emp headers (col A–F = 1–6)
         $merges = [];
         $r = 1;
         foreach ($this->rows as $row) {
             if (in_array($row['type'], ['title', 'subtitle', 'emp_header', 'emp_local'])) {
-                $merges[] = "A{$r}:G{$r}";
+                $merges[] = "A{$r}:F{$r}";
             }
             $r++;
         }
@@ -272,15 +271,15 @@ class AttendanceReportExport
         $type   = $row['type'];
         $values = $row['values'];
 
-        // style indices (defined in styles()) — 7 columns A-G
+        // style indices (defined in styles()) — 6 columns A-F
         $styleMap = [
             'title'      => [0 => 1],
             'subtitle'   => [0 => 2],
-            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3,6=>3],
+            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3],
             'emp_header' => [0 => 4],
             'emp_local'  => [0 => 5],
-            'day'        => [0=>6,1=>0,2=>7,3=>7,4=>7,5=>6,6=>6],
-            'total'      => [0=>8,1=>8,2=>8,3=>8,4=>8,5=>9,6=>10],
+            'day'        => [0=>6,1=>7,2=>7,3=>7,4=>6,5=>6],
+            'total'      => [0=>8,1=>8,2=>8,3=>8,4=>9,5=>10],
             'blank'      => [],
         ];
 
@@ -359,14 +358,14 @@ class AttendanceReportExport
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="8">
-    <font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font>
-    <font><b/><sz val="13"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
-    <font><sz val="10"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
-    <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
-    <font><b/><sz val="10"/><color rgb="FF3730A3"/><name val="Calibri"/></font>
-    <font><b/><sz val="10"/><color rgb="FF92400E"/><name val="Calibri"/></font>
-    <font><sz val="10"/><color rgb="FF111827"/><name val="Calibri"/></font>
-    <font><b/><sz val="10"/><color rgb="FF4338CA"/><name val="Calibri"/></font>
+    <font><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/></font>
+    <font><b/><sz val="14"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
+    <font><sz val="12"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FF3730A3"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FF92400E"/><name val="Calibri"/></font>
+    <font><sz val="12"/><color rgb="FF111827"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FF4338CA"/><name val="Calibri"/></font>
   </fonts>
   <fills count="7">
     <fill><patternFill patternType="none"/></fill>

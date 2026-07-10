@@ -27,7 +27,7 @@ new class extends Component {
     // Modal Agregar Empleado Local
     public bool    $showAddModal    = false;
     public string  $addName         = '';
-    public bool    $addAllDevices   = true;
+    public bool    $addAllDevices   = true; // always true, no UI toggle
     public int     $addStep         = 0;   // 0=form 1=querying 2=calculating 3=pushing 4=done -1=error
     public ?string $addError        = null;
     public ?string $addPin          = null;
@@ -1211,12 +1211,7 @@ new class extends Component {
                         <input wire:model="addName" type="text" placeholder="Ej. Juan Pérez López"
                             class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                     </div>
-                    <label class="flex items-center gap-3 cursor-pointer select-none">
-                        <input wire:model="addAllDevices" type="checkbox"
-                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
-                        <span class="text-sm text-gray-700">Enviar a todos los dispositivos de la empresa</span>
-                    </label>
-                    <p class="text-xs text-gray-400">El PIN se asignará automáticamente como el siguiente disponible en el biométrico.</p>
+                    <p class="text-xs text-gray-400">El PIN se asignará automáticamente como el siguiente disponible. Se enviará a todos los dispositivos de la empresa.</p>
                 </div>
                 @endif
 

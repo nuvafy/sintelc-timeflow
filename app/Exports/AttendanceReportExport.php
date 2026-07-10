@@ -113,11 +113,12 @@ class AttendanceReportExport
         $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
         foreach ($byEmployee as $empData) {
-            // Employee group header
+            // Employee group header + repeated column headers
             $rows[] = [
                 'type'   => $empData['local'] ? 'emp_local' : 'emp_header',
                 'values' => [$empData['name'] . ($empData['local'] ? ' [Local]' : ''), '', '', '', '', ''],
             ];
+            $rows[] = ['type' => 'header', 'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
             $days      = $empData['days'];
             $totalMins = 0;
@@ -357,7 +358,7 @@ class AttendanceReportExport
     {
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="8">
+  <fonts count="9">
     <font><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/></font>
     <font><b/><sz val="14"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
     <font><sz val="12"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
@@ -366,6 +367,7 @@ class AttendanceReportExport
     <font><b/><sz val="12"/><color rgb="FF92400E"/><name val="Calibri"/></font>
     <font><sz val="12"/><color rgb="FF111827"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FF4338CA"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
   </fonts>
   <fills count="7">
     <fill><patternFill patternType="none"/></fill>
@@ -392,7 +394,7 @@ class AttendanceReportExport
     <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>
     <xf numFmtId="0" fontId="6" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="2"/></xf>
     <xf numFmtId="0" fontId="7" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="right"/></xf>
-    <xf numFmtId="0" fontId="1" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
+    <xf numFmtId="0" fontId="8" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
   </cellXfs>
 </styleSheet>';
     }

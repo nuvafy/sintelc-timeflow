@@ -110,7 +110,7 @@ class AttendanceReportExport
         $rows[] = ['type' => 'blank',   'values' => []];
 
         // Header
-        $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Empleado', 'Entrada', 'Salida', 'Área / Biométrico', 'Estado']];
+        $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Empleado', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
         foreach ($byEmployee as $empData) {
             // Employee group header
@@ -152,27 +152,47 @@ class AttendanceReportExport
                 $outTime    = $checkOut ? $checkOut->occurred_at->format('H:i') : null;
                 $area       = $checkIn?->biometricSource?->name ?? $checkOut?->biometricSource?->name ?? '—';
 
-                // Sum working segments: work = check_in→break_in, break_out→check_out (handles multiple breaks)
-                $segmentMins  = 0;
-                $segmentStart = null;
-                $hasComplete  = false;
+                // Calculate break minutes: break_in → break_out pairs
+                // Falls back to intermediate check_out → check_in pairs if no break labels exist
+                $breakMins    = 0;
+                $breakStart   = null;
+                $hasBreakLabels = collect($allEvents)->whereIn('check_type', ['break_in', 'break_out'])->isNotEmpty();
 
-                foreach ($allEvents as $e) {
-                    if (in_array($e->check_type, ['check_in', 'break_out'])) {
-                        $segmentStart = $e->occurred_at;
-                    } elseif (in_array($e->check_type, ['break_in', 'check_out']) && $segmentStart) {
-                        $segmentMins += $segmentStart->diffInMinutes($e->occurred_at);
-                        $segmentStart = null;
-                        if ($e->check_type === 'check_out') $hasComplete = true;
+                if ($hasBreakLabels) {
+                    foreach ($allEvents as $e) {
+                        if ($e->check_type === 'break_in')  $breakStart = $e->occurred_at;
+                        if ($e->check_type === 'break_out' && $breakStart) {
+                            $breakMins += $breakStart->diffInMinutes($e->occurred_at);
+                            $breakStart = null;
+                        }
+                    }
+                } else {
+                    // No break labels: intermediate check_out→check_in pairs are breaks
+                    $prevOut = null;
+                    foreach ($allEvents as $e) {
+                        if ($e->check_type === 'check_out') $prevOut = $e->occurred_at;
+                        if ($e->check_type === 'check_in' && $prevOut) {
+                            $breakMins += $prevOut->diffInMinutes($e->occurred_at);
+                            $prevOut = null;
+                        }
                     }
                 }
 
-                if ($checkIn && $checkOut && $hasComplete) {
-                    $totalMins += $segmentMins;
+                $breakStr = $breakMins > 0
+                    ? intdiv($breakMins, 60) . 'h ' . ($breakMins % 60) . 'min'
+                    : '—';
+
+                // Worked = total span − breaks
+                $hasComplete = $checkIn && $checkOut;
+                if ($hasComplete) {
+                    $spanMins   = $checkIn->occurred_at->diffInMinutes($checkOut->occurred_at);
+                    $workedMins = max(0, $spanMins - $breakMins);
+                    $totalMins += $workedMins;
                     $estado     = 'Completo';
                     $daysOk++;
                 } else {
-                    $estado = $checkIn ? 'Sin salida' : ($checkOut ? 'Sin entrada' : 'N/A');
+                    $breakStr = '—';
+                    $estado   = $checkIn ? 'Sin salida' : ($checkOut ? 'Sin entrada' : 'N/A');
                     $daysNA++;
                 }
 
@@ -181,7 +201,7 @@ class AttendanceReportExport
                 $rows[] = [
                     'type'   => 'day',
                     'estado' => $estado,
-                    'values' => [$dateLabel, '', $inTime ?? '—', $outTime ?? '—', $area, $estado],
+                    'values' => [$dateLabel, '', $inTime ?? '—', $outTime ?? '—', $breakStr, $area, $estado],
                 ];
             }
 
@@ -193,7 +213,7 @@ class AttendanceReportExport
 
             $rows[] = [
                 'type'   => 'total',
-                'values' => ['', '', '', '', 'Total horas laboradas', "{$totalStr}  {$naNote}"],
+                'values' => ['', '', '', '', '', 'Total horas laboradas', "{$totalStr}  {$naNote}"],
             ];
             $rows[] = ['type' => 'blank', 'values' => []];
         }
@@ -214,8 +234,9 @@ class AttendanceReportExport
         $xml .= '<col min="2" max="2" width="30" customWidth="1"/>';
         $xml .= '<col min="3" max="3" width="10" customWidth="1"/>';
         $xml .= '<col min="4" max="4" width="10" customWidth="1"/>';
-        $xml .= '<col min="5" max="5" width="28" customWidth="1"/>';
-        $xml .= '<col min="6" max="6" width="32" customWidth="1"/>';
+        $xml .= '<col min="5" max="5" width="12" customWidth="1"/>';
+        $xml .= '<col min="6" max="6" width="28" customWidth="1"/>';
+        $xml .= '<col min="7" max="7" width="32" customWidth="1"/>';
         $xml .= '</cols>';
         $xml .= '<sheetData>';
 
@@ -227,12 +248,12 @@ class AttendanceReportExport
 
         $xml .= '</sheetData>';
 
-        // Merges for title/subtitle/emp headers (col A–F = 1–6)
+        // Merges for title/subtitle/emp headers (col A–G = 1–7)
         $merges = [];
         $r = 1;
         foreach ($this->rows as $row) {
             if (in_array($row['type'], ['title', 'subtitle', 'emp_header', 'emp_local'])) {
-                $merges[] = "A{$r}:F{$r}";
+                $merges[] = "A{$r}:G{$r}";
             }
             $r++;
         }
@@ -251,15 +272,15 @@ class AttendanceReportExport
         $type   = $row['type'];
         $values = $row['values'];
 
-        // style indices (defined in styles())
+        // style indices (defined in styles()) — 7 columns A-G
         $styleMap = [
-            'title'      => [0 => 1],  // col A style 1
+            'title'      => [0 => 1],
             'subtitle'   => [0 => 2],
-            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3],
+            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3,6=>3],
             'emp_header' => [0 => 4],
             'emp_local'  => [0 => 5],
-            'day'        => [0=>6,1=>0,2=>7,3=>7,4=>6,5=>6],
-            'total'      => [0=>8,1=>8,2=>8,3=>8,4=>9,5=>10],
+            'day'        => [0=>6,1=>0,2=>7,3=>7,4=>7,5=>6,6=>6],
+            'total'      => [0=>8,1=>8,2=>8,3=>8,4=>8,5=>9,6=>10],
             'blank'      => [],
         ];
 

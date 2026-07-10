@@ -112,9 +112,9 @@ class AttendanceReportExport
         foreach ($byEmployee as $empData) {
             $rows[] = [
                 'type'   => $empData['local'] ? 'emp_local' : 'emp_header',
-                'values' => [$empData['name'] . ($empData['local'] ? ' [Local]' : ''), '', '', '', '', ''],
+                'values' => [$empData['name'] . ($empData['local'] ? ' [Local]' : ''), '', '', '', '', '', ''],
             ];
-            $rows[] = ['type' => 'header', 'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
+            $rows[] = ['type' => 'header', 'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Horas', 'Estado']];
 
             $days      = $empData['days'];
             $totalMins = 0;
@@ -181,11 +181,13 @@ class AttendanceReportExport
 
                 // Worked = total span − breaks
                 $hasComplete = $checkIn && $checkOut;
+                $workedStr   = '—';
                 if ($hasComplete) {
                     $spanMins   = $checkIn->occurred_at->diffInMinutes($checkOut->occurred_at);
                     $workedMins = max(0, $spanMins - $breakMins);
                     $totalMins += $workedMins;
-                    $estado     = 'Completo';
+                    $estado    = 'Completo';
+                    $workedStr = intdiv($workedMins, 60) . 'h ' . ($workedMins % 60) . 'min';
                     $daysOk++;
                 } else {
                     $breakStr = '—';
@@ -198,7 +200,7 @@ class AttendanceReportExport
                 $rows[] = [
                     'type'   => 'day',
                     'estado' => $estado,
-                    'values' => [$dateLabel, $inTime ?? '—', $outTime ?? '—', $breakStr, $area, $estado],
+                    'values' => [$dateLabel, $inTime ?? '—', $outTime ?? '—', $breakStr, $area, $workedStr, $estado],
                 ];
             }
 
@@ -206,11 +208,11 @@ class AttendanceReportExport
             $h = intdiv($totalMins, 60);
             $m = $totalMins % 60;
             $totalStr = $daysOk > 0 ? "{$h}h {$m}min" : 'N/A';
-            $naNote   = $daysNA > 0 ? "({$daysOk} días completos · {$daysNA} N/A)" : "({$daysOk} días completos)";
+            $naNote   = $daysNA > 0 ? "{$daysOk} días completos · {$daysNA} N/A" : "{$daysOk} días completos";
 
             $rows[] = [
                 'type'   => 'total',
-                'values' => ['', '', '', 'Total horas laboradas', $totalStr, $naNote],
+                'values' => ['', '', '', '', 'Total horas laboradas', $totalStr, $naNote],
             ];
             $rows[] = ['type' => 'blank', 'values' => []];
         }
@@ -231,8 +233,9 @@ class AttendanceReportExport
         $xml .= '<col min="2" max="2" width="10" customWidth="1"/>';
         $xml .= '<col min="3" max="3" width="10" customWidth="1"/>';
         $xml .= '<col min="4" max="4" width="12" customWidth="1"/>';
-        $xml .= '<col min="5" max="5" width="28" customWidth="1"/>';
-        $xml .= '<col min="6" max="6" width="34" customWidth="1"/>';
+        $xml .= '<col min="5" max="5" width="24" customWidth="1"/>';
+        $xml .= '<col min="6" max="6" width="14" customWidth="1"/>';
+        $xml .= '<col min="7" max="7" width="26" customWidth="1"/>';
         $xml .= '</cols>';
         $xml .= '<sheetData>';
 
@@ -249,7 +252,7 @@ class AttendanceReportExport
         $r = 1;
         foreach ($this->rows as $row) {
             if (in_array($row['type'], ['title', 'subtitle', 'emp_header', 'emp_local'])) {
-                $merges[] = "A{$r}:F{$r}";
+                $merges[] = "A{$r}:G{$r}";
             }
             $r++;
         }
@@ -272,11 +275,11 @@ class AttendanceReportExport
         $styleMap = [
             'title'      => [0 => 1],
             'subtitle'   => [0 => 2],
-            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3],
+            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3,6=>3],
             'emp_header' => [0 => 4],
             'emp_local'  => [0 => 5],
-            'day'        => [0=>6,1=>7,2=>7,3=>7,4=>6,5=>6],
-            'total'      => [0=>8,1=>8,2=>8,3=>9,4=>10,5=>11],
+            'day'        => [0=>6,1=>7,2=>7,3=>7,4=>6,5=>7,6=>6],
+            'total'      => [0=>8,1=>8,2=>8,3=>8,4=>9,5=>10,6=>11],
             'blank'      => [],
         ];
 
@@ -295,7 +298,7 @@ class AttendanceReportExport
         };
 
         $xml = "<row r=\"{$rowNum}\"{$ht}>";
-        $cols = ['A','B','C','D','E','F'];
+        $cols = ['A','B','C','D','E','F','G'];
 
         foreach ($values as $i => $val) {
             $col   = $cols[$i] ?? chr(65 + $i);

@@ -128,36 +128,47 @@ class AttendanceReportExport
             $dayKeys = array_keys($days);
 
             foreach ($dayKeys as $date) {
-                $events   = $days[$date];
-                $checkIn  = null;
-                $checkOut = null;
-
-                foreach ($events as $e) {
-                    if ($e->check_type === 'check_in'  && !$checkIn)  $checkIn  = $e;
-                    if ($e->check_type === 'check_out' && !$checkOut) $checkOut = $e;
-                }
-
-                // Night shift: look for check_out next day within 24h
-                if ($checkIn && !$checkOut) {
-                    $nextDate = Carbon::parse($date)->addDay()->format('Y-m-d');
-                    if (isset($days[$nextDate])) {
+                // Collect events for this date + next day (night shifts within 24h)
+                $allEvents = $days[$date];
+                $nextDate  = Carbon::parse($date)->addDay()->format('Y-m-d');
+                if (isset($days[$nextDate])) {
+                    $firstIn = collect($allEvents)->where('check_type', 'check_in')->sortBy('occurred_at')->first();
+                    if ($firstIn) {
                         foreach ($days[$nextDate] as $e) {
-                            if ($e->check_type === 'check_out' && !$checkOut) {
-                                if ($checkIn->occurred_at->diffInMinutes($e->occurred_at) <= 1440) {
-                                    $checkOut = $e;
-                                }
+                            if ($firstIn->occurred_at->diffInMinutes($e->occurred_at) <= 1440) {
+                                $allEvents[] = $e;
                             }
                         }
                     }
                 }
 
-                $inTime  = $checkIn  ? $checkIn->occurred_at->format('H:i')  : null;
-                $outTime = $checkOut ? $checkOut->occurred_at->format('H:i') : null;
-                $area    = $checkIn?->biometricSource?->name ?? $checkOut?->biometricSource?->name ?? '—';
+                // Sort chronologically
+                usort($allEvents, fn($a, $b) => $a->occurred_at <=> $b->occurred_at);
 
-                if ($checkIn && $checkOut) {
-                    $mins       = $checkIn->occurred_at->diffInMinutes($checkOut->occurred_at);
-                    $totalMins += $mins;
+                $col        = collect($allEvents);
+                $checkIn    = $col->where('check_type', 'check_in')->first();
+                $checkOut   = $col->where('check_type', 'check_out')->last();
+                $inTime     = $checkIn  ? $checkIn->occurred_at->format('H:i')  : null;
+                $outTime    = $checkOut ? $checkOut->occurred_at->format('H:i') : null;
+                $area       = $checkIn?->biometricSource?->name ?? $checkOut?->biometricSource?->name ?? '—';
+
+                // Sum working segments: work = check_in→break_in, break_out→check_out (handles multiple breaks)
+                $segmentMins  = 0;
+                $segmentStart = null;
+                $hasComplete  = false;
+
+                foreach ($allEvents as $e) {
+                    if (in_array($e->check_type, ['check_in', 'break_out'])) {
+                        $segmentStart = $e->occurred_at;
+                    } elseif (in_array($e->check_type, ['break_in', 'check_out']) && $segmentStart) {
+                        $segmentMins += $segmentStart->diffInMinutes($e->occurred_at);
+                        $segmentStart = null;
+                        if ($e->check_type === 'check_out') $hasComplete = true;
+                    }
+                }
+
+                if ($checkIn && $checkOut && $hasComplete) {
+                    $totalMins += $segmentMins;
                     $estado     = 'Completo';
                     $daysOk++;
                 } else {

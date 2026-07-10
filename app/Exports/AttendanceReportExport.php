@@ -113,12 +113,10 @@ class AttendanceReportExport
         $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
         foreach ($byEmployee as $empData) {
-            // Employee group header + repeated column headers
             $rows[] = [
                 'type'   => $empData['local'] ? 'emp_local' : 'emp_header',
                 'values' => [$empData['name'] . ($empData['local'] ? ' [Local]' : ''), '', '', '', '', ''],
             ];
-            $rows[] = ['type' => 'header', 'values' => ['Fecha', 'Entrada', 'Salida', 'Descanso', 'Área / Biométrico', 'Estado']];
 
             $days      = $empData['days'];
             $totalMins = 0;

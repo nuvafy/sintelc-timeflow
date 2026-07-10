@@ -360,7 +360,7 @@ class AttendanceReportExport
   <fonts count="9">
     <font><sz val="12"/><color rgb="FF111827"/><name val="Calibri"/></font>
     <font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
-    <font><sz val="12"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
+    <font><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
     <font><b/><sz val="12"/><color rgb="FF92400E"/><name val="Calibri"/></font>
@@ -394,7 +394,7 @@ class AttendanceReportExport
     <xf numFmtId="0" fontId="6" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>
     <xf numFmtId="0" fontId="7" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="right"/></xf>
     <xf numFmtId="0" fontId="8" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>
-    <xf numFmtId="0" fontId="3" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>
+    <xf numFmtId="0" fontId="7" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>
   </cellXfs>
 </styleSheet>';
     }

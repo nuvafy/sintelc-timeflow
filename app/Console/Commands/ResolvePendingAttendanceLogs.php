@@ -17,6 +17,17 @@ class ResolvePendingAttendanceLogs extends Command
         $mappings = BiometricUserSync::whereNotNull('factorial_employee_id')
             ->pluck('factorial_employee_id', 'external_employee_code');
 
+        // Local-only employees: resolve pending logs without dispatching Factorial sync
+        $localPins = BiometricUserSync::whereNull('factorial_employee_id')
+            ->whereNotNull('local_name')
+            ->pluck('external_employee_code');
+
+        if ($localPins->isNotEmpty()) {
+            AttendanceLog::whereIn('employee_code', $localPins)
+                ->where('sync_status', 'pending')
+                ->update(['sync_status' => 'local']);
+        }
+
         if ($mappings->isEmpty()) {
             $this->info('Sin mapeos disponibles.');
             return self::SUCCESS;

@@ -12,6 +12,7 @@ class BiometricUserSync extends Model
         'biometric_provider_id',
         'factorial_employee_id',
         'external_employee_code',
+        'local_name',
         'provider_user_id',
         'sync_status',
         'sync_error',

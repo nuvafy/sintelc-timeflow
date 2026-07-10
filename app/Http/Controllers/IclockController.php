@@ -240,6 +240,13 @@ class IclockController extends Controller
             ->whereNotNull('factorial_employee_id')
             ->pluck('factorial_employee_id', 'external_employee_code');
 
+        // PINs de empleados locales (local_name ≠ null, factorial_employee_id = null)
+        $localPins = \App\Models\BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
+            ->whereNull('factorial_employee_id')
+            ->whereNotNull('local_name')
+            ->pluck('external_employee_code')
+            ->flip();
+
         $factorialCompanyId = \App\Models\FactorialConnection::where('client_id', $source->client_id)
             ->whereNotNull('factorial_company_id')
             ->value('factorial_company_id');
@@ -286,6 +293,7 @@ class IclockController extends Controller
             if (isset($existingKeys[$key])) continue;
 
             $employeeId = $mappings[$pin] ?? null;
+            $isLocal    = !$employeeId && isset($localPins[$pin]);
 
             $records[] = [
                 'client_id'             => $source->client_id,
@@ -295,7 +303,7 @@ class IclockController extends Controller
                 'check_type'            => $attendanceConfig->resolveCheckType($status) ?? 'unknown',
                 'occurred_at'           => $occurredAt,
                 'raw_payload'           => json_encode(compact('pin', 'timestamp', 'status', 'verify', 'workcode')),
-                'sync_status'           => $employeeId ? 'resolved' : 'pending',
+                'sync_status'           => $employeeId ? 'resolved' : ($isLocal ? 'local' : 'pending'),
                 'created_at'            => $now,
                 'updated_at'            => $now,
             ];

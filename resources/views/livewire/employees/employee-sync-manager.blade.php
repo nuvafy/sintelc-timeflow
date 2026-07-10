@@ -24,6 +24,16 @@ new class extends Component {
     public array   $assignments = [];          // PIN => factorial_employee_id (pendiente de guardar)
     public ?string $mapMessage  = null;        // Resultado del último mapeo
 
+    // Modal Agregar Empleado Local
+    public bool    $showAddModal    = false;
+    public string  $addName         = '';
+    public bool    $addAllDevices   = true;
+    public int     $addStep         = 0;   // 0=form 1=querying 2=calculating 3=pushing 4=done -1=error
+    public ?string $addError        = null;
+    public ?string $addPin          = null;
+    public array   $addQueryCmdIds  = [];
+    public array   $addPushCmdIds   = [];
+
     // Modal CSV (a nivel de proveedor)
     public bool    $showCsvModal = false;
     public $csvFile              = null;
@@ -434,6 +444,168 @@ new class extends Component {
         ];
     }
 
+    public function openAddModal(): void
+    {
+        $this->addName        = '';
+        $this->addAllDevices  = true;
+        $this->addStep        = 0;
+        $this->addError       = null;
+        $this->addPin         = null;
+        $this->addQueryCmdIds = [];
+        $this->addPushCmdIds  = [];
+        $this->showAddModal   = true;
+    }
+
+    public function closeAddModal(): void
+    {
+        $this->showAddModal = false;
+    }
+
+    public function startAddEmployee(): void
+    {
+        $name = trim($this->addName);
+        if (!$name || !$this->client_id) return;
+
+        $sources = \App\Models\BiometricSource::where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->get();
+
+        if ($sources->isEmpty()) {
+            $this->addError = 'No hay dispositivos activos para esta empresa.';
+            $this->addStep  = -1;
+            return;
+        }
+
+        if (!$this->addAllDevices) {
+            $sources = $sources->take(1);
+        }
+
+        $this->addStep        = 1;
+        $this->addError       = null;
+        $this->addQueryCmdIds = [];
+
+        foreach ($sources as $source) {
+            $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
+            $cmd = \App\Models\DeviceCommand::create([
+                'biometric_source_id' => $source->id,
+                'command_seq'         => $seq,
+                'command_type'        => 'query_users',
+                'payload'             => 'DATA QUERY USERINFO',
+                'status'              => 'pending',
+            ]);
+            $this->addQueryCmdIds[] = $cmd->id;
+        }
+    }
+
+    public function pollAddEmployee(): void
+    {
+        if ($this->addStep === 1) {
+            // Waiting for all QUERY USERINFO commands to be acknowledged
+            $pending = \App\Models\DeviceCommand::whereIn('id', $this->addQueryCmdIds)
+                ->whereNotIn('status', ['acknowledged', 'failed'])
+                ->count();
+
+            if ($pending > 0) return;
+
+            // Step 2: calculate next PIN
+            $this->addStep = 2;
+
+            $maxPin = \App\Models\BiometricSource::where('client_id', $this->client_id)
+                ->where('status', 'active')
+                ->get()
+                ->flatMap(fn($s) => collect($s->device_users ?? [])->pluck('pin'))
+                ->map(fn($p) => (int) $p)
+                ->max() ?? 0;
+
+            // Also consider existing BiometricUserSync codes to avoid conflicts
+            $maxSync = \App\Models\BiometricUserSync::where('client_id', $this->client_id)
+                ->selectRaw('MAX(CAST(external_employee_code AS UNSIGNED)) as max_pin')
+                ->value('max_pin') ?? 0;
+
+            $this->addPin  = (string) (max($maxPin, $maxSync) + 1);
+            $this->addStep = 3;
+
+            // Push to all active devices
+            $sources = \App\Models\BiometricSource::where('client_id', $this->client_id)
+                ->where('status', 'active')
+                ->get();
+
+            if (!$this->addAllDevices) {
+                $sources = $sources->take(1);
+            }
+
+            $pin  = $this->addPin;
+            $name = trim($this->addName);
+            $this->addPushCmdIds = [];
+
+            foreach ($sources as $source) {
+                $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
+                $cmd = \App\Models\DeviceCommand::create([
+                    'biometric_source_id' => $source->id,
+                    'command_seq'         => $seq,
+                    'command_type'        => 'push_user',
+                    'payload'             => "DATA UPDATE USERINFO Pin={$pin}\tName={$name}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000000000000\tVerify=0\tVein=0\tDuress=0",
+                    'status'              => 'pending',
+                ]);
+                $this->addPushCmdIds[] = $cmd->id;
+            }
+
+            return;
+        }
+
+        if ($this->addStep === 3) {
+            // Waiting for all PUSH commands to be acknowledged
+            $failed = \App\Models\DeviceCommand::whereIn('id', $this->addPushCmdIds)
+                ->where('status', 'failed')
+                ->count();
+
+            $pending = \App\Models\DeviceCommand::whereIn('id', $this->addPushCmdIds)
+                ->whereNotIn('status', ['acknowledged', 'failed'])
+                ->count();
+
+            if ($pending > 0) return;
+
+            if ($failed > 0 && $failed === count($this->addPushCmdIds)) {
+                $this->addError = 'El dispositivo rechazó el comando. Verifica la conexión e intenta de nuevo.';
+                $this->addStep  = -1;
+                return;
+            }
+
+            // Step 4: save to DB
+            $provider = \App\Models\BiometricProvider::where('client_id', $this->client_id)->first();
+
+            if ($provider) {
+                \App\Models\BiometricUserSync::create([
+                    'client_id'              => $this->client_id,
+                    'biometric_provider_id'  => $provider->id,
+                    'factorial_employee_id'  => null,
+                    'external_employee_code' => $this->addPin,
+                    'local_name'             => trim($this->addName),
+                    'sync_status'            => 'synced',
+                    'last_attempt_at'        => now(),
+                    'synced_at'              => now(),
+                ]);
+
+                // Update device_users cache on all sources
+                \App\Models\BiometricSource::where('client_id', $this->client_id)
+                    ->where('status', 'active')
+                    ->get()
+                    ->each(function ($source) {
+                        $existing = collect($source->device_users ?? []);
+                        $pin      = $this->addPin;
+                        $name     = trim($this->addName);
+                        if ($existing->where('pin', $pin)->isEmpty()) {
+                            $source->update([
+                                'device_users' => $existing->push(['pin' => $pin, 'name' => $name, 'card' => '', 'role' => '0'])->values()->toArray(),
+                            ]);
+                        }
+                    });
+            }
+
+            $this->addStep = 4;
+        }
+    }
+
     public function openCsvModal(): void
     {
         $this->csvFile     = null;
@@ -663,6 +835,13 @@ new class extends Component {
                     </span>
                     @endif
                 @elseif($tab === 'biometric')
+                    <button wire:click="openAddModal"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Agregar Empleado
+                    </button>
                     <button wire:click="syncFromDevices" wire:loading.attr="disabled" title="Solicitar lista actualizada de usuarios a los dispositivos"
                         class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition">
                         <svg wire:loading.remove wire:target="syncFromDevices" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -994,6 +1173,135 @@ new class extends Component {
                     <span wire:loading.remove wire:target="uploadCsv">Importar usuarios</span>
                     <span wire:loading wire:target="uploadCsv">Importando…</span>
                 </button>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Poll para modal Agregar Empleado ──────────────────────────── --}}
+    @if($showAddModal && in_array($addStep, [1, 3]))
+    <div wire:poll.3000ms="pollAddEmployee"></div>
+    @endif
+
+    {{-- ── Modal: Agregar Empleado Local ─────────────────────────────── --}}
+    @if($showAddModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-base font-semibold text-gray-900">Agregar Empleado al Biométrico</h3>
+                @if($addStep === 0 || $addStep === 4 || $addStep === -1)
+                <button wire:click="closeAddModal" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+                @endif
+            </div>
+
+            <div class="px-6 py-5">
+                {{-- Formulario inicial --}}
+                @if($addStep === 0)
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
+                        <input wire:model="addName" type="text" placeholder="Ej. Juan Pérez López"
+                            class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                    </div>
+                    <label class="flex items-center gap-3 cursor-pointer select-none">
+                        <input wire:model="addAllDevices" type="checkbox"
+                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
+                        <span class="text-sm text-gray-700">Enviar a todos los dispositivos de la empresa</span>
+                    </label>
+                    <p class="text-xs text-gray-400">El PIN se asignará automáticamente como el siguiente disponible en el biométrico.</p>
+                </div>
+                @endif
+
+                {{-- Barra de progreso --}}
+                @if($addStep > 0 && $addStep !== -1)
+                @php
+                    $steps = [
+                        1 => ['label' => 'Consultando IDs en dispositivo',    'desc' => 'Esperando respuesta del checador…'],
+                        2 => ['label' => 'Calculando PIN disponible',          'desc' => 'Asignando siguiente número libre…'],
+                        3 => ['label' => 'Registrando en dispositivo',         'desc' => $addPin ? "Enviando PIN {$addPin} — {$addName}…" : 'Enviando al checador…'],
+                        4 => ['label' => 'Guardado en sistema',                'desc' => $addPin ? "Empleado registrado con PIN {$addPin}" : 'Listo'],
+                    ];
+                @endphp
+                <div class="space-y-3">
+                    @foreach($steps as $n => $s)
+                    @php
+                        $done    = $addStep > $n;
+                        $active  = $addStep === $n;
+                        $pending = $addStep < $n;
+                    @endphp
+                    <div class="flex items-start gap-3">
+                        <div class="mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center
+                            {{ $done ? 'bg-emerald-500' : ($active ? 'bg-indigo-500' : 'bg-gray-200') }}">
+                            @if($done)
+                                <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            @elseif($active)
+                                <svg class="w-3.5 h-3.5 text-white animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            @else
+                                <span class="text-xs text-gray-400 font-medium">{{ $n }}</span>
+                            @endif
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium {{ $done ? 'text-emerald-700' : ($active ? 'text-indigo-700' : 'text-gray-400') }}">
+                                {{ $s['label'] }}
+                            </p>
+                            @if($active || $done)
+                            <p class="text-xs {{ $done ? 'text-gray-400' : 'text-gray-500' }}">{{ $s['desc'] }}</p>
+                            @endif
+                        </div>
+                    </div>
+                    @endforeach
+
+                    @if($addStep === 4)
+                    <div class="mt-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                        <p class="text-sm font-semibold text-emerald-800">¡Empleado registrado!</p>
+                        <p class="text-xs text-emerald-600 mt-0.5">
+                            <strong>{{ $addName }}</strong> — PIN <strong>{{ $addPin }}</strong>
+                        </p>
+                        <p class="text-xs text-gray-500 mt-1">Sus registros de asistencia se guardarán en el sistema. No se sincronizan a Factorial.</p>
+                    </div>
+                    @endif
+                </div>
+                @endif
+
+                {{-- Error --}}
+                @if($addStep === -1)
+                <div class="p-3 bg-red-50 rounded-lg border border-red-200">
+                    <p class="text-sm font-medium text-red-800">Error al registrar empleado</p>
+                    <p class="text-xs text-red-600 mt-0.5">{{ $addError }}</p>
+                </div>
+                @endif
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                @if($addStep === 0)
+                <button wire:click="closeAddModal"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button wire:click="startAddEmployee" wire:loading.attr="disabled"
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+                    Iniciar
+                </button>
+                @elseif($addStep === 4 || $addStep === -1)
+                <button wire:click="closeAddModal"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    Cerrar
+                </button>
+                @if($addStep === -1)
+                <button wire:click="openAddModal"
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                    Reintentar
+                </button>
+                @endif
                 @endif
             </div>
         </div>

@@ -4,17 +4,17 @@ namespace App\Exports;
 
 use App\Models\AttendanceLog;
 use App\Models\BiometricUserSync;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Concerns\WithTitle;
-use Maatwebsite\Excel\Events\AfterSheet;
-use PhpOffice\PhpSpreadsheet\Style\Color;
+use Carbon\Carbon;
 
-class AttendanceReportExport implements WithEvents, WithTitle
+/**
+ * Generates a styled .xlsx attendance report using ZipArchive + XML (no composer packages).
+ * XLSX = ZIP of XML files per the Office Open XML spec.
+ */
+class AttendanceReportExport
 {
+    private array $sharedStrings = [];
+    private array $rows = [];
+
     public function __construct(
         private int     $clientId,
         private string  $clientName,
@@ -25,233 +25,382 @@ class AttendanceReportExport implements WithEvents, WithTitle
         private ?string $checkTypeFilter,
     ) {}
 
-    public function title(): string
+    public function download(string $filename): \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\Response
     {
-        return 'Asistencia';
+        $path = $this->buildFile();
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
     }
 
-    public function registerEvents(): array
+    private function buildFile(): string
     {
-        return [
-            AfterSheet::class => function (AfterSheet $event) {
-                $sheet = $event->sheet->getDelegate();
+        $this->buildRows();
 
-                // ── Fetch & group data ─────────────────────────────────────
-                $query = AttendanceLog::with(['biometricSource', 'factorialEmployee'])
-                    ->where('client_id', $this->clientId)
-                    ->when($this->dateFrom, fn($q) => $q->whereDate('occurred_at', '>=', $this->dateFrom))
-                    ->when($this->dateTo,   fn($q) => $q->whereDate('occurred_at', '<=', $this->dateTo))
-                    ->when($this->search, fn($q) => $q->where(function ($q2) {
-                        $q2->where('employee_code', 'like', "%{$this->search}%")
-                           ->orWhereHas('factorialEmployee', fn($e) => $e->where('full_name', 'like', "%{$this->search}%"));
-                    }))
-                    ->when($this->statusFilter,    fn($q) => $q->where('sync_status', $this->statusFilter))
-                    ->when($this->checkTypeFilter, fn($q) => $q->where('check_type', $this->checkTypeFilter))
-                    ->orderBy('occurred_at')
-                    ->get();
+        $path = tempnam(sys_get_temp_dir(), 'xlsx_');
+        $zip  = new \ZipArchive();
+        $zip->open($path, \ZipArchive::OVERWRITE);
 
-                // Local employee names (local_name on BiometricUserSync)
-                $localNames = BiometricUserSync::where('client_id', $this->clientId)
-                    ->whereNotNull('local_name')
-                    ->pluck('local_name', 'external_employee_code');
+        $zip->addFromString('[Content_Types].xml',           $this->contentTypes());
+        $zip->addFromString('_rels/.rels',                   $this->rels());
+        $zip->addFromString('xl/workbook.xml',               $this->workbook());
+        $zip->addFromString('xl/_rels/workbook.xml.rels',    $this->workbookRels());
+        $zip->addFromString('xl/styles.xml',                 $this->styles());
+        $zip->addFromString('xl/sharedStrings.xml',          $this->sharedStringsXml());
+        $zip->addFromString('xl/worksheets/sheet1.xml',      $this->sheet());
 
-                // Group logs by employee key → date → events
-                $byEmployee = [];
-                foreach ($query as $log) {
-                    if ($log->factorialEmployee) {
-                        $empKey  = 'f_' . $log->factorialEmployee->id;
-                        $empName = $log->factorialEmployee->full_name;
-                        $isLocal = false;
-                    } elseif (isset($localNames[$log->employee_code])) {
-                        $empKey  = 'l_' . $log->employee_code;
-                        $empName = $localNames[$log->employee_code];
-                        $isLocal = true;
-                    } else {
-                        $empKey  = 'u_' . $log->employee_code;
-                        $empName = 'PIN ' . $log->employee_code;
-                        $isLocal = false;
-                    }
+        $zip->close();
+        return $path;
+    }
 
-                    $date = $log->occurred_at->format('Y-m-d');
+    // ── Data building ─────────────────────────────────────────────────────────
 
-                    if (!isset($byEmployee[$empKey])) {
-                        $byEmployee[$empKey] = ['name' => $empName, 'local' => $isLocal, 'days' => []];
-                    }
-                    $byEmployee[$empKey]['days'][$date][] = $log;
+    private function buildRows(): void
+    {
+        $query = AttendanceLog::with(['biometricSource', 'factorialEmployee'])
+            ->where('client_id', $this->clientId)
+            ->when($this->dateFrom, fn($q) => $q->whereDate('occurred_at', '>=', $this->dateFrom))
+            ->when($this->dateTo,   fn($q) => $q->whereDate('occurred_at', '<=', $this->dateTo))
+            ->when($this->search, fn($q) => $q->where(function ($q2) {
+                $q2->where('employee_code', 'like', "%{$this->search}%")
+                   ->orWhereHas('factorialEmployee', fn($e) => $e->where('full_name', 'like', "%{$this->search}%"));
+            }))
+            ->when($this->statusFilter,    fn($q) => $q->where('sync_status', $this->statusFilter))
+            ->when($this->checkTypeFilter, fn($q) => $q->where('check_type', $this->checkTypeFilter))
+            ->orderBy('occurred_at')
+            ->get();
+
+        $localNames = BiometricUserSync::where('client_id', $this->clientId)
+            ->whereNotNull('local_name')
+            ->pluck('local_name', 'external_employee_code');
+
+        // Group by employee → date
+        $byEmployee = [];
+        foreach ($query as $log) {
+            if ($log->factorialEmployee) {
+                $key  = 'f_' . $log->factorialEmployee->id;
+                $name = $log->factorialEmployee->full_name;
+                $local = false;
+            } elseif (isset($localNames[$log->employee_code])) {
+                $key  = 'l_' . $log->employee_code;
+                $name = $localNames[$log->employee_code];
+                $local = true;
+            } else {
+                $key  = 'u_' . $log->employee_code;
+                $name = 'PIN ' . $log->employee_code;
+                $local = false;
+            }
+
+            $date = $log->occurred_at->format('Y-m-d');
+            if (!isset($byEmployee[$key])) {
+                $byEmployee[$key] = ['name' => $name, 'local' => $local, 'days' => []];
+            }
+            $byEmployee[$key]['days'][$date][] = $log;
+        }
+
+        $rows = [];
+
+        // Title rows
+        $rows[] = ['type' => 'title',   'values' => ['Reporte de asistencia — ' . $this->clientName]];
+        $rows[] = ['type' => 'subtitle','values' => [trim(($this->dateFrom ?? '') . ' — ' . ($this->dateTo ?? ''))]];
+        $rows[] = ['type' => 'blank',   'values' => []];
+
+        // Header
+        $rows[] = ['type' => 'header',  'values' => ['Fecha', 'Empleado', 'Entrada', 'Salida', 'Área / Biométrico', 'Estado']];
+
+        foreach ($byEmployee as $empData) {
+            // Employee group header
+            $rows[] = [
+                'type'   => $empData['local'] ? 'emp_local' : 'emp_header',
+                'values' => [$empData['name'] . ($empData['local'] ? ' [Local]' : ''), '', '', '', '', ''],
+            ];
+
+            $days      = $empData['days'];
+            $totalMins = 0;
+            $daysOk    = 0;
+            $daysNA    = 0;
+
+            ksort($days);
+            $dayKeys = array_keys($days);
+
+            foreach ($dayKeys as $date) {
+                $events   = $days[$date];
+                $checkIn  = null;
+                $checkOut = null;
+
+                foreach ($events as $e) {
+                    if ($e->check_type === 'check_in'  && !$checkIn)  $checkIn  = $e;
+                    if ($e->check_type === 'check_out' && !$checkOut) $checkOut = $e;
                 }
 
-                // ── Styles ────────────────────────────────────────────────
-                $headerBg   = 'FF4F46E5'; // indigo
-                $groupBg    = 'FFF1F0FF'; // light indigo
-                $totalBg    = 'FFEEF2FF';
-                $localBg    = 'FFFFF3CD'; // amber tint
-                $borderColor= 'FFD1D5DB';
-                $white      = 'FFFFFFFF';
-
-                $sheet->getColumnDimension('A')->setWidth(16);
-                $sheet->getColumnDimension('B')->setWidth(30);
-                $sheet->getColumnDimension('C')->setWidth(12);
-                $sheet->getColumnDimension('D')->setWidth(12);
-                $sheet->getColumnDimension('E')->setWidth(28);
-                $sheet->getColumnDimension('F')->setWidth(14);
-
-                // ── Title row ────────────────────────────────────────────
-                $sheet->setCellValue('A1', 'Reporte de asistencia — ' . $this->clientName);
-                $sheet->mergeCells('A1:F1');
-                $sheet->getStyle('A1')->applyFromArray([
-                    'font'      => ['bold' => true, 'size' => 13, 'color' => ['argb' => 'FF1E1B4B']],
-                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT],
-                    'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFEEF2FF']],
-                ]);
-                $sheet->getRowDimension(1)->setRowHeight(22);
-
-                $dateLabel = trim(($this->dateFrom ?? '') . ' — ' . ($this->dateTo ?? ''));
-                $sheet->setCellValue('A2', $dateLabel);
-                $sheet->mergeCells('A2:F2');
-                $sheet->getStyle('A2')->applyFromArray([
-                    'font'      => ['size' => 10, 'color' => ['argb' => 'FF6B7280']],
-                    'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFEEF2FF']],
-                ]);
-                $sheet->getRowDimension(2)->setRowHeight(16);
-
-                // ── Column headers ────────────────────────────────────────
-                $row = 4;
-                $headers = ['Fecha', 'Empleado', 'Entrada', 'Salida', 'Área / Biométrico', 'Estado'];
-                foreach ($headers as $col => $header) {
-                    $cell = chr(65 + $col) . $row;
-                    $sheet->setCellValue($cell, $header);
-                }
-                $sheet->getStyle("A{$row}:F{$row}")->applyFromArray([
-                    'font'      => ['bold' => true, 'size' => 9, 'color' => ['argb' => $white]],
-                    'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $headerBg]],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
-                    'borders'   => ['bottom' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FF6366F1']]],
-                ]);
-                $sheet->getRowDimension($row)->setRowHeight(18);
-                $row++;
-
-                // ── Employee groups ───────────────────────────────────────
-                foreach ($byEmployee as $empData) {
-                    $empName   = $empData['name'];
-                    $isLocal   = $empData['local'];
-                    $days      = $empData['days'];
-                    $totalMins = 0;
-                    $daysOk    = 0;
-                    $daysNA    = 0;
-                    $empStartRow = $row;
-
-                    // Employee header row
-                    $label = $empName . ($isLocal ? '  [Local]' : '');
-                    $sheet->setCellValue("A{$row}", $label);
-                    $sheet->mergeCells("A{$row}:F{$row}");
-                    $bg = $isLocal ? $localBg : $groupBg;
-                    $sheet->getStyle("A{$row}:F{$row}")->applyFromArray([
-                        'font'      => ['bold' => true, 'size' => 10, 'color' => ['argb' => $isLocal ? 'FF92400E' : 'FF3730A3']],
-                        'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $bg]],
-                        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'indent' => 1],
-                        'borders'   => ['top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['argb' => $borderColor]]],
-                    ]);
-                    $sheet->getRowDimension($row)->setRowHeight(20);
-                    $row++;
-
-                    // Day rows
-                    ksort($days);
-                    foreach ($days as $date => $events) {
-                        // Find check_in and check_out anchored to check_in date
-                        $checkIn  = null;
-                        $checkOut = null;
-                        foreach ($events as $e) {
-                            if ($e->check_type === 'check_in' && !$checkIn)   $checkIn  = $e;
-                            if ($e->check_type === 'check_out' && !$checkOut) $checkOut = $e;
-                        }
-
-                        // Also look for check_out in next-day events (night shifts: within 24h)
-                        if ($checkIn && !$checkOut) {
-                            $nextDate = \Carbon\Carbon::parse($date)->addDay()->format('Y-m-d');
-                            if (isset($days[$nextDate])) {
-                                foreach ($days[$nextDate] as $e) {
-                                    if ($e->check_type === 'check_out' && !$checkOut) {
-                                        $diff = $e->occurred_at->diffInMinutes($checkIn->occurred_at);
-                                        if ($diff <= 1440) $checkOut = $e; // within 24h
-                                    }
+                // Night shift: look for check_out next day within 24h
+                if ($checkIn && !$checkOut) {
+                    $nextDate = Carbon::parse($date)->addDay()->format('Y-m-d');
+                    if (isset($days[$nextDate])) {
+                        foreach ($days[$nextDate] as $e) {
+                            if ($e->check_type === 'check_out' && !$checkOut) {
+                                if ($e->occurred_at->diffInMinutes($checkIn->occurred_at) <= 1440) {
+                                    $checkOut = $e;
                                 }
                             }
                         }
-
-                        $inTime   = $checkIn  ? $checkIn->occurred_at->format('H:i')  : null;
-                        $outTime  = $checkOut ? $checkOut->occurred_at->format('H:i') : null;
-                        $area     = $checkIn?->biometricSource?->name ?? $checkOut?->biometricSource?->name ?? '—';
-
-                        if ($checkIn && $checkOut) {
-                            $mins       = $checkOut->occurred_at->diffInMinutes($checkIn->occurred_at);
-                            $totalMins += $mins;
-                            $estado     = 'Completo';
-                            $daysOk++;
-                        } else {
-                            $mins   = null;
-                            $estado = $checkIn ? 'Sin salida' : ($checkOut ? 'Sin entrada' : 'N/A');
-                            $daysNA++;
-                        }
-
-                        $dateLabel = \Carbon\Carbon::parse($date)->locale('es')->isoFormat('ddd D MMM');
-
-                        $sheet->setCellValue("A{$row}", $dateLabel);
-                        $sheet->setCellValue("B{$row}", '');
-                        $sheet->setCellValue("C{$row}", $inTime  ?? '—');
-                        $sheet->setCellValue("D{$row}", $outTime ?? '—');
-                        $sheet->setCellValue("E{$row}", $area);
-                        $sheet->setCellValue("F{$row}", $estado);
-
-                        $sheet->getStyle("A{$row}:F{$row}")->applyFromArray([
-                            'font'      => ['size' => 10],
-                            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $white]],
-                            'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
-                        ]);
-                        $sheet->getStyle("A{$row}")->getAlignment()->setIndent(2);
-                        $sheet->getStyle("C{$row}:D{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-                        // Color estado cell
-                        if ($estado === 'Completo') {
-                            $sheet->getStyle("F{$row}")->getFont()->getColor()->setARGB('FF15803D');
-                        } elseif (in_array($estado, ['Sin salida', 'Sin entrada'])) {
-                            $sheet->getStyle("F{$row}")->getFont()->getColor()->setARGB('FFB45309');
-                        }
-
-                        $sheet->getStyle("A{$row}:F{$row}")->getBorders()->getBottom()->setBorderStyle(Border::BORDER_HAIR)->getColor()->setARGB($borderColor);
-                        $sheet->getRowDimension($row)->setRowHeight(16);
-                        $row++;
                     }
-
-                    // Total row
-                    $totalH   = intdiv($totalMins, 60);
-                    $totalM   = $totalMins % 60;
-                    $totalStr = $daysOk > 0 ? "{$totalH}h {$totalM}min" : 'N/A';
-                    $naStr    = $daysNA > 0 ? "  ({$daysOk} días completos · {$daysNA} N/A)" : "  ({$daysOk} días completos)";
-
-                    $sheet->setCellValue("E{$row}", 'Total horas laboradas');
-                    $sheet->setCellValue("F{$row}", $totalStr . $naStr);
-                    $sheet->mergeCells("F{$row}:F{$row}");
-                    $sheet->getStyle("A{$row}:F{$row}")->applyFromArray([
-                        'font'      => ['bold' => true, 'size' => 10],
-                        'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $totalBg]],
-                        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
-                        'borders'   => [
-                            'top'    => ['borderStyle' => Border::BORDER_THIN,   'color' => ['argb' => $borderColor]],
-                            'bottom' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['argb' => $borderColor]],
-                        ],
-                    ]);
-                    $sheet->getStyle("E{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                    $sheet->getStyle("E{$row}")->getFont()->getColor()->setARGB('FF4338CA');
-                    $sheet->getStyle("F{$row}")->getFont()->setBold(true)->getColor()->setARGB('FF1E1B4B');
-                    $sheet->getRowDimension($row)->setRowHeight(18);
-                    $row++;
-
-                    $row++; // blank row between employees
                 }
 
-                // Freeze header rows
-                $sheet->freezePane('A5');
-            },
+                $inTime  = $checkIn  ? $checkIn->occurred_at->format('H:i')  : null;
+                $outTime = $checkOut ? $checkOut->occurred_at->format('H:i') : null;
+                $area    = $checkIn?->biometricSource?->name ?? $checkOut?->biometricSource?->name ?? '—';
+
+                if ($checkIn && $checkOut) {
+                    $mins       = $checkOut->occurred_at->diffInMinutes($checkIn->occurred_at);
+                    $totalMins += $mins;
+                    $estado     = 'Completo';
+                    $daysOk++;
+                } else {
+                    $estado = $checkIn ? 'Sin salida' : ($checkOut ? 'Sin entrada' : 'N/A');
+                    $daysNA++;
+                }
+
+                $dateLabel = Carbon::parse($date)->locale('es')->isoFormat('ddd D MMM YYYY');
+
+                $rows[] = [
+                    'type'   => 'day',
+                    'estado' => $estado,
+                    'values' => [$dateLabel, '', $inTime ?? '—', $outTime ?? '—', $area, $estado],
+                ];
+            }
+
+            // Total row
+            $h = intdiv($totalMins, 60);
+            $m = $totalMins % 60;
+            $totalStr = $daysOk > 0 ? "{$h}h {$m}min" : 'N/A';
+            $naNote   = $daysNA > 0 ? "({$daysOk} días completos · {$daysNA} N/A)" : "({$daysOk} días completos)";
+
+            $rows[] = [
+                'type'   => 'total',
+                'values' => ['', '', '', '', 'Total horas laboradas', "{$totalStr}  {$naNote}"],
+            ];
+            $rows[] = ['type' => 'blank', 'values' => []];
+        }
+
+        $this->rows = $rows;
+    }
+
+    // ── Sheet XML ─────────────────────────────────────────────────────────────
+
+    private function sheet(): string
+    {
+        $xml  = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+        $xml .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+        $xml .= '<sheetViews><sheetView workbookViewId="0"><selection activeCell="A1"/></sheetView></sheetViews>';
+        $xml .= '<sheetFormatPr defaultRowHeight="16"/>';
+        $xml .= '<cols>';
+        $xml .= '<col min="1" max="1" width="16" customWidth="1"/>';
+        $xml .= '<col min="2" max="2" width="30" customWidth="1"/>';
+        $xml .= '<col min="3" max="3" width="10" customWidth="1"/>';
+        $xml .= '<col min="4" max="4" width="10" customWidth="1"/>';
+        $xml .= '<col min="5" max="5" width="28" customWidth="1"/>';
+        $xml .= '<col min="6" max="6" width="32" customWidth="1"/>';
+        $xml .= '</cols>';
+        $xml .= '<sheetData>';
+
+        $rowNum = 1;
+        foreach ($this->rows as $row) {
+            $xml .= $this->buildRow($rowNum, $row);
+            $rowNum++;
+        }
+
+        $xml .= '</sheetData>';
+
+        // Merges for title/subtitle/emp headers (col A–F = 1–6)
+        $merges = [];
+        $r = 1;
+        foreach ($this->rows as $row) {
+            if (in_array($row['type'], ['title', 'subtitle', 'emp_header', 'emp_local'])) {
+                $merges[] = "A{$r}:F{$r}";
+            }
+            $r++;
+        }
+        if ($merges) {
+            $xml .= '<mergeCells count="' . count($merges) . '">';
+            foreach ($merges as $m) $xml .= "<mergeCell ref=\"{$m}\"/>";
+            $xml .= '</mergeCells>';
+        }
+
+        $xml .= '</worksheet>';
+        return $xml;
+    }
+
+    private function buildRow(int $rowNum, array $row): string
+    {
+        $type   = $row['type'];
+        $values = $row['values'];
+
+        // style indices (defined in styles())
+        $styleMap = [
+            'title'      => [0 => 1],  // col A style 1
+            'subtitle'   => [0 => 2],
+            'header'     => [0=>3,1=>3,2=>3,3=>3,4=>3,5=>3],
+            'emp_header' => [0 => 4],
+            'emp_local'  => [0 => 5],
+            'day'        => [0=>6,1=>0,2=>7,3=>7,4=>6,5=>6],
+            'total'      => [0=>8,1=>8,2=>8,3=>8,4=>9,5=>10],
+            'blank'      => [],
         ];
+
+        $styles = $styleMap[$type] ?? [];
+
+        if ($type === 'blank' || empty($values)) {
+            return "<row r=\"{$rowNum}\"><c r=\"A{$rowNum}\" t=\"s\"><v></v></c></row>";
+        }
+
+        $ht = match($type) {
+            'title'      => ' ht="22" customHeight="1"',
+            'header'     => ' ht="18" customHeight="1"',
+            'emp_header','emp_local' => ' ht="20" customHeight="1"',
+            'total'      => ' ht="18" customHeight="1"',
+            default      => '',
+        };
+
+        $xml = "<row r=\"{$rowNum}\"{$ht}>";
+        $cols = ['A','B','C','D','E','F'];
+
+        foreach ($values as $i => $val) {
+            $col   = $cols[$i] ?? chr(65 + $i);
+            $ref   = $col . $rowNum;
+            $style = $styles[$i] ?? 0;
+
+            if ($val === '' || $val === null) {
+                $xml .= "<c r=\"{$ref}\" s=\"{$style}\"/>";
+            } else {
+                $si  = $this->si($val);
+                $xml .= "<c r=\"{$ref}\" t=\"s\" s=\"{$style}\"><v>{$si}</v></c>";
+            }
+        }
+
+        $xml .= '</row>';
+        return $xml;
+    }
+
+    // ── Shared strings ────────────────────────────────────────────────────────
+
+    private function si(string $val): int
+    {
+        if (!isset($this->sharedStrings[$val])) {
+            $this->sharedStrings[$val] = count($this->sharedStrings);
+        }
+        return $this->sharedStrings[$val];
+    }
+
+    private function sharedStringsXml(): string
+    {
+        $count = count($this->sharedStrings);
+        $xml   = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+        $xml  .= "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"{$count}\" uniqueCount=\"{$count}\">";
+        foreach (array_keys($this->sharedStrings) as $str) {
+            $xml .= '<si><t xml:space="preserve">' . htmlspecialchars($str, ENT_XML1) . '</t></si>';
+        }
+        $xml .= '</sst>';
+        return $xml;
+    }
+
+    // ── Styles ───────────────────────────────────────────────────────────────
+    // Style indices used in buildRow():
+    // 0 = default
+    // 1 = title (bold, large, indigo bg)
+    // 2 = subtitle (small, gray, indigo bg)
+    // 3 = header (bold white on indigo)
+    // 4 = emp_header (bold indigo on light indigo)
+    // 5 = emp_local  (bold amber on light amber)
+    // 6 = day normal cell
+    // 7 = day center (H:i columns)
+    // 8 = total row base
+    // 9 = total label (right-align, bold indigo)
+    // 10 = total value (bold dark)
+
+    private function styles(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="8">
+    <font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font>
+    <font><b/><sz val="13"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>
+    <font><sz val="10"/><color rgb="FF6B7280"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF3730A3"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF92400E"/><name val="Calibri"/></font>
+    <font><sz val="10"/><color rgb="FF111827"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF4338CA"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="7">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF4F46E5"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF1F0FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border><left/><right/><top><color rgb="FFD1D5DB"/></top><bottom><color rgb="FFD1D5DB"/></bottom><diagonal/></border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="11">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" indent="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" indent="1"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" horizontal="left" indent="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment vertical="center" indent="2"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment vertical="center" horizontal="center"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="2"/></xf>
+    <xf numFmtId="0" fontId="7" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" horizontal="right"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center" indent="1"/></xf>
+  </cellXfs>
+</styleSheet>';
+    }
+
+    // ── OOXML boilerplate ─────────────────────────────────────────────────────
+
+    private function contentTypes(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml"  ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml"            ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml"   ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml"       ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+  <Override PartName="/xl/styles.xml"              ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>';
+    }
+
+    private function rels(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>';
+    }
+
+    private function workbook(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Asistencia" sheetId="1" r:id="rId1"/></sheets>
+</workbook>';
+    }
+
+    private function workbookRels(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"     Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"        Target="styles.xml"/>
+</Relationships>';
     }
 }

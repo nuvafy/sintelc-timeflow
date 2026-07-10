@@ -5,7 +5,6 @@ use App\Models\AttendanceLog;
 use App\Models\Client;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
-use Maatwebsite\Excel\Facades\Excel;
 
 new class extends Component {
     use WithPagination;
@@ -40,18 +39,15 @@ new class extends Component {
     {
         $filename = 'asistencia_' . str($this->client->name)->slug() . '_' . ($this->dateFrom ?? 'inicio') . '_' . ($this->dateTo ?? 'fin') . '.xlsx';
 
-        return Excel::download(
-            new AttendanceReportExport(
-                clientId:        $this->client->id,
-                clientName:      $this->client->name,
-                dateFrom:        $this->dateFrom ?: null,
-                dateTo:          $this->dateTo   ?: null,
-                search:          $this->search          ?: null,
-                statusFilter:    $this->statusFilter    ?: null,
-                checkTypeFilter: $this->checkTypeFilter ?: null,
-            ),
-            $filename
-        );
+        return (new AttendanceReportExport(
+            clientId:        $this->client->id,
+            clientName:      $this->client->name,
+            dateFrom:        $this->dateFrom ?: null,
+            dateTo:          $this->dateTo   ?: null,
+            search:          $this->search          ?: null,
+            statusFilter:    $this->statusFilter    ?: null,
+            checkTypeFilter: $this->checkTypeFilter ?: null,
+        ))->download($filename);
     }
 
     public function clearFilters(): void

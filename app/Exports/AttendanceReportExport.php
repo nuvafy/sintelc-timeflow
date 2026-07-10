@@ -41,13 +41,17 @@ class AttendanceReportExport
         $zip  = new \ZipArchive();
         $zip->open($path, \ZipArchive::OVERWRITE);
 
+        // sheet() must run first — it populates $this->sharedStrings via si()
+        $sheetXml         = $this->sheet();
+        $sharedStringsXml = $this->sharedStringsXml();
+
         $zip->addFromString('[Content_Types].xml',           $this->contentTypes());
         $zip->addFromString('_rels/.rels',                   $this->rels());
         $zip->addFromString('xl/workbook.xml',               $this->workbook());
         $zip->addFromString('xl/_rels/workbook.xml.rels',    $this->workbookRels());
         $zip->addFromString('xl/styles.xml',                 $this->styles());
-        $zip->addFromString('xl/sharedStrings.xml',          $this->sharedStringsXml());
-        $zip->addFromString('xl/worksheets/sheet1.xml',      $this->sheet());
+        $zip->addFromString('xl/sharedStrings.xml',          $sharedStringsXml);
+        $zip->addFromString('xl/worksheets/sheet1.xml',      $sheetXml);
 
         $zip->close();
         return $path;

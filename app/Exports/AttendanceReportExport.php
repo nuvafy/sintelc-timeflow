@@ -143,7 +143,7 @@ class AttendanceReportExport
                     if (isset($days[$nextDate])) {
                         foreach ($days[$nextDate] as $e) {
                             if ($e->check_type === 'check_out' && !$checkOut) {
-                                if ($e->occurred_at->diffInMinutes($checkIn->occurred_at) <= 1440) {
+                                if ($checkIn->occurred_at->diffInMinutes($e->occurred_at) <= 1440) {
                                     $checkOut = $e;
                                 }
                             }
@@ -156,7 +156,7 @@ class AttendanceReportExport
                 $area    = $checkIn?->biometricSource?->name ?? $checkOut?->biometricSource?->name ?? '—';
 
                 if ($checkIn && $checkOut) {
-                    $mins       = $checkOut->occurred_at->diffInMinutes($checkIn->occurred_at);
+                    $mins       = $checkIn->occurred_at->diffInMinutes($checkOut->occurred_at);
                     $totalMins += $mins;
                     $estado     = 'Completo';
                     $daysOk++;

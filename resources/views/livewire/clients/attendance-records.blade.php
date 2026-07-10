@@ -1,9 +1,11 @@
 <?php
 
+use App\Exports\AttendanceReportExport;
 use App\Models\AttendanceLog;
 use App\Models\Client;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 
 new class extends Component {
     use WithPagination;
@@ -33,6 +35,24 @@ new class extends Component {
     public function updatedCheckTypeFilter(): void { $this->resetPage(); }
     public function updatedDateFrom(): void        { $this->resetPage(); }
     public function updatedDateTo(): void          { $this->resetPage(); }
+
+    public function exportExcel()
+    {
+        $filename = 'asistencia_' . str($this->client->name)->slug() . '_' . ($this->dateFrom ?? 'inicio') . '_' . ($this->dateTo ?? 'fin') . '.xlsx';
+
+        return Excel::download(
+            new AttendanceReportExport(
+                clientId:        $this->client->id,
+                clientName:      $this->client->name,
+                dateFrom:        $this->dateFrom ?: null,
+                dateTo:          $this->dateTo   ?: null,
+                search:          $this->search          ?: null,
+                statusFilter:    $this->statusFilter    ?: null,
+                checkTypeFilter: $this->checkTypeFilter ?: null,
+            ),
+            $filename
+        );
+    }
 
     public function clearFilters(): void
     {
@@ -131,7 +151,7 @@ new class extends Component {
                 @endforeach
             </div>
 
-            {{-- Total + limpiar --}}
+            {{-- Total + acciones --}}
             <div class="flex items-center gap-3">
                 <span class="text-xs text-gray-400">{{ number_format($total) }} registros</span>
                 @if($this->hasExtraFilters())
@@ -139,6 +159,16 @@ new class extends Component {
                     Limpiar filtros
                 </button>
                 @endif
+                <button wire:click="exportExcel" wire:loading.attr="disabled"
+                    class="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-900 disabled:opacity-50 transition">
+                    <svg wire:loading.remove wire:target="exportExcel" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                    </svg>
+                    <svg wire:loading wire:target="exportExcel" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Exportar Excel
+                </button>
             </div>
         </div>
     </div>

@@ -72,7 +72,7 @@ new class extends Component {
             abort_if(!$user->client_id, 403);
             $this->client_id    = $user->client_id;
             $this->clientLocked = true;
-            $this->tab          = 'mapping';
+            $this->tab          = 'biometric';
         }
     }
 
@@ -463,6 +463,9 @@ new class extends Component {
 
     public function startAddEmployee(): void
     {
+        $user = auth()->user();
+        if ($user->isClient() && $user->client_id !== $this->client_id) abort(403);
+
         $name = trim($this->addName);
         if (!$name || !$this->client_id) return;
 

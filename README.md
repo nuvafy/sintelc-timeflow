@@ -1,59 +1,116 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+<div align="center">
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+<img src="public/favicon.svg" width="60" alt="Sintelc FlowTime Logo"/>
 
-## About Laravel
+# Sintelc FlowTime
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+**Middleware de asistencia biométrica → Factorial HR**
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+[![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net)
+[![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat-square&logo=laravel&logoColor=white)](https://laravel.com)
+[![Livewire](https://img.shields.io/badge/Livewire-3-FB70A9?style=flat-square&logo=livewire&logoColor=white)](https://livewire.laravel.com)
+[![Deploy](https://img.shields.io/badge/AWS-EC2%20t3.micro-FF9900?style=flat-square&logo=amazon-aws&logoColor=white)](https://aws.amazon.com)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+</div>
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## ¿Qué es?
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Sintelc FlowTime recibe marcaciones de asistencia desde dispositivos biométricos **ZKTeco** y las sincroniza automáticamente con la API de **Factorial HR**. Es multi-tenant: un solo servidor atiende múltiples empresas cliente, cada una con su propia conexión OAuth a Factorial.
 
-## Laravel Sponsors
+## Flujo de datos
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```
+Dispositivo ZKTeco
+    └─► POST /iclock/cdata?table=ATTLOG
+            └─► AttendanceLog::insert()
+                    └─► SyncAttendanceToFactorial (Job)
+                            ├─► FactorialService::clockIn() / clockOut()
+                            └─► fallback: FactorialService::updateShift()
+```
 
-### Premium Partners
+Los dispositivos hacen polling de comandos cada pocos segundos via `GET /iclock/getrequest`. El servidor responde con instrucciones como `DATA UPDATE USERINFO` para sincronizar empleados al biométrico.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## Características
 
-## Contributing
+- **Multi-tenant** — clientes aislados, cada uno con sus dispositivos y conexión Factorial
+- **Protocolo iClock/PUSH** — compatible con la mayoría de dispositivos ZKTeco
+- **Empleados locales** — alta de empleados solo en el sistema (sin Factorial), con push automático a todos los biométricos
+- **Mapeo de PINs** — conecta el código del dispositivo con el empleado de Factorial
+- **Reporte de asistencia** — exportación Excel con horas trabajadas, descansos y estado por empleado
+- **Dashboard en tiempo real** — métricas de sincronización con gráficas Chart.js
+- **Comandos en cola** — envío de usuarios al dispositivo con seguimiento de estado
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Tecnologías
 
-## Code of Conduct
+| Capa | Tecnología |
+|------|-----------|
+| Backend | Laravel 12, PHP 8.2 |
+| Frontend | Livewire Volt, Alpine.js, Tailwind CSS |
+| Queue | Database queue driver, Supervisor |
+| Cache | Database cache |
+| Infraestructura | AWS EC2 t3.micro, Nginx, Cloudflare |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Instalación local
 
-## Security Vulnerabilities
+```bash
+git clone https://github.com/nuvafy/sintelc-timeflow.git
+cd sintelc-timeflow
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+composer install
+npm install
 
-## License
+cp .env.example .env
+php artisan key:generate
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# Configurar DB, Factorial OAuth, etc. en .env
+php artisan migrate
+
+php artisan serve
+npm run dev
+
+# En otra terminal — worker de colas (requerido para sync)
+php artisan queue:work --sleep=1 --tries=1
+```
+
+## Comandos útiles
+
+```bash
+# Resolver logs pendientes sin mapeo de empleado
+php artisan attendance:resolve-pending
+
+# Sincronizar empleados y ubicaciones desde Factorial
+php artisan factorial:sync-employees
+php artisan factorial:sync-locations
+
+# Enviar usuarios a dispositivo biométrico
+php artisan biometric:push-users
+
+# Después de cada deploy en producción
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+## Estados de un registro de asistencia
+
+| Estado | Descripción |
+|--------|-------------|
+| `pending` | Llegó pero el empleado no está mapeado aún |
+| `resolved` | Mapeado, job despachado, pendiente de procesar |
+| `synced` | Enviado exitosamente a Factorial |
+| `failed` | Factorial lo rechazó (ver `sync_error`) |
+| `local` | Empleado solo existe en el sistema, no va a Factorial |
+
+## Producción
+
+- **URL:** `app.sintelcft.dev`
+- **Servidor:** AWS EC2 t3.micro — `us-east-2`
+- **App root:** `/var/www/sintelcft`
+
+---
+
+<div align="center">
+  <sub>Desarrollado por <a href="https://nuvafy.com">Nuvafy</a> para Sintelc</sub>
+</div>

@@ -368,20 +368,17 @@ new class extends Component {
     <livewire:connections.connection-manager :client-filter-id="$client->id" />
 
     {{-- ── Usuarios del sistema ───────────────────────────────────── --}}
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold text-gray-800">Usuarios del sistema</h2>
+        <button wire:click="openUserModal()"
+            class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+            <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Agregar usuario
+        </button>
+    </div>
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-                <h3 class="text-sm font-semibold text-gray-700">Usuarios del sistema</h3>
-                <p class="text-xs text-gray-400 mt-0.5">Acceso al portal para esta empresa</p>
-            </div>
-            <button wire:click="openUserModal()"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded transition">
-                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Agregar usuario
-            </button>
-        </div>
 
         @if($clientUsers->isEmpty())
             <div class="px-6 py-8 text-center text-sm text-gray-400">

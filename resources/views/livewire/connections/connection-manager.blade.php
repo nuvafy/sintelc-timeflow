@@ -172,22 +172,17 @@ new class extends Component {
         </button>
     </div>
 
-    {{-- Cards --}}
-    <div class="grid grid-cols-1 gap-6 px-6 py-4">
+    {{-- Lista --}}
+    <ul class="divide-y divide-gray-100">
         @forelse($connections as $conn)
         @php $status = $this->getTokenStatus($conn); @endphp
-        <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">
-            <div class="p-5 flex-1">
-                {{-- Header de card --}}
-                <div class="flex items-start justify-between">
-                    <div class="min-w-0 flex-1 pr-3">
-                        <h3 class="text-base font-semibold text-gray-900 truncate">{{ $conn->name }}</h3>
-                        <p class="text-sm text-gray-500 mt-0.5 truncate">{{ $conn->client?->name ?? 'Sin empresa asignada' }}</p>
-                    </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
-                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $status['color'] }}">
-                            {{ $status['label'] }}
-                        </span>
+        <li class="px-6 py-4">
+            <div class="flex items-start justify-between gap-4">
+                {{-- Info --}}
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <p class="text-sm font-semibold text-gray-900 truncate">{{ $conn->name }}</p>
+                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full {{ $status['color'] }}">{{ $status['label'] }}</span>
                         <a href="{{ route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($conn->id)]) }}"
                            title="{{ $conn->access_token ? 'Reconectar' : 'Conectar' }}"
                            class="text-gray-400 hover:text-indigo-600 transition">
@@ -196,82 +191,65 @@ new class extends Component {
                             </svg>
                         </a>
                     </div>
-                </div>
+                    @if($conn->factorial_company_id)
+                    <p class="text-xs text-gray-400 mt-0.5">Factorial ID <span class="font-mono text-gray-600">{{ $conn->factorial_company_id }}</span></p>
+                    @endif
 
-                {{-- Factorial ID --}}
-                @if($conn->factorial_company_id)
-                <div class="mt-4 flex justify-between text-xs text-gray-500">
-                    <span>Factorial ID</span>
-                    <span class="font-mono text-gray-700">{{ $conn->factorial_company_id }}</span>
-                </div>
-                @endif
-            </div>
-
-            {{-- Sync result / pending banner --}}
-            @if(isset($syncPending[$conn->id]))
-            <div class="px-5 py-2 bg-indigo-50 border-t border-indigo-100 flex items-center gap-2"
-                 wire:poll.3s="checkSync({{ $conn->id }})">
-                <svg class="animate-spin w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-                <p class="text-xs text-indigo-600">
-                    {{ $syncProgress[$conn->id] ?? 'Iniciando sincronización…' }}
-                </p>
-            </div>
-            @elseif(isset($syncResults[$conn->id]))
-            @php $r = $syncResults[$conn->id]; @endphp
-            @if($r['ok'])
-            <div class="px-5 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-emerald-700">✓ {{ $r['employees'] }} empleados · {{ $r['locations'] }} ubicaciones</p>
-                    @if(!empty($r['loc_error']))
-                    <p class="text-xs text-amber-600 mt-0.5">⚠ Ubicaciones no disponibles (sin permisos)</p>
+                    {{-- Sync banner --}}
+                    @if(isset($syncPending[$conn->id]))
+                    <div class="mt-2 flex items-center gap-2" wire:poll.3s="checkSync({{ $conn->id }})">
+                        <svg class="animate-spin w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        <p class="text-xs text-indigo-600">{{ $syncProgress[$conn->id] ?? 'Iniciando sincronización…' }}</p>
+                    </div>
+                    @elseif(isset($syncResults[$conn->id]))
+                    @php $r = $syncResults[$conn->id]; @endphp
+                    @if($r['ok'])
+                    <div class="mt-2">
+                        <p class="text-xs text-emerald-700">✓ {{ $r['employees'] }} empleados · {{ $r['locations'] }} ubicaciones
+                            <a href="{{ route('employees') }}" wire:navigate class="underline hover:text-emerald-900 ml-2">Ver empleados →</a>
+                        </p>
+                        @if(!empty($r['loc_error']))<p class="text-xs text-amber-600 mt-0.5">⚠ Ubicaciones no disponibles (sin permisos)</p>@endif
+                    </div>
+                    @else
+                    <p class="mt-2 text-xs text-red-600">✗ Error: {{ Str::limit($r['error'], 80) }}</p>
+                    @endif
                     @endif
                 </div>
-                <a href="{{ route('employees') }}" wire:navigate class="text-xs font-medium text-emerald-700 underline hover:text-emerald-900">
-                    Ver empleados →
-                </a>
-            </div>
-            @else
-            <div class="px-5 py-2 bg-red-50 border-t border-red-100">
-                <p class="text-xs text-red-700">✗ Error: {{ Str::limit($r['error'], 80) }}</p>
-            </div>
-            @endif
-            @endif
 
-            {{-- Footer --}}
-            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
-                @if($conn->access_token)
-                <button wire:click="sync({{ $conn->id }})"
-                    @if(isset($syncPending[$conn->id])) disabled @endif
-                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition disabled:opacity-50">
-                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    Sincronizar
-                </button>
-                @else
-                <a href="{{ route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($conn->id)]) }}"
-                   class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
-                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                    </svg>
-                    Conectar
-                </a>
-                @endif
-                <div class="flex gap-3 items-center">
-                    <button wire:click="openEdit({{ $conn->id }})" class="text-sm text-indigo-600 hover:text-indigo-900">Editar</button>
-                    <button wire:click="delete({{ $conn->id }})" wire:confirm="¿Eliminar esta conexión?" class="text-sm text-red-600 hover:text-red-900">Eliminar</button>
+                {{-- Acciones --}}
+                <div class="flex items-center gap-3 flex-shrink-0 pt-0.5">
+                    @if($conn->access_token)
+                    <button wire:click="sync({{ $conn->id }})"
+                        @if(isset($syncPending[$conn->id])) disabled @endif
+                        class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition disabled:opacity-50">
+                        <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Sincronizar
+                    </button>
+                    @else
+                    <a href="{{ route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($conn->id)]) }}"
+                       class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
+                        <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        Conectar
+                    </a>
+                    @endif
+                    <button wire:click="openEdit({{ $conn->id }})" class="text-xs text-indigo-600 hover:text-indigo-900">Editar</button>
+                    <button wire:click="delete({{ $conn->id }})" wire:confirm="¿Eliminar esta conexión?" class="text-xs text-red-500 hover:text-red-700">Eliminar</button>
                 </div>
             </div>
-        </div>
+        </li>
         @empty
-        <div class="col-span-3 bg-white shadow rounded-lg px-6 py-12 text-center text-sm text-gray-500">
-            No hay conexiones configuradas. Créalas desde la sección <strong>Empresas</strong>.
-        </div>
+        <li class="px-6 py-12 text-center text-sm text-gray-400">
+            No hay conexiones configuradas.
+        </li>
         @endforelse
-    </div>
+    </ul>
 
     {{-- Modal: Crear / Editar --}}
     @if($showModal)

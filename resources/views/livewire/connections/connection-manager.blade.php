@@ -162,7 +162,7 @@ new class extends Component {
 
 <div>
     {{-- Header --}}
-    <div class="flex items-center justify-between mb-6">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h2 class="text-xl font-semibold text-gray-800">Conexiones Factorial</h2>
         <button wire:click="openCreate" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
             <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -173,7 +173,7 @@ new class extends Component {
     </div>
 
     {{-- Cards --}}
-    <div class="grid grid-cols-1 gap-6">
+    <div class="grid grid-cols-1 gap-6 px-6 py-4">
         @forelse($connections as $conn)
         @php $status = $this->getTokenStatus($conn); @endphp
         <div class="bg-white shadow rounded-lg overflow-hidden flex flex-col">

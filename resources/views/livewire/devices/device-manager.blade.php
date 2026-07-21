@@ -97,10 +97,14 @@ new class extends Component {
             'unassigned'         => $isAdmin
                 ? BiometricSource::whereNull('client_id')->orderByDesc('last_ping_at')->get()
                 : collect(),
-            'clients'            => Client::orderBy('name')->get(),
-            'locations'          => FactorialLocation::orderBy('name')->get(),
-            'providers'          => $this->client_id
-                ? BiometricProvider::where('client_id', $this->client_id)->orderBy('vendor')->get()
+            'clients'            => Client::query()
+                ->when(!$isAdmin, fn($q) => $q->whereKey($user->client_id))
+                ->orderBy('name')->get(),
+            'locations'          => FactorialLocation::query()
+                ->when(!$isAdmin, fn($q) => $q->where('client_id', $user->client_id))
+                ->orderBy('name')->get(),
+            'providers'          => ($isAdmin ? $this->client_id : $user->client_id)
+                ? BiometricProvider::where('client_id', $isAdmin ? $this->client_id : $user->client_id)->orderBy('vendor')->get()
                 : collect(),
         ];
     }
@@ -110,6 +114,10 @@ new class extends Component {
 
     public function updatedClientId(): void
     {
+        if (auth()->user()->isClient()) {
+            abort_unless((int) $this->client_id === (int) auth()->user()->client_id, 403);
+        }
+
         $this->biometric_provider_id = null;
 
         if ($this->client_id) {
@@ -129,7 +137,7 @@ new class extends Component {
 
     public function openEdit(int $id): void
     {
-        $device = BiometricSource::findOrFail($id);
+        $device = $this->authorizedDevice($id);
         $this->editingId              = $device->id;
         $this->name                   = $device->name;
         $this->serial_number          = $device->serial_number;
@@ -180,7 +188,7 @@ new class extends Component {
         $data = $this->validate();
 
         if ($this->editing) {
-            BiometricSource::findOrFail($this->editingId)->update($data);
+            $this->authorizedDevice($this->editingId)->update($data);
         } else {
             BiometricSource::create($data);
         }
@@ -191,12 +199,12 @@ new class extends Component {
 
     public function delete(int $id): void
     {
-        BiometricSource::findOrFail($id)->delete();
+        $this->authorizedDevice($id)->delete();
     }
 
     public function toggleStatus(int $id): void
     {
-        $device = BiometricSource::findOrFail($id);
+        $device = $this->authorizedDevice($id);
         $device->update(['status' => $device->status === 'active' ? 'inactive' : 'active']);
     }
 
@@ -204,6 +212,7 @@ new class extends Component {
 
     public function openAssign(int $id): void
     {
+        $this->authorizeAdmin();
         $source = BiometricSource::findOrFail($id);
         $this->assigningSourceId = $source->id;
         $this->assign_name       = $source->serial_number ?? '';
@@ -215,6 +224,7 @@ new class extends Component {
 
     public function saveAssign(): void
     {
+        $this->authorizeAdmin();
         $this->validate([
             'assign_name'      => 'required|string|max:255',
             'assign_client_id' => 'required|exists:clients,id',
@@ -249,7 +259,7 @@ new class extends Component {
 
     public function openImportModal(int $id): void
     {
-        $source = BiometricSource::findOrFail($id);
+        $source = $this->authorizedDevice($id);
 
         $this->pushSourceId   = $source->id;
         $this->pushSuccessMsg = null;
@@ -285,7 +295,7 @@ new class extends Component {
 
     public function confirmPush(): void
     {
-        $source = BiometricSource::findOrFail($this->pushSourceId);
+        $source = $this->authorizedDevice($this->pushSourceId);
 
         $isAttendance = true; // SDK recomienda Attendance PUSH (DATA UPDATE USERINFO) para todos los modelos
 
@@ -439,6 +449,7 @@ new class extends Component {
 
     public function openCloneModal(int $id): void
     {
+        $this->authorizedDevice($id);
         $this->cloneTargetId   = $id;
         $this->cloneSourceId   = null;
         $this->cloneSuccessMsg = null;
@@ -449,8 +460,9 @@ new class extends Component {
     {
         if (!$this->cloneTargetId || !$this->cloneSourceId) return;
 
-        $target = BiometricSource::findOrFail($this->cloneTargetId);
-        $source = BiometricSource::findOrFail($this->cloneSourceId);
+        $target = $this->authorizedDevice($this->cloneTargetId);
+        $source = $this->authorizedDevice($this->cloneSourceId);
+        abort_unless((int) $target->client_id === (int) $source->client_id, 403);
 
         // Marcar el source con el target para cuando llegue el BIODATA
         $source->update(['clone_target_id' => $target->id]);
@@ -486,6 +498,26 @@ new class extends Component {
         $this->biometric_provider_id = null;
         $this->factorial_location_id = null;
         $this->resetValidation();
+    }
+
+    private function authorizedDevice(?int $id): BiometricSource
+    {
+        abort_unless($id, 404);
+
+        $device = BiometricSource::findOrFail($id);
+        $user   = auth()->user();
+
+        abort_unless($user, 403);
+        if ($user->isClient()) {
+            abort_unless($user->client_id && (int) $device->client_id === (int) $user->client_id, 403);
+        }
+
+        return $device;
+    }
+
+    private function authorizeAdmin(): void
+    {
+        abort_unless(auth()->user()?->isAdmin(), 403);
     }
 }; ?>
 

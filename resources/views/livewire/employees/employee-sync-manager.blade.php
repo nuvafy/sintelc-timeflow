@@ -42,6 +42,7 @@ new class extends Component {
 
     public function syncFromDevices(): void
     {
+        $this->authorizeSelectedClient();
         if (!$this->client_id) return;
 
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
@@ -77,7 +78,7 @@ new class extends Component {
     }
 
     public function updatedSearch(): void      { $this->resetPage(); }
-    public function updatedClientId(): void    { $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; }
+    public function updatedClientId(): void    { $this->authorizeSelectedClient(); $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; }
     public function updatedTab(): void         { $this->resetPage(); $this->selected = []; $this->statusFilter = 'all'; }
     public function updatedScoreFilter(): void { $this->resetPage(); }
     public function updatedStatusFilter(): void { $this->resetPage(); }
@@ -98,6 +99,7 @@ new class extends Component {
 
     public function mapSelected(): void
     {
+        $this->authorizeSelectedClient();
         if (!$this->client_id || empty($this->selected)) return;
 
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
@@ -107,7 +109,7 @@ new class extends Component {
         $toMap = [];
         foreach ($this->selected as $pin) {
             $employeeId = $this->assignments[$pin] ?? null;
-            if ($employeeId) {
+            if ($employeeId && FactorialEmployee::where('client_id', $this->client_id)->whereKey($employeeId)->exists()) {
                 $toMap[(string) $pin] = (int) $employeeId;
             }
         }
@@ -187,7 +189,11 @@ new class extends Component {
 
     public function with(): array
     {
-        $clients = Client::orderBy('name')->get();
+        $this->authorizeSelectedClient();
+        $user = auth()->user();
+        $clients = Client::query()
+            ->when($user->isClient(), fn($q) => $q->whereKey($user->client_id))
+            ->orderBy('name')->get();
 
         // ── Tab: Mapping ────────────────────────────────────────────
         if ($this->tab === 'mapping') {
@@ -463,8 +469,7 @@ new class extends Component {
 
     public function startAddEmployee(): void
     {
-        $user = auth()->user();
-        if ($user->isClient() && $user->client_id !== $this->client_id) abort(403);
+        $this->authorizeSelectedClient();
 
         $name = trim($this->addName);
         if (!$name || !$this->client_id) return;
@@ -502,6 +507,7 @@ new class extends Component {
 
     public function pollAddEmployee(): void
     {
+        $this->authorizeSelectedClient();
         if ($this->addStep === 1) {
             // Waiting for all QUERY USERINFO commands to be acknowledged
             $pending = \App\Models\DeviceCommand::whereIn('id', $this->addQueryCmdIds)
@@ -627,6 +633,7 @@ new class extends Component {
 
     public function uploadCsv(): void
     {
+        $this->authorizeSelectedClient();
         $this->importError = '';
         $this->csvResult   = null;
 
@@ -699,10 +706,12 @@ new class extends Component {
 
     public function saveBiometricId(int $employeeId, string $pin): void
     {
+        $this->authorizeSelectedClient();
         $pin = trim($pin);
         if ($pin === '') return;
 
         $employee = FactorialEmployee::findOrFail($employeeId);
+        abort_unless((int) $employee->client_id === (int) $this->client_id, 403);
         $provider = BiometricProvider::where('client_id', $employee->client_id)->first();
 
         if (!$provider) return;
@@ -728,6 +737,16 @@ new class extends Component {
                 'factorial_employee_id' => $employee->id,
                 'sync_status'           => 'resolved',
             ]);
+    }
+
+    private function authorizeSelectedClient(): void
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        if ($user->isClient()) {
+            abort_unless($user->client_id && (int) $this->client_id === (int) $user->client_id, 403);
+        }
     }
 
 }; ?>

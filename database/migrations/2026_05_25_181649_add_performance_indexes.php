@@ -8,8 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $indexes = \Illuminate\Support\Facades\DB::select("SHOW INDEX FROM biometric_sources");
-        $existingBs = collect($indexes)->pluck('Key_name')->toArray();
+        $existingBs = collect(Schema::getIndexes('biometric_sources'))->pluck('name')->toArray();
 
         Schema::table('biometric_sources', function (Blueprint $table) use ($existingBs) {
             if (!in_array('biometric_sources_serial_number_index', $existingBs))
@@ -18,8 +17,7 @@ return new class extends Migration
                 $table->index(['status', 'last_ping_at']);
         });
 
-        $indexes = \Illuminate\Support\Facades\DB::select("SHOW INDEX FROM factorial_employees");
-        $existingFe = collect($indexes)->pluck('Key_name')->toArray();
+        $existingFe = collect(Schema::getIndexes('factorial_employees'))->pluck('name')->toArray();
 
         Schema::table('factorial_employees', function (Blueprint $table) use ($existingFe) {
             if (!in_array('factorial_employees_access_id_index', $existingFe))
@@ -28,8 +26,7 @@ return new class extends Migration
                 $table->index('client_id');
         });
 
-        $indexes = \Illuminate\Support\Facades\DB::select("SHOW INDEX FROM attendance_logs");
-        $existingAl = collect($indexes)->pluck('Key_name')->toArray();
+        $existingAl = collect(Schema::getIndexes('attendance_logs'))->pluck('name')->toArray();
 
         Schema::table('attendance_logs', function (Blueprint $table) use ($existingAl) {
             if (!in_array('attendance_logs_factorial_employee_id_index', $existingAl))
@@ -42,8 +39,7 @@ return new class extends Migration
                 $table->index(['client_id', 'employee_code']);
         });
 
-        $indexes = \Illuminate\Support\Facades\DB::select("SHOW INDEX FROM biometric_user_syncs");
-        $existingBus = collect($indexes)->pluck('Key_name')->toArray();
+        $existingBus = collect(Schema::getIndexes('biometric_user_syncs'))->pluck('name')->toArray();
 
         Schema::table('biometric_user_syncs', function (Blueprint $table) use ($existingBus) {
             if (!in_array('biometric_user_syncs_client_id_external_employee_code_index', $existingBus))

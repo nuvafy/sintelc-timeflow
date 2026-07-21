@@ -86,7 +86,8 @@ new class extends Component {
         $this->slug                = $client->slug;
         $this->status              = $client->status;
         $this->oauth_client_id     = $client->oauth_client_id ?? '';
-        $this->oauth_client_secret = $client->oauth_client_secret ?? '';
+        // Nunca hidratar el secreto existente en una propiedad pública de Livewire.
+        $this->oauth_client_secret = '';
         $this->hq_address          = $client->hq_address ?? '';
         $this->contact_email       = $client->contact_email ?? '';
 
@@ -108,7 +109,7 @@ new class extends Component {
             'slug'                => 'required|string|max:255|alpha_dash',
             'status'              => 'required|in:active,inactive',
             'oauth_client_id'     => 'required|string|max:255',
-            'oauth_client_secret' => 'required|string|max:500',
+            'oauth_client_secret' => ($this->editing ? 'nullable' : 'required') . '|string|max:500',
             'hq_address'          => 'nullable|string|max:500',
             'contact_email'       => 'nullable|email|max:255',
             'checkin_id'          => 'required|string|max:10',
@@ -125,10 +126,13 @@ new class extends Component {
             'slug'                => $this->slug,
             'status'              => $this->status,
             'oauth_client_id'     => $this->oauth_client_id,
-            'oauth_client_secret' => $this->oauth_client_secret,
             'hq_address'          => $this->hq_address ?: null,
             'contact_email'       => $this->contact_email ?: null,
         ];
+
+        if (!$this->editing || $this->oauth_client_secret !== '') {
+            $data['oauth_client_secret'] = $this->oauth_client_secret;
+        }
 
         if ($this->editing) {
             $client = Client::findOrFail($this->editingId);
@@ -438,8 +442,8 @@ new class extends Component {
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Client Secret</label>
-                            <input wire:model="oauth_client_secret" type="text" autocomplete="off"
-                                placeholder="Client secret..."
+                            <input wire:model="oauth_client_secret" type="password" autocomplete="new-password"
+                                placeholder="{{ $editing ? 'Dejar vacío para conservarlo' : 'Client secret...' }}"
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                             @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                         </div>

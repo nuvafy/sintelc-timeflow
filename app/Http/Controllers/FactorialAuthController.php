@@ -6,8 +6,10 @@ use App\Models\FactorialConnection;
 use App\Services\FactorialService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Vinkla\Hashids\Facades\Hashids;
 
 class FactorialAuthController extends Controller
@@ -28,12 +30,26 @@ class FactorialAuthController extends Controller
 
         $connection = FactorialConnection::with('client')->findOrFail($decoded[0]);
 
+        abort_if(
+            !$connection->client
+            || empty($connection->client->oauth_client_id)
+            || empty($connection->client->oauth_client_secret),
+            422,
+            'La empresa no tiene credenciales OAuth completas.'
+        );
+
+        $state = Str::random(64);
+        Cache::put("factorial_oauth_state:{$state}", [
+            'connection_id' => $connection->id,
+            'user_id'       => $request->user()->id,
+        ], now()->addMinutes(10));
+
         $query = http_build_query([
             'client_id'           => $connection->client->oauth_client_id,
             'redirect_uri'        => config('services.factorial.redirect'),
             'response_type'       => 'code',
             'resource_owner_type' => $connection->resource_owner_type ?? 'company',
-            'state'               => Hashids::encode($connection->id),
+            'state'               => $state,
         ]);
 
         return redirect(config('services.factorial.base_url') . '/oauth/authorize?' . $query);
@@ -41,13 +57,14 @@ class FactorialAuthController extends Controller
 
     public function callback(Request $request)
     {
-        Log::info('Factorial OAuth callback', ['all' => $request->all(), 'query' => $request->query()]);
-
         if ($request->filled('error')) {
+            Log::warning('Factorial OAuth authorization rejected', [
+                'error' => $request->string('error')->limit(100)->toString(),
+            ]);
+
             return response()->json([
                 'ok' => false,
-                'error' => $request->input('error'),
-                'description' => $request->input('error_description'),
+                'message' => 'Factorial rechazó la autorización.',
             ], 400);
         }
 
@@ -60,19 +77,21 @@ class FactorialAuthController extends Controller
             ], 400);
         }
 
-        $hashedState = $request->input('state');
+        $state = $request->input('state');
 
-        if (! $hashedState) {
-            return response()->json(['ok' => false, 'message' => 'state (connection_id) ausente en el callback'], 400);
+        if (! is_string($state) || $state === '') {
+            return response()->json(['ok' => false, 'message' => 'state ausente en el callback'], 400);
         }
 
-        $decoded = Hashids::decode($hashedState);
+        $stateData = Cache::pull("factorial_oauth_state:{$state}");
 
-        if (empty($decoded)) {
-            return response()->json(['ok' => false, 'message' => 'state inválido en el callback'], 400);
+        if (! is_array($stateData)
+            || empty($stateData['connection_id'])
+            || (int) ($stateData['user_id'] ?? 0) !== (int) $request->user()->id) {
+            return response()->json(['ok' => false, 'message' => 'state inválido o expirado'], 400);
         }
 
-        $connection = FactorialConnection::with('client')->findOrFail($decoded[0]);
+        $connection = FactorialConnection::with('client')->findOrFail($stateData['connection_id']);
 
         $response = Http::asForm()->post(
             config('services.factorial.base_url') . '/oauth/token',
@@ -88,13 +107,12 @@ class FactorialAuthController extends Controller
         if ($response->failed()) {
             Log::error('Factorial token exchange failed', [
                 'status' => $response->status(),
-                'body' => $response->body(),
+                'connection_id' => $connection->id,
             ]);
 
             return response()->json([
                 'ok' => false,
                 'message' => 'No se pudo obtener token',
-                'details' => $response->json(),
             ], 500);
         }
 
@@ -108,7 +126,10 @@ class FactorialAuthController extends Controller
             'expires_at'    => isset($data['expires_in'])
                 ? Carbon::now()->addSeconds((int) $data['expires_in'])
                 : null,
-            'raw_response'  => $data,
+            'raw_response'  => array_filter([
+                'scope'      => $data['scope'] ?? null,
+                'created_at' => now()->toIso8601String(),
+            ]),
         ]);
 
         // Extraer company_id del JWT del access_token
@@ -145,17 +166,16 @@ class FactorialAuthController extends Controller
                 $updates['name'] = $company['name'];
             }
 
-            if (!empty($company['email']) && empty($connection->contact_email)) {
-                $updates['contact_email'] = $company['email'];
-            }
-
             if (!empty($updates)) {
                 $connection->update($updates);
             }
 
+            if (!empty($company['email']) && empty($connection->client->contact_email)) {
+                $connection->client->update(['contact_email' => $company['email']]);
+            }
+
             Log::info('Factorial company info fetched', [
                 'connection_id' => $connection->id,
-                'company'       => $company,
             ]);
         } catch (\Throwable $e) {
             Log::warning('No se pudo obtener info de empresa Factorial', [

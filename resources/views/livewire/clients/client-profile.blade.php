@@ -48,7 +48,8 @@ new class extends Component {
         $this->slug                = $this->client->slug;
         $this->status              = $this->client->status;
         $this->oauth_client_id     = $this->client->oauth_client_id ?? '';
-        $this->oauth_client_secret = $this->client->oauth_client_secret ?? '';
+        // Nunca hidratar el secreto existente en una propiedad pública de Livewire.
+        $this->oauth_client_secret = '';
         $this->hq_address          = $this->client->hq_address ?? '';
         $this->contact_email       = $this->client->contact_email ?? '';
 
@@ -74,7 +75,7 @@ new class extends Component {
             'slug'                => 'required|string|max:255|alpha_dash',
             'status'              => 'required|in:active,inactive',
             'oauth_client_id'     => 'required|string|max:255',
-            'oauth_client_secret' => 'required|string|max:500',
+            'oauth_client_secret' => 'nullable|string|max:500',
             'hq_address'          => 'nullable|string|max:500',
             'contact_email'       => 'nullable|email|max:255',
             'checkin_id'          => 'required|string|max:10',
@@ -84,15 +85,20 @@ new class extends Component {
             'breakout_id'         => $this->has_breaks ? 'required|string|max:10' : 'nullable',
         ]);
 
-        $this->client->update([
+        $clientData = [
             'name'                => $this->name,
             'slug'                => $this->slug,
             'status'              => $this->status,
             'oauth_client_id'     => $this->oauth_client_id,
-            'oauth_client_secret' => $this->oauth_client_secret,
             'hq_address'          => $this->hq_address ?: null,
             'contact_email'       => $this->contact_email ?: null,
-        ]);
+        ];
+
+        if ($this->oauth_client_secret !== '') {
+            $clientData['oauth_client_secret'] = $this->oauth_client_secret;
+        }
+
+        $this->client->update($clientData);
 
         ClientAttendanceConfig::updateOrCreate(
             ['client_id' => $this->client->id],
@@ -312,8 +318,8 @@ new class extends Component {
                     <div>
                         <p class="text-xs text-gray-400 mb-1">Client Secret</p>
                         @if($editing)
-                            <input wire:model="oauth_client_secret" type="text" autocomplete="off"
-                                placeholder="Client secret..."
+                            <input wire:model="oauth_client_secret" type="password" autocomplete="new-password"
+                                placeholder="Dejar vacío para conservarlo"
                                 class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
                             @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                         @else
@@ -494,4 +500,3 @@ new class extends Component {
 @endif
 
 </div>{{-- /space-y-4 raíz --}}
-

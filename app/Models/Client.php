@@ -17,6 +17,13 @@ class Client extends Model
         'contact_email',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'oauth_client_secret' => 'encrypted',
+        ];
+    }
+
     public function setNameAttribute(string $value): void
     {
         $this->attributes['name'] = mb_strtoupper($value);

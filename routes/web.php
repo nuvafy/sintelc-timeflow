@@ -57,8 +57,10 @@ Route::get('templates/empleados.csv', function () {
 })->middleware(['auth'])->name('templates.empleados');
 
 // ── Factorial OAuth ───────────────────────────────────────────────────────────
-Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect'])->name('oauth.factorial.redirect');
-Route::get('/oauth/factorial/callback',  [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');
+Route::middleware(['auth', 'verified', 'admin'])->group(function () {
+    Route::get('/oauth/factorial/redirect', [FactorialAuthController::class, 'redirect'])->name('oauth.factorial.redirect');
+    Route::get('/oauth/factorial/callback',  [FactorialAuthController::class, 'callback'])->name('oauth.factorial.callback');
+});
 
 // ── Biometric devices (ZKTeco) — sin auth ────────────────────────────────────
 Route::prefix('iclock')->middleware('iclock')->group(function () {

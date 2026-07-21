@@ -185,27 +185,27 @@ new class extends Component {
     }
 }; ?>
 
-<div>
+<div class="bg-white shadow rounded-lg overflow-hidden">
 
     {{-- ── Tab bar ───────────────────────────────────────────────── --}}
-    <div class="border-b border-gray-200 mb-6">
+    <div class="border-b border-gray-200 px-6">
         <nav class="-mb-px flex gap-6">
             <button wire:click="$set('tab','info')"
-                class="pb-3 text-sm font-medium border-b-2 transition
+                class="pb-3 pt-4 text-sm font-medium border-b-2 transition
                     {{ $tab === 'info'
                         ? 'border-indigo-600 text-indigo-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                 Información de la empresa
             </button>
             <button wire:click="$set('tab','conexiones')"
-                class="pb-3 text-sm font-medium border-b-2 transition
+                class="pb-3 pt-4 text-sm font-medium border-b-2 transition
                     {{ $tab === 'conexiones'
                         ? 'border-indigo-600 text-indigo-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                 Conexiones
             </button>
             <button wire:click="$set('tab','usuarios')"
-                class="pb-3 text-sm font-medium border-b-2 transition
+                class="pb-3 pt-4 text-sm font-medium border-b-2 transition
                     {{ $tab === 'usuarios'
                         ? 'border-indigo-600 text-indigo-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
@@ -213,6 +213,8 @@ new class extends Component {
             </button>
         </nav>
     </div>
+
+    <div class="p-6">
 
     {{-- ── Tab: Información ───────────────────────────────────────── --}}
     @if($tab === 'info')
@@ -436,61 +438,64 @@ new class extends Component {
     </div>
     @endif
 
+    </div>{{-- /p-6 --}}
+
     {{-- Modal crear/editar usuario --}}
-    @if($showUserModal)
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
-            <h3 class="text-base font-semibold text-gray-900">
-                {{ $editUserId ? 'Editar usuario' : 'Nuevo usuario' }}
-            </h3>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Nombre</label>
-                <input wire:model="userName" type="text"
-                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                @error('userName') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
-                <input wire:model="userEmail" type="email"
-                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                @error('userEmail') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">
-                    Contraseña {{ $editUserId ? '(dejar vacío para no cambiar)' : '' }}
-                </label>
-                <input wire:model="userPassword" type="password"
-                    class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                @error('userPassword') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-            </div>
-            <div class="flex justify-end gap-2 pt-2">
-                <button wire:click="$set('showUserModal', false)"
-                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
-                <button wire:click="saveUser"
-                    class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition">
-                    {{ $editUserId ? 'Guardar cambios' : 'Crear usuario' }}
-                </button>
-            </div>
+@if($showUserModal)
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+        <h3 class="text-base font-semibold text-gray-900">
+            {{ $editUserId ? 'Editar usuario' : 'Nuevo usuario' }}
+        </h3>
+        <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Nombre</label>
+            <input wire:model="userName" type="text"
+                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+            @error('userName') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
+            <input wire:model="userEmail" type="email"
+                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+            @error('userEmail') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">
+                Contraseña {{ $editUserId ? '(dejar vacío para no cambiar)' : '' }}
+            </label>
+            <input wire:model="userPassword" type="password"
+                class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+            @error('userPassword') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button wire:click="$set('showUserModal', false)"
+                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+            <button wire:click="saveUser"
+                class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition">
+                {{ $editUserId ? 'Guardar cambios' : 'Crear usuario' }}
+            </button>
         </div>
     </div>
-    @endif
-
-    {{-- Modal confirmar eliminación --}}
-    @if($deleteUserId)
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
-            <h3 class="text-base font-semibold text-gray-900">¿Eliminar usuario?</h3>
-            <p class="text-sm text-gray-500">Esta acción no se puede deshacer.</p>
-            <div class="flex justify-end gap-2 pt-2">
-                <button wire:click="$set('deleteUserId', null)"
-                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
-                <button wire:click="deleteUser"
-                    class="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md transition">
-                    Eliminar
-                </button>
-            </div>
-        </div>
-    </div>
-    @endif
-
 </div>
+@endif
+
+{{-- Modal confirmar eliminación --}}
+@if($deleteUserId)
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+        <h3 class="text-base font-semibold text-gray-900">¿Eliminar usuario?</h3>
+        <p class="text-sm text-gray-500">Esta acción no se puede deshacer.</p>
+        <div class="flex justify-end gap-2 pt-2">
+            <button wire:click="$set('deleteUserId', null)"
+                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+            <button wire:click="deleteUser"
+                class="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md transition">
+                Eliminar
+            </button>
+        </div>
+    </div>
+</div>
+@endif
+
+</div>{{-- /card raíz --}}
+

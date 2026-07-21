@@ -188,7 +188,7 @@ new class extends Component {
 <div class="space-y-4">
 
 {{-- ── Tab bar (card superior) ────────────────────────────────── --}}
-<div class="bg-white shadow rounded-lg px-6">
+<div class="bg-white shadow rounded-lg px-6 border-b border-gray-200">
     <nav class="-mb-px flex gap-6">
         <button wire:click="$set('tab','info')"
             class="pb-3 pt-4 text-sm font-medium border-b-2 transition
@@ -216,15 +216,14 @@ new class extends Component {
 
 {{-- ── Contenido (card inferior) ─────────────────────────────── --}}
 <div class="bg-white shadow rounded-lg overflow-hidden">
-    <div class="p-6">
 
     {{-- ── Tab: Información ───────────────────────────────────────── --}}
     @if($tab === 'info')
-    <div class="space-y-6">
-        <div class="flex items-center justify-between">
-            <div></div>
-            <div class="flex items-center gap-2">
-                @if($editing)
+
+        {{-- Botón editar --}}
+        <div class="flex justify-end px-6 pt-4">
+            @if($editing)
+                <div class="flex gap-2">
                     <button wire:click="cancelEdit"
                         class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition">
                         Cancelar
@@ -233,19 +232,17 @@ new class extends Component {
                         class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
                         Guardar cambios
                     </button>
-                @else
-                    <button wire:click="$set('editing', true)"
-                        class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
-                        <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                        </svg>
-                        Editar información
-                    </button>
-                @endif
-            </div>
+                </div>
+            @else
+                <button wire:click="$set('editing', true)"
+                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                    <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    Editar información
+                </button>
+            @endif
         </div>
-
-        <div class="bg-white shadow rounded-lg overflow-hidden">
 
             {{-- Header: nombre + estado --}}
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -392,8 +389,7 @@ new class extends Component {
                     </div>
                 @endif
             </div>
-        </div>
-    </div>
+        <div class="pb-4"></div>
     @endif
 
     {{-- ── Tab: Conexiones ────────────────────────────────────────── --}}
@@ -403,8 +399,7 @@ new class extends Component {
 
     {{-- ── Tab: Usuarios ──────────────────────────────────────────── --}}
     @if($tab === 'usuarios')
-    <div class="space-y-4">
-        <div class="flex items-center justify-end">
+        <div class="flex justify-end px-6 pt-4 pb-2">
             <button wire:click="openUserModal()"
                 class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
                 <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -413,34 +408,30 @@ new class extends Component {
                 Agregar usuario
             </button>
         </div>
-        <div class="bg-white shadow rounded-lg overflow-hidden">
-            @if($clientUsers->isEmpty())
-                <div class="px-6 py-8 text-center text-sm text-gray-400">
-                    No hay usuarios registrados para esta empresa.
-                </div>
-            @else
-                <ul class="divide-y divide-gray-100">
-                    @foreach($clientUsers as $u)
-                    <li class="px-6 py-3 flex items-center justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-gray-900">{{ $u->name }}</p>
-                            <p class="text-xs text-gray-400">{{ $u->email }}</p>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <button wire:click="openUserModal({{ $u->id }})"
-                                class="text-xs text-indigo-600 hover:text-indigo-800">Editar</button>
-                            <button wire:click="confirmDelete({{ $u->id }})"
-                                class="text-xs text-red-500 hover:text-red-700">Eliminar</button>
-                        </div>
-                    </li>
-                    @endforeach
-                </ul>
-            @endif
-        </div>
-    </div>
+        @if($clientUsers->isEmpty())
+            <div class="px-6 py-8 text-center text-sm text-gray-400">
+                No hay usuarios registrados para esta empresa.
+            </div>
+        @else
+            <ul class="divide-y divide-gray-100">
+                @foreach($clientUsers as $u)
+                <li class="px-6 py-3 flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900">{{ $u->name }}</p>
+                        <p class="text-xs text-gray-400">{{ $u->email }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button wire:click="openUserModal({{ $u->id }})"
+                            class="text-xs text-indigo-600 hover:text-indigo-800">Editar</button>
+                        <button wire:click="confirmDelete({{ $u->id }})"
+                            class="text-xs text-red-500 hover:text-red-700">Eliminar</button>
+                    </div>
+                </li>
+                @endforeach
+            </ul>
+        @endif
     @endif
 
-    </div>{{-- /p-6 --}}
 </div>{{-- /card inferior --}}
 
 {{-- Modal crear/editar usuario --}}

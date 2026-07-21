@@ -220,8 +220,9 @@ new class extends Component {
     {{-- ── Tab: Información ───────────────────────────────────────── --}}
     @if($tab === 'info')
 
-        {{-- Botón editar --}}
-        <div class="flex justify-end px-6 pt-4">
+        {{-- Header unificado: título izq + botón der --}}
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-800">Información de la empresa</h2>
             @if($editing)
                 <div class="flex gap-2">
                     <button wire:click="cancelEdit"
@@ -244,7 +245,7 @@ new class extends Component {
             @endif
         </div>
 
-            {{-- Header: nombre + estado --}}
+            {{-- Nombre + estado --}}
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 @if($editing)
                     <input wire:model="name" type="text"
@@ -389,7 +390,6 @@ new class extends Component {
                     </div>
                 @endif
             </div>
-        <div class="pb-4"></div>
     @endif
 
     {{-- ── Tab: Conexiones ────────────────────────────────────────── --}}
@@ -399,7 +399,9 @@ new class extends Component {
 
     {{-- ── Tab: Usuarios ──────────────────────────────────────────── --}}
     @if($tab === 'usuarios')
-        <div class="flex justify-end px-6 pt-4 pb-2">
+        {{-- Header unificado --}}
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-800">Usuarios del sistema</h2>
             <button wire:click="openUserModal()"
                 class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
                 <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

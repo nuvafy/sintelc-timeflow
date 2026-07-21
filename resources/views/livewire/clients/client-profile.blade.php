@@ -10,6 +10,7 @@ new class extends Component {
     public Client $client;
 
     public bool $editing = false;
+    public string $tab = 'info';
 
     // Usuarios del sistema
     public bool    $showUserModal  = false;
@@ -184,85 +185,113 @@ new class extends Component {
     }
 }; ?>
 
-<div class="space-y-6">
+<div>
 
-    {{-- ── Información de la empresa ──────────────────────────────── --}}
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-semibold text-gray-800">Información de la empresa</h2>
-        <div class="flex items-center gap-2">
-            @if($editing)
-                <button wire:click="cancelEdit"
-                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition">
-                    Cancelar
-                </button>
-                <button wire:click="save"
-                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
-                    Guardar cambios
-                </button>
-            @else
-                <button wire:click="$set('editing', true)"
-                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
-                    <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                    </svg>
-                    Editar información
-                </button>
-            @endif
-        </div>
+    {{-- ── Tab bar ───────────────────────────────────────────────── --}}
+    <div class="border-b border-gray-200 mb-6">
+        <nav class="-mb-px flex gap-6">
+            <button wire:click="$set('tab','info')"
+                class="pb-3 text-sm font-medium border-b-2 transition
+                    {{ $tab === 'info'
+                        ? 'border-indigo-600 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                Información de la empresa
+            </button>
+            <button wire:click="$set('tab','conexiones')"
+                class="pb-3 text-sm font-medium border-b-2 transition
+                    {{ $tab === 'conexiones'
+                        ? 'border-indigo-600 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                Conexiones
+            </button>
+            <button wire:click="$set('tab','usuarios')"
+                class="pb-3 text-sm font-medium border-b-2 transition
+                    {{ $tab === 'usuarios'
+                        ? 'border-indigo-600 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                Usuarios
+            </button>
+        </nav>
     </div>
 
-    <div class="bg-white shadow rounded-lg overflow-hidden">
-
-        {{-- Header de la card: nombre + estado --}}
-        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            @if($editing)
-                <input wire:model="name" type="text"
-                    oninput="this.value=this.value.toUpperCase()"
-                    class="block w-64 rounded-md border-gray-300 shadow-sm text-sm font-semibold focus:border-indigo-500 focus:ring-indigo-500"/>
-                @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-            @else
-                <h4 class="text-base font-semibold text-gray-900">{{ $client->name }}</h4>
-            @endif
-            @if($editing)
-                <select wire:model="status"
-                    class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <option value="active">Activa</option>
-                    <option value="inactive">Inactiva</option>
-                </select>
-            @else
-                <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
-                    {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
-                </span>
-            @endif
-        </div>
-
-        {{-- Fila 1: Email + Slug --}}
-        <div class="px-6 py-5 grid grid-cols-2 gap-6">
-            <div>
-                <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
+    {{-- ── Tab: Información ───────────────────────────────────────── --}}
+    @if($tab === 'info')
+    <div class="space-y-6">
+        <div class="flex items-center justify-between">
+            <div></div>
+            <div class="flex items-center gap-2">
                 @if($editing)
-                    <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
-                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    <button wire:click="cancelEdit"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition">
+                        Cancelar
+                    </button>
+                    <button wire:click="save"
+                        class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                        Guardar cambios
+                    </button>
                 @else
-                    <p class="text-sm text-gray-700">{{ $client->contact_email ?: '—' }}</p>
-                @endif
-            </div>
-            <div>
-                <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Slug</p>
-                @if($editing)
-                    <input wire:model="slug" type="text"
-                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
-                    @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                @else
-                    <p class="text-sm font-mono text-gray-600">{{ $client->slug }}</p>
+                    <button wire:click="$set('editing', true)"
+                        class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                        <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Editar información
+                    </button>
                 @endif
             </div>
         </div>
 
-        {{-- Separador + Credenciales OAuth --}}
-        <div class="border-t border-gray-100">
-            <div class="px-6 py-5">
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+
+            {{-- Header: nombre + estado --}}
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                @if($editing)
+                    <input wire:model="name" type="text"
+                        oninput="this.value=this.value.toUpperCase()"
+                        class="block w-64 rounded-md border-gray-300 shadow-sm text-sm font-semibold focus:border-indigo-500 focus:ring-indigo-500"/>
+                    @error('name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                @else
+                    <h4 class="text-base font-semibold text-gray-900">{{ $client->name }}</h4>
+                @endif
+                @if($editing)
+                    <select wire:model="status"
+                        class="rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="active">Activa</option>
+                        <option value="inactive">Inactiva</option>
+                    </select>
+                @else
+                    <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full {{ $client->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                        {{ $client->status === 'active' ? 'Activa' : 'Inactiva' }}
+                    </span>
+                @endif
+            </div>
+
+            {{-- Email + Slug --}}
+            <div class="px-6 py-5 grid grid-cols-2 gap-6">
+                <div>
+                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
+                    @if($editing)
+                        <input wire:model="contact_email" type="email" placeholder="admin@empresa.com"
+                            class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('contact_email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    @else
+                        <p class="text-sm text-gray-700">{{ $client->contact_email ?: '—' }}</p>
+                    @endif
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Slug</p>
+                    @if($editing)
+                        <input wire:model="slug" type="text"
+                            class="block w-full rounded-md border-gray-300 shadow-sm text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500"/>
+                        @error('slug') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    @else
+                        <p class="text-sm font-mono text-gray-600">{{ $client->slug }}</p>
+                    @endif
+                </div>
+            </div>
+
+            {{-- Credenciales OAuth --}}
+            <div class="border-t border-gray-100 px-6 py-5">
                 <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4">Credenciales Factorial OAuth</p>
                 <div class="grid grid-cols-2 gap-6">
                     <div>
@@ -293,11 +322,9 @@ new class extends Component {
                     </div>
                 </div>
             </div>
-        </div>
 
-        {{-- Separador + Asistencia biométrica --}}
-        <div class="border-t border-gray-100">
-            <div class="px-6 py-5">
+            {{-- Asistencia biométrica --}}
+            <div class="border-t border-gray-100 px-6 py-5">
                 <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4">Asistencia biométrica</p>
                 @if($editing)
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
@@ -363,54 +390,51 @@ new class extends Component {
             </div>
         </div>
     </div>
+    @endif
 
-    {{-- ── Conexiones + Usuarios 50/50 ───────────────────────────── --}}
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-    {{-- Conexiones --}}
-    <div>
+    {{-- ── Tab: Conexiones ────────────────────────────────────────── --}}
+    @if($tab === 'conexiones')
     <livewire:connections.connection-manager :client-filter-id="$client->id" />
-    </div>
+    @endif
 
-    {{-- Usuarios del sistema ──────────────────────────────────────── --}}
-    <div>
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-semibold text-gray-800">Usuarios del sistema</h2>
-        <button wire:click="openUserModal()"
-            class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
-            <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Agregar usuario
-        </button>
+    {{-- ── Tab: Usuarios ──────────────────────────────────────────── --}}
+    @if($tab === 'usuarios')
+    <div class="space-y-4">
+        <div class="flex items-center justify-end">
+            <button wire:click="openUserModal()"
+                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition">
+                <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Agregar usuario
+            </button>
+        </div>
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            @if($clientUsers->isEmpty())
+                <div class="px-6 py-8 text-center text-sm text-gray-400">
+                    No hay usuarios registrados para esta empresa.
+                </div>
+            @else
+                <ul class="divide-y divide-gray-100">
+                    @foreach($clientUsers as $u)
+                    <li class="px-6 py-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">{{ $u->name }}</p>
+                            <p class="text-xs text-gray-400">{{ $u->email }}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button wire:click="openUserModal({{ $u->id }})"
+                                class="text-xs text-indigo-600 hover:text-indigo-800">Editar</button>
+                            <button wire:click="confirmDelete({{ $u->id }})"
+                                class="text-xs text-red-500 hover:text-red-700">Eliminar</button>
+                        </div>
+                    </li>
+                    @endforeach
+                </ul>
+            @endif
+        </div>
     </div>
-    <div class="bg-white shadow rounded-lg overflow-hidden">
-
-        @if($clientUsers->isEmpty())
-            <div class="px-6 py-8 text-center text-sm text-gray-400">
-                No hay usuarios registrados para esta empresa.
-            </div>
-        @else
-            <ul class="divide-y divide-gray-100">
-                @foreach($clientUsers as $u)
-                <li class="px-6 py-3 flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-900">{{ $u->name }}</p>
-                        <p class="text-xs text-gray-400">{{ $u->email }}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <button wire:click="openUserModal({{ $u->id }})"
-                            class="text-xs text-indigo-600 hover:text-indigo-800">Editar</button>
-                        <button wire:click="confirmDelete({{ $u->id }})"
-                            class="text-xs text-red-500 hover:text-red-700">Eliminar</button>
-                    </div>
-                </li>
-                @endforeach
-            </ul>
-        @endif
-    </div>
-    </div>{{-- col usuarios --}}
-    </div>{{-- grid --}}
+    @endif
 
     {{-- Modal crear/editar usuario --}}
     @if($showUserModal)
@@ -419,21 +443,18 @@ new class extends Component {
             <h3 class="text-base font-semibold text-gray-900">
                 {{ $editUserId ? 'Editar usuario' : 'Nuevo usuario' }}
             </h3>
-
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">Nombre</label>
                 <input wire:model="userName" type="text"
                     class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                 @error('userName') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
-
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
                 <input wire:model="userEmail" type="email"
                     class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                 @error('userEmail') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
-
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">
                     Contraseña {{ $editUserId ? '(dejar vacío para no cambiar)' : '' }}
@@ -442,7 +463,6 @@ new class extends Component {
                     class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                 @error('userPassword') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
-
             <div class="flex justify-end gap-2 pt-2">
                 <button wire:click="$set('showUserModal', false)"
                     class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>

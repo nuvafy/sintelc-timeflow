@@ -19,9 +19,14 @@ class BiometricSource extends Model
         'site_name',
         'settings',
         'status',
+        'onboarding_status',
+        'onboarding_started_at',
+        'onboarding_completed_at',
+        'onboarding_error',
         'last_ping_at',
         'device_users',
         'device_users_fetched_at',
+        'last_inventory_at',
         'push_version',
         'device_name',
         'biodata_cache',
@@ -34,6 +39,9 @@ class BiometricSource extends Model
         'device_users'            => 'array',
         'last_ping_at'            => 'datetime',
         'device_users_fetched_at' => 'datetime',
+        'last_inventory_at'       => 'datetime',
+        'onboarding_started_at'   => 'datetime',
+        'onboarding_completed_at' => 'datetime',
         'biodata_cache'           => 'array',
         'biodata_cached_at'       => 'datetime',
     ];
@@ -61,6 +69,16 @@ class BiometricSource extends Model
     public function commands(): HasMany
     {
         return $this->hasMany(DeviceCommand::class);
+    }
+
+    public function inventorySnapshots(): HasMany
+    {
+        return $this->hasMany(DeviceInventorySnapshot::class);
+    }
+
+    public function userAssignments(): HasMany
+    {
+        return $this->hasMany(DeviceUserAssignment::class);
     }
 
     public function isAssigned(): bool

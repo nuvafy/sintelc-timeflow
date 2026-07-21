@@ -6,6 +6,7 @@ use App\Jobs\SyncAttendanceToFactorial;
 use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use App\Models\DeviceCommand;
+use App\Services\DeviceInventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -215,6 +216,10 @@ class IclockController extends Controller
         $source->update([
             'device_users'            => $users,
             'device_users_fetched_at' => now(),
+        ]);
+
+        app(DeviceInventoryService::class)->capture($source->fresh(), $users, 'device', [
+            'table' => $table,
         ]);
 
         Log::info('ZKTeco USERINFO recibido', ['sn' => $sn, 'table' => $table, 'count' => count($users)]);

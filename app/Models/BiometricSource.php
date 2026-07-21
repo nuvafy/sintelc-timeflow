@@ -23,6 +23,7 @@ class BiometricSource extends Model
         'device_users',
         'device_users_fetched_at',
         'push_version',
+        'device_name',
         'biodata_cache',
         'biodata_cached_at',
         'clone_target_id',

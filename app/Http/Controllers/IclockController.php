@@ -82,12 +82,13 @@ class IclockController extends Controller
 
         if ($table === 'options' && $sn) {
             $body = $request->getContent();
-            preg_match('/PushVersion=([^\r\n,]+)/i', $body, $m);
-            if (!empty($m[1])) $m[1] = trim($m[1]);
-            if (!empty($m[1])) {
-                BiometricSource::where('serial_number', $sn)
-                    ->update(['push_version' => $m[1]]);
-            }
+            $updates = [];
+            if (preg_match('/PushVersion=([^\r\n,]+)/i', $body, $m) && !empty(trim($m[1])))
+                $updates['push_version'] = trim($m[1]);
+            if (preg_match('/DeviceName=([^\r\n,]+)/i', $body, $m) && !empty(trim($m[1])))
+                $updates['device_name'] = trim($m[1]);
+            if (!empty($updates))
+                BiometricSource::where('serial_number', $sn)->update($updates);
         }
 
         if ($table === 'ATTLOG') {

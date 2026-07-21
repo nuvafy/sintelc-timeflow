@@ -41,19 +41,15 @@ class PushUsersToDevice extends Command
         $now     = now();
         $inserts = [];
 
-        // PushVersion 3.0.x → Attendance PUSH Protocol (USERINFO, campos mayúsculas)
-        // PushVersion 3.1.x+ → Security PUSH Protocol (user, campos mixtos)
-        $pushVersion  = $source->push_version ?? '';
-        $isAttendance = str_starts_with($pushVersion, 'Ver 3.0') || str_starts_with($pushVersion, '3.0');
-
+        // USERINFO (Attendance PUSH Protocol) funciona en todos los modelos probados
+        // incluyendo Ver 2.x (UEED), Ver 3.0.x (VGU/NQN) y posteriores.
+        // device_name se captura del handshake para referencia futura.
         foreach ($employees as $i => $employee) {
             $seq  = $maxSeq + $i + 1;
             $pin  = $employee->factorial_id;
             $name = mb_substr($employee->full_name, 0, 24);
 
-            $payload = $isAttendance
-                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
-                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
+            $payload = "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1";
 
             $inserts[] = [
                 'biometric_source_id' => $source->id,

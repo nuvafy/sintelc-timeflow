@@ -364,10 +364,16 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- ── Conexiones ──────────────────────────────────────────────── --}}
-    <livewire:connections.connection-manager :client-filter-id="$client->id" />
+    {{-- ── Conexiones + Usuarios 50/50 ───────────────────────────── --}}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-    {{-- ── Usuarios del sistema ───────────────────────────────────── --}}
+    {{-- Conexiones --}}
+    <div>
+    <livewire:connections.connection-manager :client-filter-id="$client->id" />
+    </div>
+
+    {{-- Usuarios del sistema ──────────────────────────────────────── --}}
+    <div>
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-semibold text-gray-800">Usuarios del sistema</h2>
         <button wire:click="openUserModal()"
@@ -403,6 +409,8 @@ new class extends Component {
             </ul>
         @endif
     </div>
+    </div>{{-- col usuarios --}}
+    </div>{{-- grid --}}
 
     {{-- Modal crear/editar usuario --}}
     @if($showUserModal)

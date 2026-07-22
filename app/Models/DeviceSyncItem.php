@@ -18,6 +18,7 @@ class DeviceSyncItem extends Model
         'name',
         'syncs_with_factorial',
         'status',
+        'verification_method',
         'error',
     ];
 

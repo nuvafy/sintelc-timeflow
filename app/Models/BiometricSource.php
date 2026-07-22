@@ -28,7 +28,16 @@ class BiometricSource extends Model
         'device_users_fetched_at',
         'last_inventory_at',
         'push_version',
+        'push_protocol_profile',
+        'push_protocol_source',
+        'push_protocol_detected_at',
         'device_name',
+        'device_firmware',
+        'reported_user_count',
+        'reported_fingerprint_count',
+        'reported_face_count',
+        'device_info_reported_at',
+        'device_info_payload',
         'biodata_cache',
         'biodata_cached_at',
         'clone_target_id',
@@ -40,6 +49,9 @@ class BiometricSource extends Model
         'last_ping_at'            => 'datetime',
         'device_users_fetched_at' => 'datetime',
         'last_inventory_at'       => 'datetime',
+        'push_protocol_detected_at' => 'datetime',
+        'device_info_reported_at' => 'datetime',
+        'device_info_payload' => 'array',
         'onboarding_started_at'   => 'datetime',
         'onboarding_completed_at' => 'datetime',
         'biodata_cache'           => 'array',
@@ -79,6 +91,16 @@ class BiometricSource extends Model
     public function userAssignments(): HasMany
     {
         return $this->hasMany(DeviceUserAssignment::class);
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->userAssignments();
+    }
+
+    public function syncItems(): HasMany
+    {
+        return $this->hasMany(DeviceSyncItem::class);
     }
 
     public function isAssigned(): bool

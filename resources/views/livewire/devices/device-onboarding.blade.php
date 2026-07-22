@@ -154,6 +154,19 @@ new class extends Component {
             <a href="{{ auth()->user()->isAdmin() ? route('devices') : route('client.devices') }}" wire:navigate class="text-sm text-indigo-600 hover:text-indigo-800">← Volver a dispositivos</a>
             <h1 class="mt-1 text-2xl font-semibold text-gray-900">Configurar {{ $device->name }}</h1>
             <p class="text-sm text-gray-500">Compara lo que existe en el biométrico con Factorial antes de enviar cambios.</p>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span class="rounded-full bg-gray-200 px-2 py-1 text-gray-700">
+                    Protocolo: {{ config('biometric-protocols.profiles.' . ($device->push_protocol_profile ?: 'attendance_push') . '.label', 'Pendiente de detectar') }}
+                </span>
+                @if($device->reported_user_count !== null)
+                    <span class="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">
+                        {{ $device->reported_user_count }} usuario(s) reportados
+                    </span>
+                @endif
+                @if($device->device_firmware)
+                    <span class="font-mono text-gray-400">{{ $device->device_firmware }}</span>
+                @endif
+            </div>
         </div>
         <button wire:click="requestInventory" wire:loading.attr="disabled"
             class="inline-flex justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">

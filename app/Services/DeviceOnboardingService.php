@@ -32,7 +32,7 @@ class DeviceOnboardingService
                 'command_seq' => $sequence,
                 'command_type' => 'query_users',
                 'idempotency_key' => "onboarding-inventory:{$lockedSource->id}:{$sequence}",
-                'payload' => 'DATA QUERY USERINFO',
+                'payload' => app(DeviceProtocolResolver::class)->inventoryCommand($lockedSource),
                 'status' => 'pending',
             ]);
 

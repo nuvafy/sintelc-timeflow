@@ -8,6 +8,7 @@ use App\Models\BiometricSource;
 use App\Models\DeviceCommand;
 use App\Services\DeviceInventoryService;
 use App\Services\DeviceCommandLifecycleService;
+use App\Services\DeviceInfoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -45,6 +46,11 @@ class IclockController extends Controller
             ['serial_number' => $sn],
             ['last_ping_at' => now()]
         );
+
+        if ($request->filled('INFO')) {
+            app(DeviceInfoService::class)->capture($source->fresh(), (string) $request->query('INFO'));
+            $source->refresh();
+        }
 
         if (!$source->client_id) {
             return $this->plainResponse('OK');

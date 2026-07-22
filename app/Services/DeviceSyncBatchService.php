@@ -27,6 +27,10 @@ class DeviceSyncBatchService
 
         return DB::transaction(function () use ($source, $decisions, $creator, $type, $origin) {
             $source = BiometricSource::query()->lockForUpdate()->findOrFail($source->id);
+            $baselineUserCount = $source->reported_user_count;
+            if ($baselineUserCount === null) {
+                $baselineUserCount = $source->inventorySnapshots()->latest('captured_at')->value('user_count');
+            }
             $batch = DeviceSyncBatch::create([
                 'uuid' => (string) Str::uuid(),
                 'client_id' => $source->client_id,
@@ -34,6 +38,10 @@ class DeviceSyncBatchService
                 'type' => $type,
                 'origin' => $origin,
                 'status' => 'preparing',
+                'options' => [
+                    'verification_baseline_user_count' => $baselineUserCount,
+                    'protocol_profile' => app(DeviceProtocolResolver::class)->resolve($source),
+                ],
                 'started_at' => now(),
             ]);
 
@@ -48,6 +56,13 @@ class DeviceSyncBatchService
                     $nextSequence++;
                 }
             }
+
+            $queuedAdds = $batch->items()->where('status', 'queued')->count();
+            $batch->update(['options' => array_merge($batch->options ?? [], [
+                'verification_expected_user_count' => $baselineUserCount !== null
+                    ? (int) $baselineUserCount + $queuedAdds
+                    : null,
+            ])]);
 
             $this->refreshBatch($batch);
 

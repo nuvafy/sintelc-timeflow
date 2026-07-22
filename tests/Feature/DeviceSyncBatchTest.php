@@ -12,6 +12,7 @@ use App\Models\FactorialEmployee;
 use App\Models\User;
 use App\Services\DeviceCommandLifecycleService;
 use App\Services\DeviceInventoryService;
+use App\Services\DeviceInfoService;
 use App\Services\DeviceSyncBatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
@@ -175,6 +176,44 @@ class DeviceSyncBatchTest extends TestCase
             'status' => 'pending',
         ]);
         $this->assertNull($source->fresh()->device_users);
+    }
+
+    public function test_senseface_batch_is_confirmed_by_a_later_sufficient_info_count(): void
+    {
+        [, , $source] = $this->makeSource();
+        $source->update(['device_name' => 'SenseFace 3A']);
+        app(DeviceInventoryService::class)->capture($source->fresh(), [], 'confirmed_empty');
+
+        $batch = app(DeviceSyncBatchService::class)->create($source->fresh(), [
+            ['action' => 'add_local', 'pin' => '601', 'name' => 'Uno'],
+            ['action' => 'add_local', 'pin' => '602', 'name' => 'Dos'],
+        ]);
+
+        foreach (DeviceCommand::where('command_type', 'set_user')->get() as $command) {
+            $command->update(['status' => 'sent', 'sent_at' => now()]);
+            app(DeviceCommandLifecycleService::class)->markSent($command->fresh());
+            $command->update(['status' => 'acknowledged', 'acknowledged_at' => now()]);
+            app(DeviceCommandLifecycleService::class)->markAcknowledged($command->fresh(), true, 'Return=0');
+        }
+
+        $this->travel(1)->seconds();
+        app(DeviceInfoService::class)->capture($source->fresh(), 'ZAM70-Test,1,0,0,192.168.1.2');
+        $this->assertSame(2, $batch->fresh()->pending_items);
+
+        $this->travel(1)->seconds();
+        app(DeviceInfoService::class)->capture($source->fresh(), 'ZAM70-Test,2,0,0,192.168.1.2');
+
+        $this->assertSame('senseface_push', $source->fresh()->push_protocol_profile);
+        $this->assertSame(2, $source->fresh()->reported_user_count);
+        $this->assertSame('completed', $batch->fresh()->status);
+        $this->assertSame(2, $batch->fresh()->confirmed_items);
+        $this->assertDatabaseCount('device_sync_items', 2);
+        $this->assertDatabaseMissing('device_sync_items', ['verification_method' => null]);
+        $this->assertDatabaseHas('device_user_assignments', [
+            'pin' => '601',
+            'sync_status' => 'confirmed',
+            'verification_method' => 'device_info_count',
+        ]);
     }
 
     private function makeSource(): array

@@ -17,6 +17,7 @@ class DeviceUserAssignment extends Model
         'name',
         'desired_state',
         'sync_status',
+        'verification_method',
         'confirmed_at',
         'last_error',
     ];

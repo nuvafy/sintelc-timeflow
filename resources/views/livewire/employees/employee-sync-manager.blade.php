@@ -40,6 +40,7 @@ new class extends Component {
     public $csvFile              = null;
     public string  $importError  = '';
     public ?array  $csvResult    = null;
+    public array   $csvSourceIds = [];
 
     public function syncFromDevices(): void
     {
@@ -594,6 +595,7 @@ new class extends Component {
         $this->csvFile     = null;
         $this->importError = '';
         $this->csvResult   = null;
+        $this->csvSourceIds = [];
         $this->showCsvModal = true;
     }
 
@@ -603,6 +605,7 @@ new class extends Component {
         $this->csvFile      = null;
         $this->importError  = '';
         $this->csvResult    = null;
+        $this->csvSourceIds = [];
     }
 
     public function uploadCsv(): void
@@ -612,6 +615,12 @@ new class extends Component {
         $this->csvResult   = null;
 
         if (!$this->client_id) { $this->importError = 'Selecciona una empresa primero.'; return; }
+
+        $sourceIds = collect($this->csvSourceIds)->map(fn($id) => (int) $id)->filter()->unique()->values();
+        if ($sourceIds->isEmpty()) {
+            $this->importError = 'Selecciona al menos un dispositivo biométrico de destino.';
+            return;
+        }
 
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         if (!$provider) { $this->importError = 'No hay proveedor biométrico para esta empresa.'; return; }
@@ -686,7 +695,16 @@ new class extends Component {
         }
         unset($row);
 
-        $sources = BiometricSource::where('biometric_provider_id', $provider->id)->get();
+        $sources = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('biometric_provider_id', $provider->id)
+            ->where('status', 'active')
+            ->whereIn('id', $sourceIds)
+            ->get();
+
+        if ($sources->count() !== $sourceIds->count()) {
+            abort(403);
+        }
         foreach ($sources as $source) {
             $reportedPins = $source->inventorySnapshots()
                 ->latest('captured_at')
@@ -1175,7 +1193,7 @@ new class extends Component {
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900">Importar usuarios desde CSV</h3>
-                    <p class="text-xs text-gray-400 mt-0.5">Se preparará un lote verificable para todos los dispositivos.</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Elige el biométrico de destino; Factorial es opcional por usuario.</p>
                 </div>
                 <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
@@ -1187,6 +1205,28 @@ new class extends Component {
                         <p class="text-xs text-emerald-600 mt-1">Se marcarán como confirmados sólo después de releer cada equipo.</p>
                     </div>
                 @else
+                    @php
+                        $csvSources = \App\Models\BiometricSource::query()
+                            ->where('client_id', $client_id)
+                            ->where('status', 'active')
+                            ->orderBy('name')
+                            ->get(['id', 'name', 'serial_number']);
+                    @endphp
+                    <div>
+                        <p class="mb-2 text-sm font-medium text-gray-700">Dispositivos de destino <span class="text-red-500">*</span></p>
+                        <div class="max-h-36 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                            @forelse($csvSources as $source)
+                                <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                                    <input wire:model="csvSourceIds" type="checkbox" value="{{ $source->id }}"
+                                        class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span>{{ $source->name }}</span>
+                                    <span class="font-mono text-xs text-gray-400">{{ $source->serial_number }}</span>
+                                </label>
+                            @empty
+                                <p class="text-xs text-amber-700">No hay dispositivos activos para esta empresa.</p>
+                            @endforelse
+                        </div>
+                    </div>
                     <input wire:model="csvFile" type="file" accept=".csv,.txt"
                         class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"/>
                     @if($importError)

@@ -33,6 +33,7 @@ new class extends Component {
     public ?string $addPin          = null;
     public array   $addQueryCmdIds  = [];
     public array   $addPushCmdIds   = [];
+    public array   $addBatchIds     = [];
 
     // Modal CSV (a nivel de proveedor)
     public bool    $showCsvModal = false;
@@ -459,6 +460,7 @@ new class extends Component {
         $this->addPin         = null;
         $this->addQueryCmdIds = [];
         $this->addPushCmdIds  = [];
+        $this->addBatchIds    = [];
         $this->showAddModal   = true;
     }
 
@@ -509,12 +511,16 @@ new class extends Component {
     {
         $this->authorizeSelectedClient();
         if ($this->addStep === 1) {
-            // Waiting for all QUERY USERINFO commands to be acknowledged
-            $pending = \App\Models\DeviceCommand::whereIn('id', $this->addQueryCmdIds)
-                ->whereNotIn('status', ['acknowledged', 'failed'])
-                ->count();
+            $queries = \App\Models\DeviceCommand::whereIn('id', $this->addQueryCmdIds)->get();
+            $sourceIds = $queries->pluck('biometric_source_id');
+            $inventoryReady = \App\Models\BiometricSource::whereIn('id', $sourceIds)
+                ->get()
+                ->every(function ($source) use ($queries) {
+                    $requestedAt = $queries->firstWhere('biometric_source_id', $source->id)?->created_at;
+                    return $source->last_inventory_at && $requestedAt && $source->last_inventory_at->gte($requestedAt);
+                });
 
-            if ($pending > 0) return;
+            if (!$inventoryReady) return;
 
             // Step 2: calculate next PIN
             $this->addStep = 2;
@@ -546,69 +552,37 @@ new class extends Component {
             $pin  = $this->addPin;
             $name = trim($this->addName);
             $this->addPushCmdIds = [];
+            $this->addBatchIds = [];
 
             foreach ($sources as $source) {
-                $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
-                $cmd = \App\Models\DeviceCommand::create([
-                    'biometric_source_id' => $source->id,
-                    'command_seq'         => $seq,
-                    'command_type'        => 'push_user',
-                    'payload'             => "DATA UPDATE USERINFO Pin={$pin}\tName={$name}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000000000000\tVerify=0\tVein=0\tDuress=0",
-                    'status'              => 'pending',
-                ]);
-                $this->addPushCmdIds[] = $cmd->id;
+                $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+                    $source,
+                    [[
+                        'action' => 'add_local',
+                        'pin' => $pin,
+                        'name' => $name,
+                    ]],
+                    auth()->user(),
+                    'bulk',
+                    'manual'
+                );
+                $this->addBatchIds[] = $batch->id;
             }
 
             return;
         }
 
         if ($this->addStep === 3) {
-            // Waiting for all PUSH commands to be acknowledged
-            $failed = \App\Models\DeviceCommand::whereIn('id', $this->addPushCmdIds)
-                ->where('status', 'failed')
-                ->count();
-
-            $pending = \App\Models\DeviceCommand::whereIn('id', $this->addPushCmdIds)
-                ->whereNotIn('status', ['acknowledged', 'failed'])
-                ->count();
+            $batches = \App\Models\DeviceSyncBatch::whereIn('id', $this->addBatchIds)->get();
+            $pending = $batches->sum('pending_items');
 
             if ($pending > 0) return;
 
-            if ($failed > 0 && $failed === count($this->addPushCmdIds)) {
+            $failed = $batches->sum('failed_items');
+            if ($failed > 0 && $failed === $batches->sum('total_items')) {
                 $this->addError = 'El dispositivo rechazó el comando. Verifica la conexión e intenta de nuevo.';
                 $this->addStep  = -1;
                 return;
-            }
-
-            // Step 4: save to DB
-            $provider = \App\Models\BiometricProvider::where('client_id', $this->client_id)->first();
-
-            if ($provider) {
-                \App\Models\BiometricUserSync::create([
-                    'client_id'              => $this->client_id,
-                    'biometric_provider_id'  => $provider->id,
-                    'factorial_employee_id'  => null,
-                    'external_employee_code' => $this->addPin,
-                    'local_name'             => trim($this->addName),
-                    'sync_status'            => 'synced',
-                    'last_attempt_at'        => now(),
-                    'synced_at'              => now(),
-                ]);
-
-                // Update device_users cache on all sources
-                \App\Models\BiometricSource::where('client_id', $this->client_id)
-                    ->where('status', 'active')
-                    ->get()
-                    ->each(function ($source) {
-                        $existing = collect($source->device_users ?? []);
-                        $pin      = $this->addPin;
-                        $name     = trim($this->addName);
-                        if ($existing->where('pin', $pin)->isEmpty()) {
-                            $source->update([
-                                'device_users' => $existing->push(['pin' => $pin, 'name' => $name, 'card' => '', 'role' => '0'])->values()->toArray(),
-                            ]);
-                        }
-                    });
             }
 
             $this->addStep = 4;
@@ -675,11 +649,12 @@ new class extends Component {
             $pin  = trim($row['pin'] ?? '');
             $name = trim($row['nombre'] ?? $row['name'] ?? '');
             if ($pin === '') continue;
+            $syncFactorial = in_array(strtolower(trim((string) ($row['sincronizar_factorial'] ?? 'no'))), ['si', 'sí', '1', 'true'], true);
             $rows[] = [
                 'pin'  => mb_convert_encoding($pin,  'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
                 'name' => mb_convert_encoding($name, 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
-                'card' => '',
-                'role' => '0',
+                'sync_factorial' => $syncFactorial,
+                'factorial_id' => trim((string) ($row['factorial_id'] ?? '')),
             ];
         }
         fclose($handle);
@@ -689,12 +664,52 @@ new class extends Component {
             return;
         }
 
-        // Actualizar device_users en TODOS los dispositivos del proveedor (merge)
+        $duplicatePin = collect($rows)->countBy('pin')->first(fn($count) => $count > 1);
+        if ($duplicatePin) {
+            $this->importError = 'El archivo contiene PINs repetidos.';
+            return;
+        }
+
+        $employeesByFactorialId = FactorialEmployee::query()
+            ->where('client_id', $this->client_id)
+            ->whereIn('factorial_id', collect($rows)->where('sync_factorial', true)->pluck('factorial_id'))
+            ->get()
+            ->keyBy(fn($employee) => (string) $employee->factorial_id);
+
+        foreach ($rows as &$row) {
+            $employee = $row['sync_factorial'] ? $employeesByFactorialId->get($row['factorial_id']) : null;
+            if ($row['sync_factorial'] && !$employee) {
+                $this->importError = "No se encontró en Factorial el ID {$row['factorial_id']} (PIN {$row['pin']}).";
+                return;
+            }
+            $row['factorial_employee_id'] = $employee?->id;
+        }
+        unset($row);
+
         $sources = BiometricSource::where('biometric_provider_id', $provider->id)->get();
         foreach ($sources as $source) {
-            $existing = collect($source->device_users ?? []);
-            $merged   = $existing->concat($rows)->unique('pin')->values()->toArray();
-            $source->update(['device_users' => $merged, 'device_users_fetched_at' => now()]);
+            $reportedPins = $source->inventorySnapshots()
+                ->latest('captured_at')
+                ->first()?->users()
+                ->pluck('pin')
+                ->map(fn($pin) => (string) $pin)
+                ->flip() ?? collect();
+
+            $decisions = collect($rows)->map(fn($row) => [
+                'action' => match (true) {
+                    $reportedPins->has((string) $row['pin']) && $row['sync_factorial'] => 'map_factorial',
+                    $reportedPins->has((string) $row['pin']) => 'keep_local',
+                    $row['sync_factorial'] => 'add_factorial',
+                    default => 'add_local',
+                },
+                'pin' => $row['pin'],
+                'name' => $row['name'],
+                'factorial_employee_id' => $row['factorial_employee_id'],
+            ])->all();
+
+            app(\App\Services\DeviceSyncBatchService::class)->create(
+                $source, $decisions, auth()->user(), 'bulk', 'csv'
+            );
         }
 
         $this->csvResult = [
@@ -1160,7 +1175,7 @@ new class extends Component {
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900">Importar usuarios desde CSV</h3>
-                    <p class="text-xs text-gray-400 mt-0.5">Los usuarios se agregarán a todos los dispositivos del proveedor.</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Se preparará un lote verificable para todos los dispositivos.</p>
                 </div>
                 <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
@@ -1168,8 +1183,8 @@ new class extends Component {
                 @if($csvResult)
                     <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-5 py-3 space-y-1">
                         <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
-                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios actualizados en {{ $csvResult['devices'] }} dispositivo(s).</p>
-                        <p class="text-xs text-emerald-600 mt-1">Ve al tab <strong>Mapping</strong> para asignarlos a empleados de Factorial.</p>
+                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios encolados en {{ $csvResult['devices'] }} dispositivo(s).</p>
+                        <p class="text-xs text-emerald-600 mt-1">Se marcarán como confirmados sólo después de releer cada equipo.</p>
                     </div>
                 @else
                     <input wire:model="csvFile" type="file" accept=".csv,.txt"
@@ -1178,7 +1193,8 @@ new class extends Component {
                         <p class="text-xs text-red-600">{{ $importError }}</p>
                     @endif
                     <p class="text-xs text-gray-400">
-                        Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>
+                        Requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>. Opcionales:
+                        <code class="bg-gray-100 px-1 rounded">sincronizar_factorial</code> y <code class="bg-gray-100 px-1 rounded">factorial_id</code>.
                         &nbsp;·&nbsp;
                         <a href="{{ route('templates.empleados') }}" class="text-emerald-600 hover:text-emerald-800 underline">Descargar plantilla</a>
                     </p>

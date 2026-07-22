@@ -193,7 +193,12 @@ new class extends Component {
         if ($this->editing) {
             $this->authorizedDevice($this->editingId)->update($data);
         } else {
-            BiometricSource::create($data);
+            $source = BiometricSource::create(array_merge($data, [
+                'onboarding_status' => $data['client_id'] && $data['biometric_provider_id'] ? 'assigned' : 'ready',
+            ]));
+            if ($source->client_id && $source->biometric_provider_id) {
+                app(\App\Services\DeviceOnboardingService::class)->requestInventory($source);
+            }
         }
 
         $this->showModal = false;
@@ -331,60 +336,19 @@ new class extends Component {
             return;
         }
 
-        $maxSeq  = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
-        $now     = now();
-        $inserts = [];
+        $decisions = $employees->map(fn($employee) => [
+            'action' => 'add_factorial',
+            'pin' => (string) $employee->factorial_id,
+            'name' => $employee->full_name,
+            'factorial_employee_id' => $employee->id,
+        ])->values()->all();
 
-        foreach ($employees->values() as $i => $employee) {
-            $pin     = $employee->factorial_id;
-            $name    = mb_substr($employee->full_name, 0, 24);
-            $payload = $isAttendance
-                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
-                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
-
-            $inserts[] = [
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $maxSeq + $i + 1,
-                'command_type'        => 'set_user',
-                'payload'             => $payload,
-                'status'              => 'pending',
-                'created_at'          => $now,
-                'updated_at'          => $now,
-            ];
-        }
-
-        DeviceCommand::insert($inserts);
-
-        // Añadir al device_users existente (no reemplazar)
-        $existing = collect($source->device_users ?? []);
-        $newUsers = $employees->values()->map(fn($e) => [
-            'pin'  => (string)$e->factorial_id,
-            'name' => mb_substr($e->full_name, 0, 24),
-        ]);
-        $source->update([
-            'device_users'            => $existing->concat($newUsers)->unique('pin')->values()->toArray(),
-            'device_users_fetched_at' => $now,
-        ]);
-
-        // Crear mapeos solo para los enviados
-        $mappings = $employees->values()->map(fn($e) => [
-            'biometric_provider_id'  => $source->biometric_provider_id,
-            'factorial_employee_id'  => $e->id,
-            'client_id'              => $source->client_id,
-            'external_employee_code' => (string)$e->factorial_id,
-            'sync_status'            => 'synced',
-            'created_at'             => $now,
-            'updated_at'             => $now,
-        ])->toArray();
-
-        BiometricUserSync::upsert(
-            $mappings,
-            ['biometric_provider_id', 'factorial_employee_id'],
-            ['external_employee_code', 'sync_status', 'updated_at']
+        $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+            $source, $decisions, auth()->user(), 'bulk', 'factorial'
         );
 
         $count = $employees->count();
-        $this->pushSuccessMsg = "{$count} empleado(s) nuevos encolados. El equipo los recibirá en su próximo ping.";
+        $this->pushSuccessMsg = "{$count} empleado(s) encolados en el lote {$batch->uuid}. Se confirmarán al releer el equipo.";
     }
 
     private function _pushFromSintelc(BiometricSource $source, bool $isAttendance): void
@@ -399,50 +363,24 @@ new class extends Component {
             return;
         }
 
-        $maxSeq  = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
-        $now     = now();
-        $inserts = [];
-        $users   = [];
+        $decisions = $syncs->filter(fn($sync) => $sync->factorialEmployee)->map(fn($sync) => [
+            'action' => 'add_factorial',
+            'pin' => (string) $sync->external_employee_code,
+            'name' => $sync->factorialEmployee->full_name,
+            'factorial_employee_id' => $sync->factorial_employee_id,
+        ])->values()->all();
 
-        foreach ($syncs as $i => $sync) {
-            $employee = $sync->factorialEmployee;
-            if (!$employee) continue;
-
-            $pin  = $sync->external_employee_code; // PIN real del dispositivo
-            $name = mb_substr($employee->full_name, 0, 24);
-
-            $payload = $isAttendance
-                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
-                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
-
-            $inserts[] = [
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $maxSeq + $i + 1,
-                'command_type'        => 'set_user',
-                'payload'             => $payload,
-                'status'              => 'pending',
-                'created_at'          => $now,
-                'updated_at'          => $now,
-            ];
-
-            $users[] = ['pin' => $pin, 'name' => $name];
-        }
-
-        if (empty($inserts)) {
+        if (empty($decisions)) {
             $this->pushSuccessMsg = 'No se pudo generar comandos.';
             return;
         }
 
-        DeviceCommand::insert($inserts);
+        $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+            $source, $decisions, auth()->user(), 'bulk', 'sintelc'
+        );
 
-        $existing = collect($source->device_users ?? []);
-        $source->update([
-            'device_users'            => $existing->concat($users)->unique('pin')->values()->toArray(),
-            'device_users_fetched_at' => $now,
-        ]);
-
-        $count = count($inserts);
-        $this->pushSuccessMsg = "{$count} empleado(s) mapeados encolados con su PIN de Sintelc. El equipo los recibirá en su próximo ping.";
+        $count = count($decisions);
+        $this->pushSuccessMsg = "{$count} empleado(s) encolados en el lote {$batch->uuid}. Se confirmarán al releer el equipo.";
     }
 
     public function closeImportModal(): void

@@ -155,6 +155,28 @@ class DeviceSyncBatchTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_console_bulk_push_uses_a_verifiable_batch_without_faking_inventory(): void
+    {
+        [$client, , $source, $connection] = $this->makeSource();
+        $this->makeEmployee($client, $connection, 303, 'Desde Consola');
+
+        $this->artisan('biometric:push-users', ['sourceId' => $source->id])
+            ->assertSuccessful();
+
+        $this->assertDatabaseHas('device_sync_batches', [
+            'client_id' => $client->id,
+            'type' => 'bulk',
+            'origin' => 'console',
+            'status' => 'processing',
+        ]);
+        $this->assertDatabaseHas('device_commands', [
+            'biometric_source_id' => $source->id,
+            'command_type' => 'set_user',
+            'status' => 'pending',
+        ]);
+        $this->assertNull($source->fresh()->device_users);
+    }
+
     private function makeSource(): array
     {
         $client = Client::create([

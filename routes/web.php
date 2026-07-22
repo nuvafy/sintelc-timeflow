@@ -58,7 +58,7 @@ Route::middleware(['auth'])->group(function () {
 
 Route::get('templates/empleados.csv', function () {
     $bom  = "\xEF\xBB\xBF";
-    $rows = "pin,nombre\r\n1001,Tony Stark\r\n1002,Steve Rogers\r\n";
+    $rows = "pin,nombre,sincronizar_factorial,factorial_id\r\n1001,Tony Stark,si,123456\r\n1002,Steve Rogers,no,\r\n";
     return response($bom . $rows, 200, [
         'Content-Type'        => 'text/csv; charset=UTF-8',
         'Content-Disposition' => 'attachment; filename="plantilla-empleados.csv"',

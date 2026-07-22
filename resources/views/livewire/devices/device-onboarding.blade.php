@@ -28,6 +28,10 @@ new class extends Component {
         return [
             'device' => $device,
             'analysis' => $analysis,
+            'inventoryCommand' => $device->commands()
+                ->where('command_type', 'query_users')
+                ->latest('id')
+                ->first(),
             'employees' => FactorialEmployee::query()
                 ->where('client_id', $device->client_id)
                 ->where('active', true)
@@ -138,6 +142,24 @@ new class extends Component {
     @endif
     @error('decisions') <div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{{ $message }}</div> @enderror
     @error('decisions.*') <div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{{ $message }}</div> @enderror
+
+    @if(!$analysis['snapshot_id'] && $inventoryCommand)
+        @php
+            $waitedTooLong = $inventoryCommand->status === 'acknowledged'
+                && $inventoryCommand->acknowledged_at?->lt(now()->subMinutes(2));
+        @endphp
+        <div class="rounded-md px-4 py-3 text-sm {{ $waitedTooLong ? 'bg-amber-50 text-amber-800' : 'bg-gray-100 text-gray-700' }}">
+            @if(in_array($inventoryCommand->status, ['pending', 'sent'], true))
+                Esperando que el dispositivo recoja la consulta. Último ping: {{ $device->last_ping_at?->diffForHumans() ?? 'sin conexión' }}.
+            @elseif($waitedTooLong)
+                El dispositivo recibió la consulta, pero no devolvió el inventario. Puedes intentar nuevamente; se usará el protocolo correspondiente a {{ $device->device_name ?: 'este modelo' }}.
+            @elseif($inventoryCommand->status === 'acknowledged')
+                El dispositivo recibió la consulta. Esperando que envíe su inventario de usuarios…
+            @else
+                El dispositivo rechazó la consulta. Intenta nuevamente o revisa su conexión.
+            @endif
+        </div>
+    @endif
 
     <div class="grid gap-3 sm:grid-cols-4">
         <div class="rounded-lg bg-white p-4 shadow"><p class="text-xs text-gray-500">En el equipo</p><p class="text-2xl font-semibold">{{ collect($analysis['rows'])->whereNotNull('reported_name')->count() }}</p></div>

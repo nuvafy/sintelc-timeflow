@@ -276,14 +276,6 @@ class IclockController extends Controller
 
         $attendanceConfig = \App\Models\ClientAttendanceConfig::where('client_id', $source->client_id)->first();
 
-        if (!$attendanceConfig) {
-            Log::warning('ZKTeco ATTLOG: cliente sin configuración de asistencia, registros ignorados', [
-                'client_id' => $source->client_id,
-                'sn'        => $sn,
-            ]);
-            return $this->plainResponse('OK: 0');
-        }
-
         // ── Pre-cargar claves únicas ya existentes (evita N+1 de exists()) ──
         $existingKeys = AttendanceLog::where('biometric_source_id', $source->id)
             ->where('occurred_at', '>=', now()->subDays(7))
@@ -318,15 +310,21 @@ class IclockController extends Controller
             $employeeId = $mappings[$pin] ?? null;
             $isLocal    = !$employeeId && isset($localPins[$pin]);
 
+            $checkType = $attendanceConfig?->resolveCheckType((string) $status)
+                ?? \App\Models\ClientAttendanceConfig::defaultCheckType($status);
+            $syncStatus = $checkType === 'unknown'
+                ? 'pending'
+                : ($employeeId ? 'resolved' : ($isLocal ? 'local' : 'pending'));
+
             $records[] = [
                 'client_id'             => $source->client_id,
                 'biometric_source_id'   => $source->id,
                 'factorial_employee_id' => $employeeId,
                 'employee_code'         => $pin,
-                'check_type'            => $attendanceConfig->resolveCheckType($status) ?? 'unknown',
+                'check_type'            => $checkType,
                 'occurred_at'           => $occurredAt,
                 'raw_payload'           => json_encode(compact('pin', 'timestamp', 'status', 'verify', 'workcode')),
-                'sync_status'           => $employeeId ? 'resolved' : ($isLocal ? 'local' : 'pending'),
+                'sync_status'           => $syncStatus,
                 'created_at'            => $now,
                 'updated_at'            => $now,
             ];
@@ -452,10 +450,6 @@ class IclockController extends Controller
 
         $attendanceConfig = \App\Models\ClientAttendanceConfig::where('client_id', $source->client_id)->first();
 
-        if (!$attendanceConfig) {
-            return $this->plainResponse('OK');
-        }
-
         $key = $pin . '|' . $occurredAt->format('Y-m-d H:i:s');
         $exists = AttendanceLog::where('biometric_source_id', $source->id)
             ->whereRaw("CONCAT(employee_code, '|', occurred_at) = ?", [$key])
@@ -469,18 +463,21 @@ class IclockController extends Controller
             ->where('external_employee_code', $pin)
             ->value('factorial_employee_id');
 
+        $checkType = $attendanceConfig?->resolveCheckType((string) $status)
+            ?? \App\Models\ClientAttendanceConfig::defaultCheckType($status);
+
         $log = AttendanceLog::create([
             'client_id'             => $source->client_id,
             'biometric_source_id'   => $source->id,
             'factorial_employee_id' => $employeeId,
             'employee_code'         => $pin,
-            'check_type'            => $attendanceConfig->resolveCheckType($status) ?? 'unknown',
+            'check_type'            => $checkType,
             'occurred_at'           => $occurredAt,
             'raw_payload'           => json_encode($fields),
-            'sync_status'           => $employeeId ? 'resolved' : 'pending',
+            'sync_status'           => $employeeId && $checkType !== 'unknown' ? 'resolved' : 'pending',
         ]);
 
-        if ($employeeId) {
+        if ($employeeId && $checkType !== 'unknown') {
             SyncAttendanceToFactorial::dispatch($log->id);
         }
 

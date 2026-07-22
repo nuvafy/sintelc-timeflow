@@ -178,7 +178,10 @@ new class extends Component {
                 'client_id'             => $user->client_id,
                 'biometric_provider_id' => $provider->id,
                 'status'                => 'active',
+                'onboarding_status'     => 'assigned',
             ]);
+
+            app(\App\Services\DeviceOnboardingService::class)->requestInventory($source->fresh());
 
             $this->showModal = false;
             $this->resetForm();
@@ -249,7 +252,10 @@ new class extends Component {
             'client_id'             => $client->id,
             'biometric_provider_id' => $provider->id,
             'status'                => 'active',
+            'onboarding_status'     => 'assigned',
         ]);
+
+        app(\App\Services\DeviceOnboardingService::class)->requestInventory($source->fresh());
 
         $this->showAssignModal   = false;
         $this->assigningSourceId = null;
@@ -682,9 +688,15 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-center">
                         <div class="flex items-center justify-center gap-3">
+                            <a href="{{ route('devices.onboarding', $device) }}" wire:navigate title="Configurar y conciliar usuarios"
+                                class="text-emerald-600 hover:text-emerald-800">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                </svg>
+                            </a>
                             {{-- Enviar empleados al dispositivo --}}
-                            <button wire:click="openImportModal({{ $device->id }})" title="Enviar empleados al dispositivo"
-                                class="text-sky-500 hover:text-sky-700">
+                            <button wire:click="openImportModal({{ $device->id }})" title="Envío anterior (temporal)"
+                                class="hidden text-sky-500 hover:text-sky-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>

@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FactorialAuthController;
 use App\Http\Controllers\IclockController;
 use App\Models\Client;
+use App\Models\BiometricSource;
 
 Route::redirect('/', '/login');
 
@@ -45,6 +46,14 @@ Route::middleware(['auth'])->group(function () {
         abort_if(!$user->client_id, 403);
         return view('employees');
     })->name('client.employees');
+
+    Route::get('dispositivos/{device}/configuracion-inicial', function (BiometricSource $device) {
+        $user = auth()->user();
+        abort_unless($device->client_id, 404);
+        abort_if($user->isClient() && (int) $user->client_id !== (int) $device->client_id, 403);
+
+        return view('devices.onboarding', compact('device'));
+    })->name('devices.onboarding');
 });
 
 Route::get('templates/empleados.csv', function () {

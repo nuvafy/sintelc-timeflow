@@ -7,6 +7,7 @@ use App\Models\AttendanceLog;
 use App\Models\BiometricSource;
 use App\Models\DeviceCommand;
 use App\Services\DeviceInventoryService;
+use App\Services\DeviceCommandLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -59,6 +60,7 @@ class IclockController extends Controller
         }
 
         $command->update(['status' => 'sent', 'sent_at' => now()]);
+        app(DeviceCommandLifecycleService::class)->markSent($command->fresh());
 
         $line = $this->buildGetRequestResponse("C:{$command->command_seq}:{$command->payload}");
 
@@ -160,14 +162,23 @@ class IclockController extends Controller
                     $returnCode = isset($retMatches[1]) ? (int) $retMatches[1] : null;
                     $status     = ($returnCode === 0) ? 'acknowledged' : 'failed';
 
-                    DeviceCommand::where('biometric_source_id', $source->id)
+                    $command = DeviceCommand::where('biometric_source_id', $source->id)
                         ->where('command_seq', $commandSeq)
                         ->where('status', 'sent')
-                        ->update([
+                        ->first();
+
+                    if ($command) {
+                        $command->update([
                             'status'           => $status,
                             'acknowledged_at'  => now(),
                             'device_response'  => mb_substr($body, 0, 1000),
                         ]);
+                        app(DeviceCommandLifecycleService::class)->markAcknowledged(
+                            $command->fresh(),
+                            $status === 'acknowledged',
+                            $body
+                        );
+                    }
                 }
             }
         }

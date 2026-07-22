@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DeviceUserAssignment extends Model
 {
@@ -42,5 +43,10 @@ class DeviceUserAssignment extends Model
     public function factorialEmployee(): BelongsTo
     {
         return $this->belongsTo(FactorialEmployee::class);
+    }
+
+    public function syncItems(): HasMany
+    {
+        return $this->hasMany(DeviceSyncItem::class);
     }
 }

@@ -21,7 +21,7 @@ class DeviceInventoryService
             ->keyBy('pin')
             ->values();
 
-        return DB::transaction(function () use ($source, $origin, $metadata, $capturedAt, $normalized) {
+        $snapshot = DB::transaction(function () use ($source, $origin, $metadata, $capturedAt, $normalized) {
             $snapshot = DeviceInventorySnapshot::create([
                 'biometric_source_id' => $source->id,
                 'origin' => $origin,
@@ -55,6 +55,10 @@ class DeviceInventoryService
 
             return $snapshot->load('users');
         });
+
+        app(DeviceAssignmentVerificationService::class)->verify($source->fresh(), $snapshot);
+
+        return $snapshot->fresh('users');
     }
 
     private function normalizeUser(array $user): array

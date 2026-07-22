@@ -102,16 +102,6 @@ class DeviceOnboardingFoundationTest extends TestCase
         $this->assertSame('querying_users', $source->fresh()->onboarding_status);
     }
 
-    public function test_senseface_inventory_uses_security_push_user_table(): void
-    {
-        [, , $source] = $this->makeSource();
-        $source->update(['device_name' => 'SenseFace 3A']);
-
-        $command = app(DeviceOnboardingService::class)->requestInventory($source->fresh());
-
-        $this->assertSame('DATA QUERY user', $command->payload);
-    }
-
     private function makeSource(): array
     {
         $client = Client::create([

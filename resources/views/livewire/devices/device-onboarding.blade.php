@@ -3,6 +3,7 @@
 use App\Models\BiometricSource;
 use App\Models\FactorialEmployee;
 use App\Services\DeviceOnboardingService;
+use App\Services\DeviceInventoryService;
 use App\Services\DeviceReconciliationService;
 use App\Services\DeviceSyncBatchService;
 use Livewire\Volt\Component;
@@ -32,6 +33,11 @@ new class extends Component {
                 ->where('command_type', 'query_users')
                 ->latest('id')
                 ->first(),
+            'successfulInventoryCommand' => $device->commands()
+                ->where('command_type', 'query_users')
+                ->where('status', 'acknowledged')
+                ->latest('id')
+                ->first(),
             'employees' => FactorialEmployee::query()
                 ->where('client_id', $device->client_id)
                 ->where('active', true)
@@ -53,6 +59,24 @@ new class extends Component {
             $this->prepareDecisions($analysis);
             $this->message = 'Inventario recibido. Ya puedes revisar las coincidencias.';
         }
+    }
+
+    public function confirmEmptyInventory(): void
+    {
+        $device = $this->device();
+        $command = $device->commands()
+            ->where('command_type', 'query_users')
+            ->where('status', 'acknowledged')
+            ->latest('id')
+            ->first();
+        abort_unless($command, 422);
+
+        app(DeviceInventoryService::class)->capture($device, [], 'confirmed_empty', [
+            'command_id' => $command->id,
+            'confirmed_by' => auth()->id(),
+        ]);
+        $this->prepareDecisions();
+        $this->message = 'Equipo confirmado sin usuarios. Ya puedes decidir cuáles empleados de Factorial enviar.';
     }
 
     public function apply(): void
@@ -158,6 +182,16 @@ new class extends Component {
             @else
                 El dispositivo rechazó la consulta. Intenta nuevamente o revisa su conexión.
             @endif
+        </div>
+    @endif
+
+    @if(!$analysis['snapshot_id'] && $successfulInventoryCommand)
+        <div class="flex items-center justify-between gap-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p class="text-sm text-emerald-800">Si el dispositivo es nuevo y no tiene usuarios, es normal que no envíe ninguna fila.</p>
+            <button wire:click="confirmEmptyInventory" wire:confirm="¿Confirmas que este dispositivo no tiene usuarios?"
+                class="shrink-0 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                Confirmar equipo vacío
+            </button>
         </div>
     @endif
 

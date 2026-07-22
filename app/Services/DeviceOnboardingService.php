@@ -32,7 +32,7 @@ class DeviceOnboardingService
                 'command_seq' => $sequence,
                 'command_type' => 'query_users',
                 'idempotency_key' => "onboarding-inventory:{$lockedSource->id}:{$sequence}",
-                'payload' => $this->inventoryPayload($lockedSource),
+                'payload' => 'DATA QUERY USERINFO',
                 'status' => 'pending',
             ]);
 
@@ -47,12 +47,4 @@ class DeviceOnboardingService
         });
     }
 
-    private function inventoryPayload(BiometricSource $source): string
-    {
-        $deviceName = strtolower((string) $source->device_name);
-
-        return str_contains($deviceName, 'senseface')
-            ? 'DATA QUERY user'
-            : 'DATA QUERY USERINFO';
-    }
 }

@@ -16,5 +16,11 @@ return [
             'device_names' => ['senseface'],
             'firmware_prefixes' => ['zam70'],
         ],
+        'legacy_attendance_aggregate' => [
+            'label' => 'Attendance PUSH (INFO)',
+            'inventory_mode' => 'aggregate_info',
+            'inventory_command' => 'DATA QUERY USERINFO',
+            'firmware_prefixes' => ['ver 8.'],
+        ],
     ],
 ];

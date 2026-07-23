@@ -216,6 +216,21 @@ class DeviceSyncBatchTest extends TestCase
         ]);
     }
 
+    public function test_version_eight_firmware_uses_aggregate_info_verification(): void
+    {
+        [, , $source] = $this->makeSource();
+
+        app(DeviceInfoService::class)->capture(
+            $source,
+            'Ver 8.0.4.7-20230726,372,645,1218,192.168.1.2'
+        );
+
+        $source->refresh();
+
+        $this->assertSame('legacy_attendance_aggregate', $source->push_protocol_profile);
+        $this->assertSame(372, $source->reported_user_count);
+    }
+
     private function makeSource(): array
     {
         $client = Client::create([

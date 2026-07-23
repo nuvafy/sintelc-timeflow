@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\Client;
+use App\Models\DeviceCommand;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Models\User;
@@ -76,6 +77,33 @@ class MultiTenantAuthorizationTest extends TestCase
         $this->assertDatabaseMissing('biometric_user_syncs', [
             'factorial_employee_id' => $foreignEmployee->id,
             'external_employee_code' => '200',
+        ]);
+    }
+
+    public function test_adding_an_employee_does_not_wait_for_a_detailed_device_inventory(): void
+    {
+        [$client, $user] = $this->makeClient('add-local');
+        $device = $this->makeDevice($client, 'LEGACY-SN');
+        $device->update([
+            'device_users' => [
+                ['pin' => '522', 'name' => 'Existing User'],
+            ],
+            'device_firmware' => 'Ver 8.0.4.7-20230726',
+        ]);
+
+        $this->actingAs($user);
+
+        Livewire::test('employees.employee-sync-manager')
+            ->set('addName', 'Nueva Persona')
+            ->call('startAddEmployee')
+            ->assertSet('addStep', 3)
+            ->assertSet('addPin', '523');
+
+        $this->assertSame(0, DeviceCommand::where('command_type', 'query_users')->count());
+        $this->assertDatabaseHas('device_commands', [
+            'biometric_source_id' => $device->id,
+            'command_type' => 'set_user',
+            'status' => 'pending',
         ]);
     }
 

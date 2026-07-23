@@ -28,7 +28,7 @@ new class extends Component {
     public bool    $showAddModal    = false;
     public string  $addName         = '';
     public bool    $addAllDevices   = true; // always true, no UI toggle
-    public int     $addStep         = 0;   // 0=form 1=querying 2=calculating 3=pushing 4=done -1=error
+    public int     $addStep         = 0;   // 0=form 3=pushing 4=done -1=error
     public ?string $addError        = null;
     public ?string $addPin          = null;
     public array   $addQueryCmdIds  = [];
@@ -491,88 +491,62 @@ new class extends Component {
             $sources = $sources->take(1);
         }
 
-        $this->addStep        = 1;
         $this->addError       = null;
         $this->addQueryCmdIds = [];
+        $this->addPushCmdIds  = [];
+        $this->addBatchIds    = [];
 
-        foreach ($sources as $source) {
-            $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
-            $cmd = \App\Models\DeviceCommand::create([
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $seq,
-                'command_type'        => 'query_users',
-                'payload'             => 'DATA QUERY USERINFO',
-                'status'              => 'pending',
-            ]);
-            $this->addQueryCmdIds[] = $cmd->id;
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($sources, $name) {
+                // Serialize PIN allocation per client so two simultaneous registrations
+                // cannot choose the same number.
+                \App\Models\Client::whereKey($this->client_id)->lockForUpdate()->firstOrFail();
+
+                $maxInventoryPin = \App\Models\BiometricSource::where('client_id', $this->client_id)
+                    ->where('status', 'active')
+                    ->get()
+                    ->flatMap(fn($source) => collect($source->device_users ?? [])->pluck('pin'))
+                    ->map(fn($pin) => (int) $pin)
+                    ->max() ?? 0;
+
+                $maxIdentityPin = \App\Models\BiometricUserSync::where('client_id', $this->client_id)
+                    ->pluck('external_employee_code')
+                    ->map(fn($pin) => (int) $pin)
+                    ->max() ?? 0;
+
+                $maxAssignmentPin = \App\Models\DeviceUserAssignment::where('client_id', $this->client_id)
+                    ->pluck('pin')
+                    ->map(fn($pin) => (int) $pin)
+                    ->max() ?? 0;
+
+                $this->addPin = (string) (max($maxInventoryPin, $maxIdentityPin, $maxAssignmentPin) + 1);
+                $this->addStep = 3;
+
+                foreach ($sources as $source) {
+                    $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+                        $source,
+                        [[
+                            'action' => 'add_local',
+                            'pin' => $this->addPin,
+                            'name' => $name,
+                        ]],
+                        auth()->user(),
+                        'bulk',
+                        'manual'
+                    );
+                    $this->addBatchIds[] = $batch->id;
+                }
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError = 'No fue posible preparar el registro. Intenta nuevamente.';
+            $this->addStep = -1;
         }
     }
 
     public function pollAddEmployee(): void
     {
         $this->authorizeSelectedClient();
-        if ($this->addStep === 1) {
-            $queries = \App\Models\DeviceCommand::whereIn('id', $this->addQueryCmdIds)->get();
-            $sourceIds = $queries->pluck('biometric_source_id');
-            $inventoryReady = \App\Models\BiometricSource::whereIn('id', $sourceIds)
-                ->get()
-                ->every(function ($source) use ($queries) {
-                    $requestedAt = $queries->firstWhere('biometric_source_id', $source->id)?->created_at;
-                    return $source->last_inventory_at && $requestedAt && $source->last_inventory_at->gte($requestedAt);
-                });
-
-            if (!$inventoryReady) return;
-
-            // Step 2: calculate next PIN
-            $this->addStep = 2;
-
-            $maxPin = \App\Models\BiometricSource::where('client_id', $this->client_id)
-                ->where('status', 'active')
-                ->get()
-                ->flatMap(fn($s) => collect($s->device_users ?? [])->pluck('pin'))
-                ->map(fn($p) => (int) $p)
-                ->max() ?? 0;
-
-            // Also consider existing BiometricUserSync codes to avoid conflicts
-            $maxSync = \App\Models\BiometricUserSync::where('client_id', $this->client_id)
-                ->selectRaw('MAX(CAST(external_employee_code AS UNSIGNED)) as max_pin')
-                ->value('max_pin') ?? 0;
-
-            $this->addPin  = (string) (max($maxPin, $maxSync) + 1);
-            $this->addStep = 3;
-
-            // Push to all active devices
-            $sources = \App\Models\BiometricSource::where('client_id', $this->client_id)
-                ->where('status', 'active')
-                ->get();
-
-            if (!$this->addAllDevices) {
-                $sources = $sources->take(1);
-            }
-
-            $pin  = $this->addPin;
-            $name = trim($this->addName);
-            $this->addPushCmdIds = [];
-            $this->addBatchIds = [];
-
-            foreach ($sources as $source) {
-                $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
-                    $source,
-                    [[
-                        'action' => 'add_local',
-                        'pin' => $pin,
-                        'name' => $name,
-                    ]],
-                    auth()->user(),
-                    'bulk',
-                    'manual'
-                );
-                $this->addBatchIds[] = $batch->id;
-            }
-
-            return;
-        }
-
         if ($this->addStep === 3) {
             $batches = \App\Models\DeviceSyncBatch::whereIn('id', $this->addBatchIds)->get();
             $pending = $batches->sum('pending_items');
@@ -1258,7 +1232,7 @@ new class extends Component {
     @endif
 
     {{-- ── Poll para modal Agregar Empleado ──────────────────────────── --}}
-    @if($showAddModal && in_array($addStep, [1, 3]))
+    @if($showAddModal && $addStep === 3)
     <div wire:poll.3000ms="pollAddEmployee"></div>
     @endif
 
@@ -1294,8 +1268,8 @@ new class extends Component {
                 @if($addStep > 0 && $addStep !== -1)
                 @php
                     $steps = [
-                        1 => ['label' => 'Consultando IDs en dispositivo',    'desc' => 'Esperando respuesta del checador…'],
-                        2 => ['label' => 'Calculando PIN disponible',          'desc' => 'Asignando siguiente número libre…'],
+                        1 => ['label' => 'Validando dispositivos',             'desc' => 'Destinos disponibles verificados'],
+                        2 => ['label' => 'Asignando PIN disponible',           'desc' => 'Se reservó el siguiente número libre'],
                         3 => ['label' => 'Registrando en dispositivo',         'desc' => $addPin ? "Enviando PIN {$addPin} — {$addName}…" : 'Enviando al checador…'],
                         4 => ['label' => 'Guardado en sistema',                'desc' => $addPin ? "Empleado registrado con PIN {$addPin}" : 'Listo'],
                     ];

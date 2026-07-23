@@ -6,6 +6,7 @@ use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\Client;
 use App\Models\DeviceCommand;
+use App\Models\DeviceUserAssignment;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Models\User;
@@ -80,7 +81,7 @@ class MultiTenantAuthorizationTest extends TestCase
         ]);
     }
 
-    public function test_adding_an_employee_does_not_wait_for_a_detailed_device_inventory(): void
+    public function test_adding_to_an_offline_device_is_queued_without_waiting_for_inventory(): void
     {
         [$client, $user] = $this->makeClient('add-local');
         $device = $this->makeDevice($client, 'LEGACY-SN');
@@ -96,7 +97,7 @@ class MultiTenantAuthorizationTest extends TestCase
         Livewire::test('employees.employee-sync-manager')
             ->set('addName', 'Nueva Persona')
             ->call('startAddEmployee')
-            ->assertSet('addStep', 3)
+            ->assertSet('addStep', 5)
             ->assertSet('addPin', '523');
 
         $this->assertSame(0, DeviceCommand::where('command_type', 'query_users')->count());
@@ -105,6 +106,30 @@ class MultiTenantAuthorizationTest extends TestCase
             'command_type' => 'set_user',
             'status' => 'pending',
         ]);
+    }
+
+    public function test_online_device_registration_becomes_pending_after_thirty_seconds(): void
+    {
+        [$client, $user] = $this->makeClient('online-pending');
+        $this->makeDevice($client, 'ONLINE-SN')->update(['last_ping_at' => now()]);
+        $this->actingAs($user);
+
+        $component = Livewire::test('employees.employee-sync-manager')
+            ->set('addName', 'Persona Pendiente')
+            ->call('startAddEmployee')
+            ->assertSet('addStep', 3);
+
+        $this->travel(31)->seconds();
+
+        $component->call('pollAddEmployee')
+            ->assertSet('addStep', 5);
+
+        $this->assertDatabaseHas('device_user_assignments', [
+            'client_id' => $client->id,
+            'name' => 'Persona Pendiente',
+            'sync_status' => 'queued',
+        ]);
+        $this->assertSame(1, DeviceUserAssignment::where('sync_status', 'queued')->count());
     }
 
     private function makeClient(string $slug): array

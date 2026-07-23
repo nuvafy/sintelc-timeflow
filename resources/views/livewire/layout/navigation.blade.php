@@ -2,6 +2,7 @@
 
 use App\Livewire\Actions\Logout;
 use App\Models\BiometricSource;
+use App\Models\DeviceUserAssignment;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Volt\Component;
 
@@ -16,8 +17,13 @@ new class extends Component
             $this->unassignedDevices   = Cache::remember('nav.unassigned_devices', 60, fn() =>
                 BiometricSource::whereNull('client_id')->count()
             );
-            $this->unresolvedEmployees = Cache::remember('nav.unresolved_employees', 60, fn() =>
-                \App\Models\BiometricUserSync::whereNull('factorial_employee_id')->count()
+            $this->unresolvedEmployees = Cache::remember('nav.pending_device_employees', 60, fn() =>
+                DeviceUserAssignment::whereIn('sync_status', [
+                    'planned',
+                    'queued',
+                    'sent',
+                    'awaiting_verification',
+                ])->distinct()->count('biometric_user_sync_id')
             );
         }
     }
@@ -54,7 +60,8 @@ new class extends Component
                         <x-nav-link :href="route('employees')" :active="request()->routeIs('employees')" wire:navigate>
                             Empleados
                             @if($unresolvedEmployees > 0)
-                                <span class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
+                                <span title="Empleados pendientes de confirmar en biométricos"
+                                    class="ms-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-amber-500 rounded-full">
                                     {{ $unresolvedEmployees }}
                                 </span>
                             @endif

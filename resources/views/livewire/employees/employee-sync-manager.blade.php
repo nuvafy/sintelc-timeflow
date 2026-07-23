@@ -28,9 +28,10 @@ new class extends Component {
     public bool    $showAddModal    = false;
     public string  $addName         = '';
     public bool    $addAllDevices   = true; // always true, no UI toggle
-    public int     $addStep         = 0;   // 0=form 3=pushing 4=done -1=error
+    public int     $addStep         = 0;   // 0=form 3=pushing 4=done 5=pending -1=error
     public ?string $addError        = null;
     public ?string $addPin          = null;
+    public ?string $addStartedAt    = null;
     public array   $addQueryCmdIds  = [];
     public array   $addPushCmdIds   = [];
     public array   $addBatchIds     = [];
@@ -459,6 +460,7 @@ new class extends Component {
         $this->addStep        = 0;
         $this->addError       = null;
         $this->addPin         = null;
+        $this->addStartedAt   = null;
         $this->addQueryCmdIds = [];
         $this->addPushCmdIds  = [];
         $this->addBatchIds    = [];
@@ -492,6 +494,7 @@ new class extends Component {
         }
 
         $this->addError       = null;
+        $this->addStartedAt   = now()->toIso8601String();
         $this->addQueryCmdIds = [];
         $this->addPushCmdIds  = [];
         $this->addBatchIds    = [];
@@ -536,6 +539,14 @@ new class extends Component {
                     );
                     $this->addBatchIds[] = $batch->id;
                 }
+
+                $hasDisconnectedDestination = $sources->contains(
+                    fn($source) => !$source->last_ping_at || $source->last_ping_at->lt(now()->subMinutes(2))
+                );
+
+                if ($hasDisconnectedDestination) {
+                    $this->addStep = 5;
+                }
             });
         } catch (\Throwable $exception) {
             report($exception);
@@ -551,7 +562,17 @@ new class extends Component {
             $batches = \App\Models\DeviceSyncBatch::whereIn('id', $this->addBatchIds)->get();
             $pending = $batches->sum('pending_items');
 
-            if ($pending > 0) return;
+            if ($pending > 0) {
+                $startedAt = $this->addStartedAt
+                    ? \Illuminate\Support\Carbon::parse($this->addStartedAt)
+                    : now();
+
+                if ($startedAt->diffInSeconds(now()) >= 30) {
+                    $this->addStep = 5;
+                }
+
+                return;
+            }
 
             $failed = $batches->sum('failed_items');
             if ($failed > 0 && $failed === $batches->sum('total_items')) {
@@ -1242,7 +1263,7 @@ new class extends Component {
         <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-base font-semibold text-gray-900">Agregar Empleado al Biométrico</h3>
-                @if($addStep === 0 || $addStep === 4 || $addStep === -1)
+                @if(in_array($addStep, [0, 4, 5, -1], true))
                 <button wire:click="closeAddModal" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -1277,9 +1298,9 @@ new class extends Component {
                 <div class="space-y-3">
                     @foreach($steps as $n => $s)
                     @php
-                        $done    = $addStep > $n;
-                        $active  = $addStep === $n;
-                        $pending = $addStep < $n;
+                        $done    = $addStep === 5 ? $n < 3 : $addStep > $n;
+                        $active  = $addStep === 5 ? false : $addStep === $n;
+                        $pending = $addStep === 5 ? $n >= 3 : $addStep < $n;
                     @endphp
                     <div class="flex items-start gap-3">
                         <div class="mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center
@@ -1316,6 +1337,16 @@ new class extends Component {
                         <p class="text-xs text-gray-500 mt-1">Sus registros de asistencia se guardarán en el sistema. No se sincronizan a Factorial.</p>
                     </div>
                     @endif
+
+                    @if($addStep === 5)
+                    <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p class="text-sm font-semibold text-amber-800">Alta pendiente de conexión</p>
+                        <p class="mt-0.5 text-xs text-amber-700">
+                            Guardamos a <strong>{{ $addName }}</strong> con el PIN <strong>{{ $addPin }}</strong>.
+                            El sistema lo enviará automáticamente cuando el biométrico vuelva a conectarse.
+                        </p>
+                    </div>
+                    @endif
                 </div>
                 @endif
 
@@ -1338,7 +1369,7 @@ new class extends Component {
                     class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
                     Iniciar
                 </button>
-                @elseif($addStep === 4 || $addStep === -1)
+                @elseif(in_array($addStep, [4, 5, -1], true))
                 <button wire:click="closeAddModal"
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cerrar

@@ -5,6 +5,9 @@ use App\Http\Controllers\FactorialAuthController;
 use App\Http\Controllers\IclockController;
 use App\Models\Client;
 use App\Models\BiometricSource;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
 Route::redirect('/', '/login');
 
@@ -72,7 +75,11 @@ Route::middleware(['auth', 'verified', 'admin'])->group(function () {
 });
 
 // ── Biometric devices (ZKTeco) — sin auth ────────────────────────────────────
-Route::prefix('iclock')->middleware('iclock')->group(function () {
+Route::withoutMiddleware([
+    StartSession::class,
+    ShareErrorsFromSession::class,
+    VerifyCsrfToken::class,
+])->prefix('iclock')->middleware('iclock')->group(function () {
     Route::match(['GET', 'POST'], '/ping',       [IclockController::class, 'ping']);
     Route::match(['GET', 'POST'], '/getrequest', [IclockController::class, 'getRequest']);
     Route::match(['GET', 'POST'], '/cdata',      [IclockController::class, 'cdata']);

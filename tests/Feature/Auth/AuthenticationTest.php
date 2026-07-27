@@ -83,4 +83,19 @@ class AuthenticationTest extends TestCase
 
         $this->assertGuest();
     }
+
+    public function test_client_opening_an_admin_bookmark_is_redirected_instead_of_forbidden(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'client',
+            'client_id' => \App\Models\Client::create([
+                'name' => 'Session Client',
+                'slug' => 'session-client',
+            ])->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertRedirect(route('client.records'));
+    }
 }

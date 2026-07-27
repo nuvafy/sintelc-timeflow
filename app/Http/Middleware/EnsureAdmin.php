@@ -10,7 +10,20 @@ class EnsureAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (!$request->user() || !$request->user()->isAdmin()) {
+        $clientSafeRedirect = $request->routeIs(
+            'dashboard',
+            'clients',
+            'clients.show',
+            'clients.records',
+            'employees',
+            'devices',
+        );
+
+        if ($request->user()?->isClient() && $request->isMethod('GET') && $clientSafeRedirect) {
+            return redirect()->route('client.records');
+        }
+
+        if (!$request->user()?->isAdmin()) {
             abort(403);
         }
 

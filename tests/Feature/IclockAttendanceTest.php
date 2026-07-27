@@ -62,6 +62,17 @@ class IclockAttendanceTest extends TestCase
         Queue::assertPushed(SyncAttendanceToFactorial::class);
     }
 
+    public function test_device_ping_does_not_start_a_browser_session(): void
+    {
+        $response = $this->withHeader('User-Agent', 'iClock Proxy/1.09')
+            ->get('/iclock/ping?SN=SESSION-FREE-DEVICE');
+
+        $response->assertOk();
+        $cookieNames = collect($response->headers->getCookies())->map->getName();
+        $this->assertNotContains(config('session.cookie'), $cookieNames);
+        $this->assertDatabaseCount('sessions', 0);
+    }
+
     private function makeMappedSource(string $pin): array
     {
         $client = Client::create(['name' => 'Attendance Client', 'slug' => 'attendance-' . str()->random(8)]);

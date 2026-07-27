@@ -37,6 +37,15 @@ new class extends Component {
     public array   $addQueryCmdIds  = [];
     public array   $addPushCmdIds   = [];
     public array   $addBatchIds     = [];
+    public array   $addSourceIds    = [];
+
+    // Administrar destinos de un empleado existente
+    public bool    $showDeviceAssignmentModal = false;
+    public ?string $managePin = null;
+    public string  $manageName = '';
+    public array   $manageSourceIds = [];
+    public array   $manageOriginalSourceIds = [];
+    public ?string $manageError = null;
 
     // Modal CSV (a nivel de proveedor)
     public bool    $showCsvModal = false;
@@ -125,6 +134,109 @@ new class extends Component {
     public function updateAssignment(string $pin, mixed $employeeId): void
     {
         $this->assignments[$pin] = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
+    }
+
+    public function openDeviceAssignments(string $pin): void
+    {
+        $this->authorizeSelectedClient();
+        abort_unless($this->client_id, 422);
+
+        $identity = BiometricUserSync::query()
+            ->where('client_id', $this->client_id)
+            ->where('external_employee_code', $pin)
+            ->with('factorialEmployee:id,full_name')
+            ->firstOrFail();
+
+        $sourceIds = DeviceUserAssignment::query()
+            ->where('client_id', $this->client_id)
+            ->where('biometric_user_sync_id', $identity->id)
+            ->where('desired_state', 'present')
+            ->pluck('biometric_source_id')
+            ->map(fn($id) => (int) $id)
+            ->values()
+            ->all();
+
+        $this->managePin = (string) $identity->external_employee_code;
+        $this->manageName = $identity->factorialEmployee?->full_name
+            ?? $identity->local_name
+            ?? $this->managePin;
+        $this->manageSourceIds = $sourceIds;
+        $this->manageOriginalSourceIds = $sourceIds;
+        $this->manageError = null;
+        $this->showDeviceAssignmentModal = true;
+    }
+
+    public function selectAllManageSources(): void
+    {
+        $this->authorizeSelectedClient();
+        $this->manageSourceIds = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+    }
+
+    public function saveDeviceAssignments(): void
+    {
+        $this->authorizeSelectedClient();
+        abort_unless($this->client_id && $this->managePin, 422);
+
+        $identity = BiometricUserSync::query()
+            ->where('client_id', $this->client_id)
+            ->where('external_employee_code', $this->managePin)
+            ->with('factorialEmployee:id,full_name')
+            ->firstOrFail();
+
+        $selected = collect($this->manageSourceIds)->map(fn($id) => (int) $id)->unique();
+        $original = collect($this->manageOriginalSourceIds)->map(fn($id) => (int) $id)->unique();
+        $removed = $original->diff($selected);
+
+        if ($removed->isNotEmpty()) {
+            $this->manageError = 'La baja física todavía no está habilitada para estos modelos. Puedes agregar destinos sin riesgo, pero no retirar usuarios desde aquí.';
+            return;
+        }
+
+        $toAdd = $selected->diff($original);
+        if ($toAdd->isEmpty()) {
+            $this->showDeviceAssignmentModal = false;
+            return;
+        }
+
+        $sources = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('biometric_provider_id', $identity->biometric_provider_id)
+            ->where('status', 'active')
+            ->whereIn('id', $toAdd)
+            ->get();
+
+        abort_unless($sources->count() === $toAdd->count(), 422);
+
+        foreach ($sources as $source) {
+            app(\App\Services\DeviceSyncBatchService::class)->create(
+                $source,
+                [[
+                    'action' => $identity->factorial_employee_id ? 'add_factorial' : 'add_local',
+                    'pin' => $identity->external_employee_code,
+                    'name' => $identity->factorialEmployee?->full_name ?? $identity->local_name,
+                    'factorial_employee_id' => $identity->factorial_employee_id,
+                ]],
+                auth()->user(),
+                'bulk',
+                'manual'
+            );
+        }
+
+        $this->manageOriginalSourceIds = $selected->values()->all();
+        $this->showDeviceAssignmentModal = false;
+        $this->sourceFilter = null;
+        $this->statusFilter = 'all';
+    }
+
+    public function closeDeviceAssignments(): void
+    {
+        $this->showDeviceAssignmentModal = false;
+        $this->manageError = null;
     }
 
     public function mapSelected(): void
@@ -417,13 +529,45 @@ new class extends Component {
                         || stripos($user['name'] ?? '', $this->search) !== false
                     );
                 }
+
+                $totalDeviceCount = $biometricSources->count();
+                $biometricUsers = $biometricUsers
+                    ->groupBy('pin')
+                    ->map(function ($rows, $pin) use ($pendingStatuses, $totalDeviceCount) {
+                        $devices = $rows
+                            ->sortBy('source')
+                            ->map(fn($row) => [
+                                'id' => $row['source_id'],
+                                'name' => $row['source'],
+                                'status' => $row['device_status'],
+                            ])
+                            ->values();
+
+                        $statuses = $devices->pluck('status');
+                        $overallStatus = $statuses->contains(fn($status) => in_array($status, $pendingStatuses, true))
+                            ? 'pending'
+                            : ($statuses->contains('failed') ? 'failed' : 'confirmed');
+                        $first = $rows->first();
+
+                        return [
+                            'pin' => (string) $pin,
+                            'name' => $rows->pluck('name')->filter()->first(),
+                            'mapped' => $rows->contains(fn($row) => $row['mapped']),
+                            'factorial_id' => $rows->pluck('factorial_id')->filter()->first(),
+                            'device_status' => $overallStatus,
+                            'devices' => $devices,
+                            'device_count' => $devices->count(),
+                            'total_device_count' => $totalDeviceCount,
+                        ];
+                    });
             }
 
             // Totales fijos antes de aplicar filtro de estado
             $biometricTotalCount  = $biometricUsers->count();
             $biometricMappedCount = $biometricUsers->filter(fn($u) => $u['mapped'])->count();
             $biometricPendingCount = $biometricUsers
-                ->filter(fn($user) => in_array($user['device_status'], $pendingStatuses, true))
+                ->filter(fn($user) => $user['device_status'] === 'pending'
+                    || in_array($user['device_status'], $pendingStatuses, true))
                 ->count();
 
             // Filtro por estado
@@ -433,7 +577,8 @@ new class extends Component {
                 $biometricUsers = $biometricUsers->filter(fn($u) => !$u['mapped']);
             } elseif ($this->statusFilter === 'pending') {
                 $biometricUsers = $biometricUsers
-                    ->filter(fn($user) => in_array($user['device_status'], $pendingStatuses, true));
+                    ->filter(fn($user) => $user['device_status'] === 'pending'
+                        || in_array($user['device_status'], $pendingStatuses, true));
             }
 
             // Paginación manual sobre la colección in-memory
@@ -531,6 +676,12 @@ new class extends Component {
         $this->addQueryCmdIds = [];
         $this->addPushCmdIds  = [];
         $this->addBatchIds    = [];
+        $this->addSourceIds   = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
         $this->showAddModal   = true;
     }
 
@@ -539,25 +690,40 @@ new class extends Component {
         $this->showAddModal = false;
     }
 
+    public function selectAllAddSources(): void
+    {
+        $this->authorizeSelectedClient();
+        $this->addSourceIds = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+    }
+
     public function startAddEmployee(): void
     {
         $this->authorizeSelectedClient();
 
         $name = trim($this->addName);
         if (!$name || !$this->client_id) return;
+        if ($this->showAddModal && $this->addSourceIds === []) {
+            $this->addError = 'Selecciona al menos un biométrico de destino.';
+            return;
+        }
 
         $sources = \App\Models\BiometricSource::where('client_id', $this->client_id)
             ->where('status', 'active')
+            ->when(
+                $this->addSourceIds !== [],
+                fn($query) => $query->whereIn('id', collect($this->addSourceIds)->map(fn($id) => (int) $id))
+            )
             ->get();
 
         if ($sources->isEmpty()) {
             $this->addError = 'No hay dispositivos activos para esta empresa.';
             $this->addStep  = -1;
             return;
-        }
-
-        if (!$this->addAllDevices) {
-            $sources = $sources->take(1);
         }
 
         $this->addError       = null;
@@ -1044,10 +1210,11 @@ new class extends Component {
                 <tr>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Biométricos</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado en equipo</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
+                    <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -1059,13 +1226,28 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-700">
                         {{ $user['name'] ?? '—' }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
-                        {{ $user['source'] }}
+                    <td class="px-5 py-3 text-sm text-gray-500">
+                        <details class="group">
+                            <summary class="cursor-pointer list-none font-medium text-indigo-600 hover:text-indigo-800">
+                                {{ $user['device_count'] }} de {{ $user['total_device_count'] }}
+                                <span class="ml-1 text-xs text-gray-400 group-open:hidden">ver</span>
+                            </summary>
+                            <div class="mt-2 flex max-w-md flex-wrap gap-1">
+                                @foreach($user['devices'] as $device)
+                                <span class="inline-flex rounded-full px-2 py-0.5 text-xs
+                                    {{ in_array($device['status'], ['planned', 'queued', 'sent', 'awaiting_verification'], true)
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : ($device['status'] === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600') }}">
+                                    {{ $device['name'] }}
+                                </span>
+                                @endforeach
+                            </div>
+                        </details>
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap">
                         @php
                             $deviceStatus = $user['device_status'] ?? 'reported';
-                            $isPendingDevice = in_array($deviceStatus, ['planned', 'queued', 'sent', 'awaiting_verification'], true);
+                            $isPendingDevice = in_array($deviceStatus, ['pending', 'planned', 'queued', 'sent', 'awaiting_verification'], true);
                         @endphp
                         @if($isPendingDevice)
                             <span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
@@ -1090,10 +1272,16 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap font-mono text-sm text-gray-500">
                         {{ $user['factorial_id'] ?? '—' }}
                     </td>
+                    <td class="px-5 py-3 whitespace-nowrap text-right">
+                        <button wire:click="openDeviceAssignments('{{ $user['pin'] }}')"
+                            class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                            Administrar
+                        </button>
+                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500">
                         No hay empleados registrados en el biométrico.
                     </td>
                 </tr>
@@ -1404,7 +1592,35 @@ new class extends Component {
                         <input wire:model="addName" type="text" placeholder="Ej. Juan Pérez López"
                             class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                     </div>
-                    <p class="text-xs text-gray-400">El PIN se asignará automáticamente como el siguiente disponible. Se enviará a todos los dispositivos de la empresa.</p>
+                    @php
+                        $addSources = BiometricSource::query()
+                            ->where('client_id', $client_id)
+                            ->where('status', 'active')
+                            ->orderBy('name')
+                            ->get(['id', 'name', 'serial_number']);
+                    @endphp
+                    <div>
+                        <div class="mb-2 flex items-center justify-between">
+                            <label class="text-sm font-medium text-gray-700">Biométricos de destino</label>
+                            <button wire:click="selectAllAddSources" type="button"
+                                class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                                Seleccionar todos
+                            </button>
+                        </div>
+                        <div class="max-h-40 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                            @foreach($addSources as $source)
+                            <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                                <input wire:model="addSourceIds" type="checkbox" value="{{ $source->id }}"
+                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <span>{{ $source->name }}</span>
+                            </label>
+                            @endforeach
+                        </div>
+                    </div>
+                    @if($addError)
+                        <p class="text-xs text-red-600">{{ $addError }}</p>
+                    @endif
+                    <p class="text-xs text-gray-400">El PIN se asignará una sola vez y sólo se enviará a los biométricos seleccionados.</p>
                 </div>
                 @endif
 
@@ -1504,6 +1720,79 @@ new class extends Component {
                 </button>
                 @endif
                 @endif
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Modal: administrar biométricos del empleado ─────────────── --}}
+    @if($showDeviceAssignmentModal)
+    @php
+        $manageSources = BiometricSource::query()
+            ->where('client_id', $client_id)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get(['id', 'name', 'serial_number']);
+    @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div class="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Administrar biométricos</h3>
+                    <p class="mt-0.5 text-xs text-gray-500">{{ $manageName }} · PIN {{ $managePin }}</p>
+                </div>
+                <button wire:click="closeDeviceAssignments" class="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+
+            <div class="space-y-4 px-6 py-5">
+                <div class="flex items-center justify-between">
+                    <p class="text-sm font-medium text-gray-700">Destinos asignados</p>
+                    <button wire:click="selectAllManageSources" type="button"
+                        class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                        Seleccionar todos
+                    </button>
+                </div>
+
+                <div class="max-h-72 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                    @foreach($manageSources as $source)
+                    @php
+                        $alreadyAssigned = in_array($source->id, $manageOriginalSourceIds, true);
+                    @endphp
+                    <label class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm
+                        {{ $alreadyAssigned ? 'bg-emerald-50' : 'hover:bg-gray-50' }}">
+                        <span class="flex items-center gap-2">
+                            <input wire:model="manageSourceIds" type="checkbox" value="{{ $source->id }}"
+                                @disabled($alreadyAssigned)
+                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-gray-700">{{ $source->name }}</span>
+                        </span>
+                        @if($alreadyAssigned)
+                            <span class="text-xs font-medium text-emerald-700">Asignado</span>
+                        @endif
+                    </label>
+                    @endforeach
+                </div>
+
+                <p class="text-xs text-gray-500">
+                    Sólo se crearán comandos para destinos nuevos. Las asignaciones existentes no se reenviarán.
+                </p>
+
+                @if($manageError)
+                <div class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    {{ $manageError }}
+                </div>
+                @endif
+            </div>
+
+            <div class="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button wire:click="closeDeviceAssignments"
+                    class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button wire:click="saveDeviceAssignments" wire:loading.attr="disabled"
+                    class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                    Guardar destinos
+                </button>
             </div>
         </div>
     </div>

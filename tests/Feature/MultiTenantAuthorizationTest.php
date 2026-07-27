@@ -4,12 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
+use App\Models\BiometricUserSync;
 use App\Models\Client;
 use App\Models\DeviceCommand;
+use App\Models\DeviceSyncBatch;
 use App\Models\DeviceUserAssignment;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Models\User;
+use App\Services\DeviceInventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -164,6 +167,63 @@ class MultiTenantAuthorizationTest extends TestCase
             'sync_status' => 'queued',
         ]);
         $this->assertSame(1, DeviceUserAssignment::where('sync_status', 'queued')->count());
+    }
+
+    public function test_one_employee_is_grouped_across_devices_and_only_new_destinations_are_sent(): void
+    {
+        [$client, $user] = $this->makeClient('grouped');
+        $first = $this->makeDevice($client, 'FIRST-GROUPED');
+        $second = BiometricSource::create([
+            'client_id' => $client->id,
+            'biometric_provider_id' => $first->biometric_provider_id,
+            'name' => 'SECOND-GROUPED',
+            'serial_number' => 'SECOND-GROUPED',
+            'status' => 'active',
+        ]);
+        $third = BiometricSource::create([
+            'client_id' => $client->id,
+            'biometric_provider_id' => $first->biometric_provider_id,
+            'name' => 'THIRD-GROUPED',
+            'serial_number' => 'THIRD-GROUPED',
+            'status' => 'active',
+        ]);
+        BiometricUserSync::create([
+            'client_id' => $client->id,
+            'biometric_provider_id' => $first->biometric_provider_id,
+            'factorial_employee_id' => null,
+            'external_employee_code' => '900',
+            'local_name' => 'Persona Agrupada',
+            'sync_status' => 'synced',
+        ]);
+
+        app(DeviceInventoryService::class)->capture($first, [['pin' => '900', 'name' => 'Persona Agrupada']]);
+        app(DeviceInventoryService::class)->capture($second, [['pin' => '900', 'name' => 'Persona Agrupada']]);
+
+        $this->actingAs($user);
+        $component = Livewire::test('employees.employee-sync-manager');
+        $viewData = $component->instance()->with();
+        $row = collect($viewData['biometricUsers']->items())->first();
+
+        $this->assertSame(1, $viewData['biometricUsers']->total());
+        $this->assertSame(2, $row['device_count']);
+        $this->assertSame(3, $row['total_device_count']);
+        $this->assertSame(0, DeviceCommand::count());
+        $this->assertSame(0, DeviceSyncBatch::count());
+
+        $component
+            ->call('openDeviceAssignments', '900')
+            ->set('manageSourceIds', [$first->id, $second->id, $third->id])
+            ->call('saveDeviceAssignments');
+
+        $this->assertSame(1, DeviceCommand::where('command_type', 'set_user')->count());
+        $this->assertSame(1, DeviceSyncBatch::count());
+
+        $component
+            ->call('openDeviceAssignments', '900')
+            ->call('saveDeviceAssignments');
+
+        $this->assertSame(1, DeviceCommand::where('command_type', 'set_user')->count());
+        $this->assertSame(1, DeviceSyncBatch::count());
     }
 
     private function makeClient(string $slug): array

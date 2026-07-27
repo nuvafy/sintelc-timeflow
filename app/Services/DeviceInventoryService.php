@@ -57,6 +57,7 @@ class DeviceInventoryService
         });
 
         app(DeviceAssignmentVerificationService::class)->verify($source->fresh(), $snapshot);
+        app(DeviceAssignmentMaterializer::class)->materialize($source->fresh(), $normalized);
 
         return $snapshot->fresh('users');
     }

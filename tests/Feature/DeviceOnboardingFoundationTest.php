@@ -7,6 +7,7 @@ use App\Models\BiometricSource;
 use App\Models\BiometricUserSync;
 use App\Models\Client;
 use App\Models\DeviceCommand;
+use App\Models\DeviceSyncBatch;
 use App\Models\FactorialConnection;
 use App\Models\FactorialEmployee;
 use App\Services\DeviceInventoryService;
@@ -100,6 +101,34 @@ class DeviceOnboardingFoundationTest extends TestCase
         $this->assertSame($first->id, $second->id);
         $this->assertSame(1, DeviceCommand::where('command_type', 'query_users')->count());
         $this->assertSame('querying_users', $source->fresh()->onboarding_status);
+    }
+
+    public function test_inventory_materializes_known_assignments_without_commands_or_duplicates(): void
+    {
+        [$client, $provider, $source] = $this->makeSource();
+        $identity = BiometricUserSync::create([
+            'client_id' => $client->id,
+            'biometric_provider_id' => $provider->id,
+            'factorial_employee_id' => null,
+            'external_employee_code' => '77',
+            'local_name' => 'Persona Única',
+            'sync_status' => 'synced',
+        ]);
+
+        $users = [['pin' => '77', 'name' => 'Persona Única']];
+        app(DeviceInventoryService::class)->capture($source, $users);
+        app(DeviceInventoryService::class)->capture($source->fresh(), $users);
+
+        $this->assertDatabaseCount('device_user_assignments', 1);
+        $this->assertDatabaseHas('device_user_assignments', [
+            'biometric_source_id' => $source->id,
+            'biometric_user_sync_id' => $identity->id,
+            'pin' => '77',
+            'sync_status' => 'confirmed',
+            'verification_method' => 'device_inventory',
+        ]);
+        $this->assertSame(0, DeviceCommand::count());
+        $this->assertSame(0, DeviceSyncBatch::count());
     }
 
     private function makeSource(): array

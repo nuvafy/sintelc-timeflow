@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BiometricUserSync extends Model
 {
@@ -42,5 +43,10 @@ class BiometricUserSync extends Model
     public function factorialEmployee(): BelongsTo
     {
         return $this->belongsTo(FactorialEmployee::class);
+    }
+
+    public function deviceAssignments(): HasMany
+    {
+        return $this->hasMany(DeviceUserAssignment::class);
     }
 }

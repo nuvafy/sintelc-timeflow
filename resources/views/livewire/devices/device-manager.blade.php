@@ -51,6 +51,7 @@ new class extends Component {
     public int     $pushNewCount          = 0; // solo los no mapeados/no en device
     public int     $pushSintelcCount      = 0; // mapeados en Sintelc con PIN real
     public ?string $pushSuccessMsg        = null;
+    public ?string $refreshMessage        = null;
 
 
     public function rules(): array
@@ -432,6 +433,27 @@ new class extends Component {
         $this->cloneSuccessMsg = null;
     }
 
+    public function refreshEmployees(int $id): void
+    {
+        $source = $this->authorizedDevice($id);
+        abort_unless($source->status === 'active', 422);
+
+        $result = app(\App\Services\DeviceEmployeeRefreshService::class)
+            ->refresh($source, auth()->user());
+
+        $this->refreshMessage = match (true) {
+            $result['assigned'] === 0 =>
+                "No hay empleados asignados a {$source->name}.",
+            $result['queued'] > 0 =>
+                "{$result['queued']} empleado(s) pendiente(s) fueron enviados a {$source->name}. "
+                . "{$result['unchanged']} ya estaban actualizados.",
+            $result['active'] > 0 =>
+                "{$source->name} ya tiene {$result['active']} operación(es) en curso; no se duplicaron.",
+            default =>
+                "{$source->name} ya está actualizado. No fue necesario enviar empleados.",
+        };
+    }
+
     private function resetForm(): void
     {
         $this->editingId             = null;
@@ -466,6 +488,12 @@ new class extends Component {
 }; ?>
 
 <div>
+    @if($refreshMessage)
+    <div class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        {{ $refreshMessage }}
+    </div>
+    @endif
+
     {{-- ── Tarjeta filtros ─────────────────────────────────────────── --}}
     <div class="bg-white shadow rounded-lg px-5 py-3 mb-4">
         <div class="flex items-center justify-between gap-3">
@@ -626,6 +654,15 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-center">
                         <div class="flex items-center justify-center gap-3">
+                            <button wire:click="refreshEmployees({{ $device->id }})"
+                                wire:loading.attr="disabled"
+                                wire:target="refreshEmployees({{ $device->id }})"
+                                title="Refrescar empleados asignados"
+                                class="text-emerald-600 hover:text-emerald-800 disabled:opacity-50">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
                             {{-- Enviar empleados al dispositivo --}}
                             <button wire:click="openImportModal({{ $device->id }})" title="Envío anterior (temporal)"
                                 class="hidden text-sky-500 hover:text-sky-700">

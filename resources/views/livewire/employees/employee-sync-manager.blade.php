@@ -1280,11 +1280,11 @@ new class extends Component {
                 <tr>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Biométricos</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado en equipo</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
-                    <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Biométricos</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado en equipo</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -1296,8 +1296,8 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-700">
                         {{ $user['name'] ?? '—' }}
                     </td>
-                    <td class="px-5 py-3 text-sm text-gray-500">
-                        <details class="group">
+                    <td class="px-5 py-3 text-center text-sm text-gray-500">
+                        <details class="group inline-block text-left">
                             <summary class="cursor-pointer list-none font-medium text-indigo-600 hover:text-indigo-800">
                                 {{ $user['device_count'] }} de {{ $user['total_device_count'] }}
                                 <span class="ml-1 text-xs text-gray-400 group-open:hidden">ver</span>
@@ -1314,7 +1314,7 @@ new class extends Component {
                             </div>
                         </details>
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap">
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
                         @php
                             $deviceStatus = $user['device_status'] ?? 'reported';
                             $isPendingDevice = in_array($deviceStatus, ['pending', 'planned', 'queued', 'sent', 'awaiting_verification'], true);
@@ -1329,8 +1329,8 @@ new class extends Component {
                             <span class="inline-flex rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">Confirmado</span>
                         @endif
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap">
-                        <div class="flex items-center h-full">
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
+                        <div class="flex h-full items-center justify-center">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $user['mapped'] ? 'bg-green-500' : 'bg-gray-200' }}">
@@ -1339,10 +1339,10 @@ new class extends Component {
                         </button>
                         </div>
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap font-mono text-sm text-gray-500">
+                    <td class="px-5 py-3 whitespace-nowrap text-center font-mono text-sm text-gray-500">
                         {{ $user['factorial_id'] ?? '—' }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap text-right">
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
                         <button wire:click="openDeviceAssignments('{{ $user['pin'] }}')"
                             class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
                             Administrar

@@ -102,7 +102,9 @@ class MultiTenantAuthorizationTest extends TestCase
             ->call('startAddEmployee')
             ->assertSet('addStep', 5)
             ->assertSet('addPin', '523')
-            ->call('closeAddModal')
+            ->call('viewAddedEmployee')
+            ->assertSet('showAddModal', false)
+            ->assertSet('search', '523')
             ->assertSee('Nueva Persona')
             ->assertSee('Pendiente de conexión');
 

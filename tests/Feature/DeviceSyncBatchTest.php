@@ -263,6 +263,27 @@ class DeviceSyncBatchTest extends TestCase
         $this->assertSame(2, $batch->fresh()->confirmed_items);
     }
 
+    public function test_local_identity_keeps_full_name_while_device_payload_is_limited(): void
+    {
+        [, , $source] = $this->makeSource();
+        $fullName = 'Nombre Local Extraordinariamente Largo';
+
+        app(DeviceSyncBatchService::class)->create($source, [[
+            'action' => 'add_local',
+            'pin' => '950',
+            'name' => $fullName,
+        ]]);
+
+        $identity = \App\Models\BiometricUserSync::where('external_employee_code', '950')->firstOrFail();
+        $assignment = $identity->deviceAssignments()->firstOrFail();
+        $command = DeviceCommand::where('command_type', 'set_user')->firstOrFail();
+
+        $this->assertSame($fullName, $identity->local_name);
+        $this->assertSame(mb_substr($fullName, 0, 24), $assignment->name);
+        $this->assertStringContainsString('Name=' . mb_substr($fullName, 0, 24), $command->payload);
+        $this->assertStringNotContainsString($fullName, $command->payload);
+    }
+
     private function makeSource(): array
     {
         $client = Client::create([

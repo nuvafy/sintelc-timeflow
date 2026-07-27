@@ -480,15 +480,23 @@ new class extends Component {
                 $employees = FactorialEmployee::where('client_id', $this->client_id)
                     ->get(['id', 'factorial_id', 'full_name'])
                     ->keyBy('id');
+                $identityNames = BiometricUserSync::query()
+                    ->where('client_id', $this->client_id)
+                    ->with('factorialEmployee:id,full_name')
+                    ->get()
+                    ->mapWithKeys(fn($identity) => [
+                        (string) $identity->external_employee_code => $identity->factorialEmployee?->full_name
+                            ?? $identity->local_name,
+                    ]);
 
-                $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees) {
+                $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees, $identityNames) {
                     foreach ($source->device_users ?? [] as $u) {
                         $pin = (string) $u['pin'];
                         $empId  = $mappings[$pin] ?? null;
                         $emp    = $empId ? ($employees[$empId] ?? null) : null;
                         $biometricUsers["{$source->id}:{$pin}"] = [
                             'pin'          => $pin,
-                            'name'         => $u['name'] ?? null,
+                            'name'         => $identityNames[$pin] ?? ($u['name'] ?? null),
                             'source'       => $source->name,
                             'source_id'    => $source->id,
                             'mapped'       => $empId !== null,
@@ -503,7 +511,7 @@ new class extends Component {
                     ->whereIn('biometric_source_id', $biometricSources->pluck('id'))
                     ->with('factorialEmployee:id,factorial_id')
                     ->get()
-                    ->each(function ($assignment) use (&$biometricUsers, $biometricSources, $mappings, $employees) {
+                    ->each(function ($assignment) use (&$biometricUsers, $biometricSources, $mappings, $employees, $identityNames) {
                         $pin = (string) $assignment->pin;
                         $key = "{$assignment->biometric_source_id}:{$pin}";
                         $existing = $biometricUsers->get($key, []);
@@ -513,7 +521,7 @@ new class extends Component {
 
                         $biometricUsers[$key] = array_merge($existing, [
                             'pin' => $pin,
-                            'name' => $assignment->name,
+                            'name' => $identityNames[$pin] ?? $assignment->name,
                             'source' => $biometricSources->firstWhere('id', $assignment->biometric_source_id)?->name
                                 ?? '—',
                             'source_id' => $assignment->biometric_source_id,
@@ -688,6 +696,20 @@ new class extends Component {
     public function closeAddModal(): void
     {
         $this->showAddModal = false;
+    }
+
+    public function viewAddedEmployee(): void
+    {
+        if (!$this->addPin) {
+            return;
+        }
+
+        $this->showAddModal = false;
+        $this->tab = 'biometric';
+        $this->statusFilter = 'all';
+        $this->sourceFilter = null;
+        $this->search = $this->addPin;
+        $this->resetPage();
     }
 
     public function selectAllAddSources(): void
@@ -1713,6 +1735,12 @@ new class extends Component {
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cerrar
                 </button>
+                @if(in_array($addStep, [4, 5], true))
+                <button wire:click="viewAddedEmployee"
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                    Ver empleado
+                </button>
+                @endif
                 @if($addStep === -1)
                 <button wire:click="openAddModal"
                     class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">

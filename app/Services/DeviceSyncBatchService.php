@@ -239,7 +239,7 @@ class DeviceSyncBatchService
             [
                 'client_id' => $source->client_id,
                 'factorial_employee_id' => null,
-                'local_name' => $decision['name'],
+                'local_name' => $decision['system_name'],
                 'sync_status' => 'pending',
                 'last_attempt_at' => now(),
             ]
@@ -258,7 +258,8 @@ class DeviceSyncBatchService
         }
 
         $pin = trim((string) ($decision['pin'] ?? ''));
-        $name = $this->cleanName($decision['name'] ?? '');
+        $systemName = $this->cleanSystemName($decision['name'] ?? '');
+        $name = $this->cleanName($systemName);
         if (!preg_match('/^\d{1,14}$/', $pin)) {
             throw ValidationException::withMessages([
                 "decisions.{$index}.pin" => 'El PIN debe contener entre 1 y 14 dígitos.',
@@ -285,6 +286,7 @@ class DeviceSyncBatchService
             'action' => $action,
             'pin' => $pin,
             'name' => $name,
+            'system_name' => $systemName,
             'syncs_with_factorial' => $syncsWithFactorial,
             'factorial_employee_id' => $employeeId,
         ];
@@ -313,6 +315,15 @@ class DeviceSyncBatchService
             preg_replace('/[\x00-\x1F\x7F]/u', '', trim((string) $name)) ?? '',
             0,
             24
+        );
+    }
+
+    private function cleanSystemName(mixed $name): string
+    {
+        return mb_substr(
+            preg_replace('/[\x00-\x1F\x7F]/u', '', trim((string) $name)) ?? '',
+            0,
+            255
         );
     }
 

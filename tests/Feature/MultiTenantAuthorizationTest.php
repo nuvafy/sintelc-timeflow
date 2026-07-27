@@ -139,11 +139,15 @@ class MultiTenantAuthorizationTest extends TestCase
             ->call('$refresh')
             ->assertSee('PENDING-COMPANY')
             ->assertSee('PENDING-SN')
-            ->assertSee('Ver empleados')
-            ->call('showPendingEmployees', $client->id, $device->id)
+            ->assertSee('Persona Visible · PIN 800')
+            ->assertSee('confirmado en')
+            ->assertSee('0 de 1 biométricos')
+            ->assertSee('Ver empleado')
+            ->call('showPendingEmployee', $client->id, '800')
             ->assertSet('client_id', $client->id)
-            ->assertSet('sourceFilter', $device->id)
-            ->assertSet('statusFilter', 'pending')
+            ->assertSet('sourceFilter', null)
+            ->assertSet('statusFilter', 'all')
+            ->assertSet('search', '800')
             ->assertSee('Persona Visible');
     }
 

@@ -99,15 +99,21 @@ new class extends Component {
     public function updatedScoreFilter(): void { $this->resetPage(); }
     public function updatedStatusFilter(): void { $this->resetPage(); }
 
-    public function showPendingEmployees(int $clientId, int $sourceId): void
+    public function showPendingEmployee(int $clientId, string $pin): void
     {
         abort_unless(auth()->user()->isAdmin() || (int) auth()->user()->client_id === $clientId, 403);
-        abort_unless(BiometricSource::whereKey($sourceId)->where('client_id', $clientId)->exists(), 404);
+        abort_unless(
+            BiometricUserSync::where('client_id', $clientId)
+                ->where('external_employee_code', $pin)
+                ->exists(),
+            404
+        );
 
         $this->client_id = $clientId;
-        $this->sourceFilter = $sourceId;
+        $this->sourceFilter = null;
         $this->tab = 'biometric';
-        $this->statusFilter = 'pending';
+        $this->statusFilter = 'all';
+        $this->search = $pin;
         $this->resetPage();
     }
 
@@ -115,13 +121,49 @@ new class extends Component {
     {
         $pendingStatuses = ['planned', 'queued', 'sent', 'awaiting_verification'];
 
-        return DeviceUserAssignment::query()
+        $pendingAssignments = DeviceUserAssignment::query()
             ->when(auth()->user()->isClient(), fn($query) => $query->where('client_id', auth()->user()->client_id))
             ->whereIn('sync_status', $pendingStatuses)
-            ->selectRaw('client_id, biometric_source_id, COUNT(DISTINCT biometric_user_sync_id) as total')
-            ->groupBy('client_id', 'biometric_source_id')
-            ->with(['client:id,name', 'source:id,name,serial_number,last_ping_at'])
+            ->with([
+                'client:id,name',
+                'source:id,name,serial_number',
+                'identity:id,external_employee_code,local_name,factorial_employee_id',
+                'identity.factorialEmployee:id,full_name',
+            ])
             ->get();
+
+        $identityIds = $pendingAssignments->pluck('biometric_user_sync_id')->filter()->unique();
+        $allAssignments = DeviceUserAssignment::query()
+            ->whereIn('biometric_user_sync_id', $identityIds)
+            ->where('desired_state', 'present')
+            ->get(['biometric_user_sync_id', 'sync_status'])
+            ->groupBy('biometric_user_sync_id');
+
+        return $pendingAssignments
+            ->groupBy('biometric_user_sync_id')
+            ->map(function ($assignments, $identityId) use ($allAssignments) {
+                $first = $assignments->first();
+                $identityAssignments = $allAssignments->get($identityId, collect());
+
+                return [
+                    'client_id' => $first->client_id,
+                    'pin' => (string) $first->pin,
+                    'name' => $first->identity?->factorialEmployee?->full_name
+                        ?? $first->identity?->local_name
+                        ?? $first->name,
+                    'client_name' => $first->client?->name,
+                    'confirmed_devices' => $identityAssignments->where('sync_status', 'confirmed')->count(),
+                    'total_devices' => $identityAssignments->count(),
+                    'pending_sources' => $assignments
+                        ->map(fn($assignment) => [
+                            'name' => $assignment->source?->name,
+                            'serial_number' => $assignment->source?->serial_number,
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->values();
     }
 
     public function setSelectAll(array $pins, bool $checked): void
@@ -1199,20 +1241,24 @@ new class extends Component {
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">Pendientes de confirmar</p>
                 <div class="space-y-2">
                     @foreach($pendingGroups as $group)
-                    <button wire:click="showPendingEmployees({{ $group->client_id }}, {{ $group->biometric_source_id }})"
+                    <button wire:click="showPendingEmployee({{ $group['client_id'] }}, '{{ $group['pin'] }}')"
                         class="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left transition hover:bg-amber-100">
                         <span>
-                            <span class="block text-sm font-semibold text-gray-800">{{ $group->client?->name }}</span>
+                            <span class="block text-sm font-semibold text-gray-800">
+                                {{ $group['name'] }} · PIN {{ $group['pin'] }}
+                            </span>
                             <span class="block text-xs text-gray-500">
-                                {{ $group->source?->name }}
-                                @if($group->source?->serial_number)
-                                    · {{ $group->source->serial_number }}
-                                @endif
+                                {{ $group['client_name'] }} · confirmado en
+                                {{ $group['confirmed_devices'] }} de {{ $group['total_devices'] }} biométricos
+                            </span>
+                            <span class="mt-1 block text-xs text-amber-700">
+                                Pendientes:
+                                {{ collect($group['pending_sources'])->map(fn($source) => $source['name'] ?: $source['serial_number'])->join(', ') }}
                             </span>
                         </span>
                         <span class="inline-flex items-center gap-2">
-                            <span class="rounded-full bg-amber-500 px-2.5 py-1 text-xs font-bold text-white">{{ $group->total }}</span>
-                            <span class="text-sm font-medium text-amber-700">Ver empleados →</span>
+                            <span class="rounded-full bg-amber-500 px-2.5 py-1 text-xs font-bold text-white">{{ count($group['pending_sources']) }}</span>
+                            <span class="text-sm font-medium text-amber-700">Ver empleado →</span>
                         </span>
                     </button>
                     @endforeach

@@ -88,6 +88,8 @@ new class extends Component {
             $this->client_id    = $user->client_id;
             $this->clientLocked = true;
             $this->tab          = 'biometric';
+        } elseif ($requestedClientId = request()->integer('client_id')) {
+            $this->client_id = Client::whereKey($requestedClientId)->value('id');
         }
     }
 

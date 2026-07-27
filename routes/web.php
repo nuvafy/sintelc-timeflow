@@ -55,7 +55,9 @@ Route::middleware(['auth'])->group(function () {
         abort_unless($device->client_id, 404);
         abort_if($user->isClient() && (int) $user->client_id !== (int) $device->client_id, 403);
 
-        return view('devices.onboarding', compact('device'));
+        return $user->isAdmin()
+            ? redirect()->route('employees', ['client_id' => $device->client_id])
+            : redirect()->route('client.employees');
     })->name('devices.onboarding');
 });
 

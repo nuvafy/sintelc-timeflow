@@ -134,18 +134,27 @@ class DeviceSyncBatchTest extends TestCase
         ]]);
     }
 
-    public function test_client_can_open_the_wizard_for_its_own_device(): void
+    public function test_old_device_wizard_url_redirects_client_to_employees(): void
     {
         [$client, , $source] = $this->makeSource();
         $user = User::factory()->create(['role' => 'client', 'client_id' => $client->id]);
 
         $this->actingAs($user)
             ->get(route('devices.onboarding', $source))
-            ->assertOk()
-            ->assertSee('Configurar ' . $source->name);
+            ->assertRedirect(route('client.employees'));
     }
 
-    public function test_client_cannot_open_another_clients_wizard(): void
+    public function test_old_device_wizard_url_redirects_admin_to_selected_clients_employees(): void
+    {
+        [$client, , $source] = $this->makeSource();
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($user)
+            ->get(route('devices.onboarding', $source))
+            ->assertRedirect(route('employees', ['client_id' => $client->id]));
+    }
+
+    public function test_client_cannot_use_old_device_wizard_url_for_another_client(): void
     {
         [$client] = $this->makeSource();
         [, , $otherSource] = $this->makeSource();

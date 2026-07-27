@@ -106,7 +106,7 @@ class MultiTenantAuthorizationTest extends TestCase
             ->assertSet('showAddModal', false)
             ->assertSet('search', '523')
             ->assertSee('Nueva Persona')
-            ->assertSee('Pendiente de conexión');
+            ->assertSee('Pendiente de entrega');
 
         $this->assertSame(0, DeviceCommand::where('command_type', 'query_users')->count());
         $this->assertDatabaseHas('device_commands', [
@@ -162,6 +162,12 @@ class MultiTenantAuthorizationTest extends TestCase
 
         $component->call('pollAddEmployee')
             ->assertSet('addStep', 5);
+
+        \App\Models\DeviceSyncBatch::whereIn('id', $component->get('addBatchIds'))
+            ->update(['pending_items' => 0, 'failed_items' => 0]);
+
+        $component->call('pollAddEmployee')
+            ->assertSet('addStep', 4);
 
         $this->assertDatabaseHas('device_user_assignments', [
             'client_id' => $client->id,

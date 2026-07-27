@@ -815,7 +815,7 @@ new class extends Component {
     public function pollAddEmployee(): void
     {
         $this->authorizeSelectedClient();
-        if ($this->addStep === 3) {
+        if (in_array($this->addStep, [3, 5], true)) {
             $batches = \App\Models\DeviceSyncBatch::whereIn('id', $this->addBatchIds)->get();
             $pending = $batches->sum('pending_items');
 
@@ -824,7 +824,7 @@ new class extends Component {
                     ? \Illuminate\Support\Carbon::parse($this->addStartedAt)
                     : now();
 
-                if ($startedAt->diffInSeconds(now()) >= 30) {
+                if ($this->addStep === 3 && $startedAt->diffInSeconds(now()) >= 30) {
                     $this->addStep = 5;
                 }
 
@@ -1275,7 +1275,7 @@ new class extends Component {
                         @endphp
                         @if($isPendingDevice)
                             <span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
-                                {{ $deviceStatus === 'awaiting_verification' ? 'Recibido · por confirmar' : 'Pendiente de conexión' }}
+                                {{ $deviceStatus === 'awaiting_verification' ? 'Recibido · por confirmar' : 'Pendiente de entrega' }}
                             </span>
                         @elseif($deviceStatus === 'failed')
                             <span class="inline-flex rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700">Error</span>
@@ -1588,7 +1588,7 @@ new class extends Component {
     @endif
 
     {{-- ── Poll para modal Agregar Empleado ──────────────────────────── --}}
-    @if($showAddModal && $addStep === 3)
+    @if($showAddModal && in_array($addStep, [3, 5], true))
     <div wire:poll.3000ms="pollAddEmployee"></div>
     @endif
 
@@ -1703,10 +1703,10 @@ new class extends Component {
 
                     @if($addStep === 5)
                     <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <p class="text-sm font-semibold text-amber-800">Alta pendiente de conexión</p>
+                        <p class="text-sm font-semibold text-amber-800">Alta pendiente de entrega</p>
                         <p class="mt-0.5 text-xs text-amber-700">
                             Guardamos a <strong>{{ $addName }}</strong> con el PIN <strong>{{ $addPin }}</strong>.
-                            El sistema lo enviará automáticamente cuando el biométrico vuelva a conectarse.
+                            Uno o más biométricos todavía no han recogido la instrucción. Seguiremos intentando automáticamente.
                         </p>
                     </div>
                     @endif

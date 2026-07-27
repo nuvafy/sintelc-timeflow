@@ -57,10 +57,13 @@ class DeviceSyncBatchService
                 }
             }
 
-            $queuedAdds = $batch->items()->where('status', 'queued')->count();
+            $desiredUserCount = $source->assignments()
+                ->where('desired_state', 'present')
+                ->distinct()
+                ->count('pin');
             $batch->update(['options' => array_merge($batch->options ?? [], [
                 'verification_expected_user_count' => $baselineUserCount !== null
-                    ? (int) $baselineUserCount + $queuedAdds
+                    ? max((int) $baselineUserCount, $desiredUserCount)
                     : null,
             ])]);
 

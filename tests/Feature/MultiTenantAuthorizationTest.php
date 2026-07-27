@@ -98,7 +98,10 @@ class MultiTenantAuthorizationTest extends TestCase
             ->set('addName', 'Nueva Persona')
             ->call('startAddEmployee')
             ->assertSet('addStep', 5)
-            ->assertSet('addPin', '523');
+            ->assertSet('addPin', '523')
+            ->call('closeAddModal')
+            ->assertSee('Nueva Persona')
+            ->assertSee('Pendiente de conexión');
 
         $this->assertSame(0, DeviceCommand::where('command_type', 'query_users')->count());
         $this->assertDatabaseHas('device_commands', [
@@ -106,6 +109,37 @@ class MultiTenantAuthorizationTest extends TestCase
             'command_type' => 'set_user',
             'status' => 'pending',
         ]);
+
+    }
+
+    public function test_admin_can_open_a_pending_device_group_from_the_empty_employee_screen(): void
+    {
+        [$client] = $this->makeClient('pending-company');
+        $device = $this->makeDevice($client, 'PENDING-SN');
+        app(\App\Services\DeviceSyncBatchService::class)->create($device, [[
+            'action' => 'add_local',
+            'pin' => '800',
+            'name' => 'Persona Visible',
+        ]]);
+
+        $admin = User::factory()->create(['role' => 'admin', 'client_id' => null]);
+        $this->actingAs($admin);
+
+        $component = Livewire::test('employees.employee-sync-manager');
+
+        $this->assertSame(1, DeviceUserAssignment::where('sync_status', 'queued')->count());
+        $this->assertCount(1, $component->instance()->pendingEmployeeGroups());
+
+        $component
+            ->call('$refresh')
+            ->assertSee('PENDING-COMPANY')
+            ->assertSee('PENDING-SN')
+            ->assertSee('Ver empleados')
+            ->call('showPendingEmployees', $client->id, $device->id)
+            ->assertSet('client_id', $client->id)
+            ->assertSet('sourceFilter', $device->id)
+            ->assertSet('statusFilter', 'pending')
+            ->assertSee('Persona Visible');
     }
 
     public function test_online_device_registration_becomes_pending_after_thirty_seconds(): void

@@ -52,7 +52,13 @@ class DeviceAggregateVerificationService
                 continue;
             }
 
-            $expected = (int) $baseline + $items->count();
+            // SET USER is an upsert: sending an existing PIN updates it and must
+            // not increase the expected aggregate user count.
+            $desiredUserCount = $source->assignments()
+                ->where('desired_state', 'present')
+                ->distinct()
+                ->count('pin');
+            $expected = max((int) $baseline, $desiredUserCount);
             if ($reportedUserCount < $expected) {
                 continue;
             }

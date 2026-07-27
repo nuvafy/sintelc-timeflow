@@ -231,6 +231,38 @@ class DeviceSyncBatchTest extends TestCase
         $this->assertSame(372, $source->reported_user_count);
     }
 
+    public function test_aggregate_verification_does_not_double_count_existing_user_upserts(): void
+    {
+        [, , $source] = $this->makeSource();
+        $source->update([
+            'device_name' => 'SenseFace 3A',
+            'reported_user_count' => 2,
+            'device_users' => [
+                ['pin' => '701', 'name' => 'Persona Uno'],
+                ['pin' => '702', 'name' => 'Persona Dos'],
+            ],
+        ]);
+
+        $batch = app(DeviceSyncBatchService::class)->create($source->fresh(), [
+            ['action' => 'add_local', 'pin' => '701', 'name' => 'Persona Uno Actualizada'],
+            ['action' => 'add_local', 'pin' => '702', 'name' => 'Persona Dos Actualizada'],
+        ]);
+
+        foreach (DeviceCommand::where('command_type', 'set_user')->get() as $command) {
+            $command->update(['status' => 'sent', 'sent_at' => now()]);
+            app(DeviceCommandLifecycleService::class)->markSent($command->fresh());
+            $command->update(['status' => 'acknowledged', 'acknowledged_at' => now()]);
+            app(DeviceCommandLifecycleService::class)->markAcknowledged($command->fresh(), true, 'Return=0');
+        }
+
+        $this->travel(1)->seconds();
+        app(DeviceInfoService::class)->capture($source->fresh(), 'ZAM70-Test,2,0,0,192.168.1.2');
+
+        $this->assertSame(2, data_get($batch->fresh()->options, 'verification_expected_user_count'));
+        $this->assertSame('completed', $batch->fresh()->status);
+        $this->assertSame(2, $batch->fresh()->confirmed_items);
+    }
+
     private function makeSource(): array
     {
         $client = Client::create([

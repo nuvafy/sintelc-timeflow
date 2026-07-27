@@ -6,6 +6,7 @@ use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\BiometricUserSync;
 use App\Models\Client;
+use App\Models\DeviceUserAssignment;
 use App\Models\FactorialEmployee;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -20,6 +21,7 @@ new class extends Component {
     public string  $tab         = 'biometric'; // 'biometric' | 'factorial' | 'mapping' | 'unresolved'
     public string  $scoreFilter  = 'all';       // 'all' | 'perfect' | 'good' | 'low'
     public string  $statusFilter = 'all';       // 'all' | 'mapped' | 'unmapped' (biometric/factorial tabs)
+    public ?int    $sourceFilter = null;
     public array   $selected    = [];          // PINs seleccionados para mapear
     public array   $assignments = [];          // PIN => factorial_employee_id (pendiente de guardar)
     public ?string $mapMessage  = null;        // Resultado del último mapeo
@@ -81,10 +83,35 @@ new class extends Component {
     }
 
     public function updatedSearch(): void      { $this->resetPage(); }
-    public function updatedClientId(): void    { $this->authorizeSelectedClient(); $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; }
+    public function updatedClientId(): void    { $this->authorizeSelectedClient(); $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; $this->sourceFilter = null; }
     public function updatedTab(): void         { $this->resetPage(); $this->selected = []; $this->statusFilter = 'all'; }
     public function updatedScoreFilter(): void { $this->resetPage(); }
     public function updatedStatusFilter(): void { $this->resetPage(); }
+
+    public function showPendingEmployees(int $clientId, int $sourceId): void
+    {
+        abort_unless(auth()->user()->isAdmin() || (int) auth()->user()->client_id === $clientId, 403);
+        abort_unless(BiometricSource::whereKey($sourceId)->where('client_id', $clientId)->exists(), 404);
+
+        $this->client_id = $clientId;
+        $this->sourceFilter = $sourceId;
+        $this->tab = 'biometric';
+        $this->statusFilter = 'pending';
+        $this->resetPage();
+    }
+
+    public function pendingEmployeeGroups()
+    {
+        $pendingStatuses = ['planned', 'queued', 'sent', 'awaiting_verification'];
+
+        return DeviceUserAssignment::query()
+            ->when(auth()->user()->isClient(), fn($query) => $query->where('client_id', auth()->user()->client_id))
+            ->whereIn('sync_status', $pendingStatuses)
+            ->selectRaw('client_id, biometric_source_id, COUNT(DISTINCT biometric_user_sync_id) as total')
+            ->groupBy('client_id', 'biometric_source_id')
+            ->with(['client:id,name', 'source:id,name,serial_number,last_ping_at'])
+            ->get();
+    }
 
     public function setSelectAll(array $pins, bool $checked): void
     {
@@ -325,9 +352,11 @@ new class extends Component {
         if ($this->tab === 'biometric') {
             $biometricUsers  = collect();
             $biometricSources = collect();
+            $pendingStatuses = ['planned', 'queued', 'sent', 'awaiting_verification'];
 
             if ($this->client_id) {
                 $biometricSources = BiometricSource::where('client_id', $this->client_id)
+                    ->when($this->sourceFilter, fn($query) => $query->whereKey($this->sourceFilter))
                     ->orderBy('name')
                     ->get();
 
@@ -343,31 +372,68 @@ new class extends Component {
                 $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees) {
                     foreach ($source->device_users ?? [] as $u) {
                         $pin = (string) $u['pin'];
-                        if ($this->search && stripos($pin, $this->search) === false && stripos($u['name'] ?? '', $this->search) === false) {
-                            continue;
-                        }
                         $empId  = $mappings[$pin] ?? null;
                         $emp    = $empId ? ($employees[$empId] ?? null) : null;
-                        $biometricUsers[$pin] = [
+                        $biometricUsers["{$source->id}:{$pin}"] = [
                             'pin'          => $pin,
                             'name'         => $u['name'] ?? null,
                             'source'       => $source->name,
+                            'source_id'    => $source->id,
                             'mapped'       => $empId !== null,
                             'factorial_id' => $emp?->factorial_id,
+                            'device_status'=> 'reported',
                         ];
                     }
                 });
+
+                DeviceUserAssignment::query()
+                    ->where('client_id', $this->client_id)
+                    ->whereIn('biometric_source_id', $biometricSources->pluck('id'))
+                    ->with('factorialEmployee:id,factorial_id')
+                    ->get()
+                    ->each(function ($assignment) use (&$biometricUsers, $biometricSources, $mappings, $employees) {
+                        $pin = (string) $assignment->pin;
+                        $key = "{$assignment->biometric_source_id}:{$pin}";
+                        $existing = $biometricUsers->get($key, []);
+                        $empId = $assignment->factorial_employee_id ?? ($mappings[$pin] ?? null);
+                        $employee = $assignment->factorialEmployee
+                            ?? ($empId ? ($employees[$empId] ?? null) : null);
+
+                        $biometricUsers[$key] = array_merge($existing, [
+                            'pin' => $pin,
+                            'name' => $assignment->name,
+                            'source' => $biometricSources->firstWhere('id', $assignment->biometric_source_id)?->name
+                                ?? '—',
+                            'source_id' => $assignment->biometric_source_id,
+                            'mapped' => $empId !== null,
+                            'factorial_id' => $employee?->factorial_id,
+                            'device_status' => $assignment->sync_status,
+                        ]);
+                    });
+
+                if ($this->search) {
+                    $biometricUsers = $biometricUsers->filter(fn($user) =>
+                        stripos($user['pin'], $this->search) !== false
+                        || stripos($user['name'] ?? '', $this->search) !== false
+                    );
+                }
             }
 
             // Totales fijos antes de aplicar filtro de estado
             $biometricTotalCount  = $biometricUsers->count();
             $biometricMappedCount = $biometricUsers->filter(fn($u) => $u['mapped'])->count();
+            $biometricPendingCount = $biometricUsers
+                ->filter(fn($user) => in_array($user['device_status'], $pendingStatuses, true))
+                ->count();
 
             // Filtro por estado
             if ($this->statusFilter === 'mapped') {
                 $biometricUsers = $biometricUsers->filter(fn($u) => $u['mapped']);
             } elseif ($this->statusFilter === 'unmapped') {
                 $biometricUsers = $biometricUsers->filter(fn($u) => !$u['mapped']);
+            } elseif ($this->statusFilter === 'pending') {
+                $biometricUsers = $biometricUsers
+                    ->filter(fn($user) => in_array($user['device_status'], $pendingStatuses, true));
             }
 
             // Paginación manual sobre la colección in-memory
@@ -389,6 +455,7 @@ new class extends Component {
                 'biometricUsers'      => $biometricUsers,
                 'biometricTotalCount' => $biometricTotalCount ?? 0,
                 'biometricMappedCount'=> $biometricMappedCount ?? 0,
+                'biometricPendingCount'=> $biometricPendingCount ?? 0,
                 'biometricSources'    => $biometricSources,
                 'employees'           => collect(),
                 'unresolved'          => collect(),
@@ -850,7 +917,7 @@ new class extends Component {
                     @php
                         $pillOptions = $tab === 'factorial'
                             ? ['all' => 'Todos', 'mapped' => 'Con PIN', 'unmapped' => 'Sin PIN']
-                            : ['all' => 'Todos', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'];
+                            : ['all' => 'Todos', 'pending' => 'Pendientes', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'];
                     @endphp
                     @foreach($pillOptions as $val => $label)
                     <button wire:click="$set('statusFilter', '{{ $val }}')"
@@ -885,7 +952,18 @@ new class extends Component {
                     </span>
                     @endif
                 @elseif($tab === 'biometric')
-                    <span class="text-xs text-gray-400">{{ $biometricMappedCount }} de {{ $biometricTotalCount }} empleado(s) mapeados</span>
+                    @if($sourceFilter)
+                    <button wire:click="$set('sourceFilter', null)"
+                        class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200">
+                        {{ $biometricSources->first()?->name }} · quitar filtro ×
+                    </button>
+                    @endif
+                    <span class="text-xs text-gray-400">
+                        {{ $biometricMappedCount }} de {{ $biometricTotalCount }} empleado(s) mapeados
+                        @if($biometricPendingCount > 0)
+                            · <span class="font-medium text-amber-600">{{ $biometricPendingCount }} pendientes</span>
+                        @endif
+                    </span>
                     <button wire:click="syncFromDevices" wire:loading.attr="disabled" title="Solicitar lista actualizada de usuarios a los dispositivos"
                         class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition">
                         <svg wire:loading.remove wire:target="syncFromDevices" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -915,13 +993,42 @@ new class extends Component {
 
     {{-- Sin empresa: prompt --}}
     @if(!$client_id)
+    @php
+        $pendingGroups = $this->pendingEmployeeGroups();
+    @endphp
     <div class="bg-white shadow rounded-lg">
-        <div class="px-6 py-16 text-center">
+        <div class="px-6 py-12 text-center">
             <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
             </svg>
             <p class="text-base font-medium text-gray-700">Selecciona una empresa para continuar</p>
             <p class="mt-1 text-sm text-gray-400">Elige una empresa en el selector de arriba para ver los empleados, mapping y registros pendientes.</p>
+
+            @if($pendingGroups->isNotEmpty())
+            <div class="mx-auto mt-6 max-w-2xl text-left">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">Pendientes de confirmar</p>
+                <div class="space-y-2">
+                    @foreach($pendingGroups as $group)
+                    <button wire:click="showPendingEmployees({{ $group->client_id }}, {{ $group->biometric_source_id }})"
+                        class="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left transition hover:bg-amber-100">
+                        <span>
+                            <span class="block text-sm font-semibold text-gray-800">{{ $group->client?->name }}</span>
+                            <span class="block text-xs text-gray-500">
+                                {{ $group->source?->name }}
+                                @if($group->source?->serial_number)
+                                    · {{ $group->source->serial_number }}
+                                @endif
+                            </span>
+                        </span>
+                        <span class="inline-flex items-center gap-2">
+                            <span class="rounded-full bg-amber-500 px-2.5 py-1 text-xs font-bold text-white">{{ $group->total }}</span>
+                            <span class="text-sm font-medium text-amber-700">Ver empleados →</span>
+                        </span>
+                    </button>
+                    @endforeach
+                </div>
+            </div>
+            @endif
         </div>
     </div>
     @else
@@ -938,6 +1045,7 @@ new class extends Component {
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado en equipo</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
                 </tr>
@@ -955,6 +1063,21 @@ new class extends Component {
                         {{ $user['source'] }}
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap">
+                        @php
+                            $deviceStatus = $user['device_status'] ?? 'reported';
+                            $isPendingDevice = in_array($deviceStatus, ['planned', 'queued', 'sent', 'awaiting_verification'], true);
+                        @endphp
+                        @if($isPendingDevice)
+                            <span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+                                {{ $deviceStatus === 'awaiting_verification' ? 'Recibido · por confirmar' : 'Pendiente de conexión' }}
+                            </span>
+                        @elseif($deviceStatus === 'failed')
+                            <span class="inline-flex rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700">Error</span>
+                        @else
+                            <span class="inline-flex rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">Confirmado</span>
+                        @endif
+                    </td>
+                    <td class="px-5 py-3 whitespace-nowrap">
                         <div class="flex items-center h-full">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
@@ -970,7 +1093,7 @@ new class extends Component {
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-500">
                         No hay empleados registrados en el biométrico.
                     </td>
                 </tr>

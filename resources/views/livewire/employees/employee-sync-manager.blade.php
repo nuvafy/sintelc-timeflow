@@ -75,13 +75,23 @@ new class extends Component {
             ->where('status', 'active')
             ->get();
 
+        $resolver = app(\App\Services\DeviceProtocolResolver::class);
+
         foreach ($sources as $source) {
+            // Skip si ya hay un query_users pendiente o en vuelo para este dispositivo
+            $alreadyQueued = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)
+                ->where('command_type', 'query_users')
+                ->whereIn('status', ['pending', 'sent'])
+                ->exists();
+
+            if ($alreadyQueued) continue;
+
             $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
             \App\Models\DeviceCommand::create([
                 'biometric_source_id' => $source->id,
                 'command_seq'         => $seq,
                 'command_type'        => 'query_users',
-                'payload'             => 'DATA QUERY USERINFO',
+                'payload'             => $resolver->inventoryCommand($source),
                 'status'              => 'pending',
             ]);
         }

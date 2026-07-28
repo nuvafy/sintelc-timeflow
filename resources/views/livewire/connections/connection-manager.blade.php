@@ -221,16 +221,7 @@ new class extends Component {
 
                 {{-- Acciones --}}
                 <div class="flex items-center gap-3 flex-shrink-0 pt-0.5">
-                    @if($conn->access_token)
-                    <button wire:click="sync({{ $conn->id }})"
-                        @if(isset($syncPending[$conn->id])) disabled @endif
-                        class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition disabled:opacity-50">
-                        <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        Sincronizar
-                    </button>
-                    @else
+                    @if(!$conn->access_token)
                     <a href="{{ route('oauth.factorial.redirect', ['connection_id' => Hashids::encode($conn->id)]) }}"
                        class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition">
                         <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

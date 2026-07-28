@@ -1,6 +1,8 @@
 <?php
 
 use App\Jobs\SyncAttendanceToFactorial;
+use App\Jobs\SyncFactorialConnection;
+use App\Models\FactorialConnection;
 use App\Models\AttendanceLog;
 use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
@@ -54,14 +56,21 @@ new class extends Component {
     public ?array  $csvResult    = null;
     public array   $csvSourceIds = [];
 
-    public function syncFromDevices(): void
+    public function syncAll(): void
     {
         $this->authorizeSelectedClient();
         if (!$this->client_id) return;
 
-        $provider = BiometricProvider::where('client_id', $this->client_id)->first();
-        if (!$provider) return;
+        // Factorial: disparar sync por cada conexión activa del cliente
+        $connections = FactorialConnection::where('client_id', $this->client_id)
+            ->whereNotNull('access_token')
+            ->get();
 
+        foreach ($connections as $connection) {
+            SyncFactorialConnection::dispatch($connection->id);
+        }
+
+        // Biométricos: pedir inventario de usuarios a todos los dispositivos activos
         $sources = BiometricSource::where('client_id', $this->client_id)
             ->where('status', 'active')
             ->get();
@@ -77,7 +86,11 @@ new class extends Component {
             ]);
         }
 
-        $this->dispatch('notify', message: 'Solicitud enviada a ' . $sources->count() . ' dispositivo(s). La lista se actualizará en unos segundos.');
+        $parts = [];
+        if ($connections->count()) $parts[] = $connections->count() . ' conexión(es) Factorial';
+        if ($sources->count())     $parts[] = $sources->count() . ' dispositivo(s) biométrico(s)';
+
+        $this->dispatch('notify', message: 'Sincronizando ' . implode(' y ', $parts) . '. Los datos se actualizarán en unos momentos.');
     }
 
     public function mount(): void
@@ -1114,18 +1127,30 @@ new class extends Component {
         @if($client_id)
         {{-- Tabs --}}
         <div class="border-t border-gray-100 mt-4 -mb-px">
-            <nav class="flex gap-6">
-                <button wire:click="$set('tab', 'biometric')"
-                    class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'biometric' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                    Biométrico
-                </button>
-                <button wire:click="$set('tab', 'factorial')"
-                    class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                    Factorial
-                </button>
-                <button wire:click="$set('tab', 'mapping')"
-                    class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'mapping' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                    Mapping
+            <nav class="flex items-center justify-between">
+                <div class="flex gap-6">
+                    <button wire:click="$set('tab', 'biometric')"
+                        class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'biometric' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                        Biométrico
+                    </button>
+                    <button wire:click="$set('tab', 'factorial')"
+                        class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'factorial' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                        Factorial
+                    </button>
+                    <button wire:click="$set('tab', 'mapping')"
+                        class="py-3 px-1 text-sm font-medium border-b-2 transition-colors {{ $tab === 'mapping' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                        Mapping
+                    </button>
+                </div>
+                <button wire:click="syncAll" wire:loading.attr="disabled" wire:target="syncAll"
+                    class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition pb-px">
+                    <svg wire:loading.remove wire:target="syncAll" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <svg wire:loading wire:target="syncAll" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Sincronizar
                 </button>
             </nav>
         </div>
@@ -1197,16 +1222,6 @@ new class extends Component {
                             · <span class="font-medium text-amber-600">{{ $biometricPendingCount }} pendientes</span>
                         @endif
                     </span>
-                    <button wire:click="syncFromDevices" wire:loading.attr="disabled" title="Solicitar lista actualizada de usuarios a los dispositivos"
-                        class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition">
-                        <svg wire:loading.remove wire:target="syncFromDevices" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        <svg wire:loading wire:target="syncFromDevices" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        Consultar biométricos
-                    </button>
                     <button wire:click="openAddModal"
                         class="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

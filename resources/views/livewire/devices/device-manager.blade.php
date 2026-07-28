@@ -664,17 +664,10 @@ new class extends Component {
                                 </svg>
                             </button>
                             {{-- Enviar empleados al dispositivo --}}
-                            <button wire:click="openImportModal({{ $device->id }})" title="Envío anterior (temporal)"
-                                class="hidden text-sky-500 hover:text-sky-700">
-                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                </svg>
-                            </button>
-                            {{-- Clonar biométricos desde otro dispositivo --}}
-                            <button wire:click="openCloneModal({{ $device->id }})" title="Clonar biométricos desde otro dispositivo"
+                            <button wire:click="openImportModal({{ $device->id }})" title="Enviar empleados al dispositivo"
                                 class="text-yellow-500 hover:text-yellow-600">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
                                 </svg>
                             </button>
                             {{-- Editar --}}

@@ -766,6 +766,7 @@ new class extends Component {
         $this->addSourceIds   = BiometricSource::query()
             ->where('client_id', $this->client_id)
             ->where('status', 'active')
+            ->where('last_ping_at', '>=', now()->subMinutes(2))
             ->pluck('id')
             ->map(fn($id) => (int) $id)
             ->all();

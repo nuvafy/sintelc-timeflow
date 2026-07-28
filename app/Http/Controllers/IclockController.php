@@ -42,10 +42,13 @@ class IclockController extends Controller
             return $this->plainResponse('OK');
         }
 
-        $source = BiometricSource::updateOrCreate(
-            ['serial_number' => $sn],
-            ['last_ping_at' => now()]
-        );
+        $source = BiometricSource::where('serial_number', $sn)->first();
+
+        if (!$source) {
+            return $this->plainResponse('OK');
+        }
+
+        $source->update(['last_ping_at' => now()]);
 
         if ($request->filled('INFO')) {
             app(DeviceInfoService::class)->capture($source->fresh(), (string) $request->query('INFO'));

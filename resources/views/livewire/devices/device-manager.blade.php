@@ -51,6 +51,7 @@ new class extends Component {
     public int     $pushNewCount          = 0; // solo los no mapeados/no en device
     public int     $pushSintelcCount      = 0; // mapeados en Sintelc con PIN real
     public ?string $pushSuccessMsg        = null;
+    public ?string $refreshMessage        = null;
 
 
     public function rules(): array
@@ -178,7 +179,10 @@ new class extends Component {
                 'client_id'             => $user->client_id,
                 'biometric_provider_id' => $provider->id,
                 'status'                => 'active',
+                'onboarding_status'     => 'assigned',
             ]);
+
+            app(\App\Services\DeviceOnboardingService::class)->requestInventory($source->fresh());
 
             $this->showModal = false;
             $this->resetForm();
@@ -190,7 +194,12 @@ new class extends Component {
         if ($this->editing) {
             $this->authorizedDevice($this->editingId)->update($data);
         } else {
-            BiometricSource::create($data);
+            $source = BiometricSource::create(array_merge($data, [
+                'onboarding_status' => $data['client_id'] && $data['biometric_provider_id'] ? 'assigned' : 'ready',
+            ]));
+            if ($source->client_id && $source->biometric_provider_id) {
+                app(\App\Services\DeviceOnboardingService::class)->requestInventory($source);
+            }
         }
 
         $this->showModal = false;
@@ -249,7 +258,10 @@ new class extends Component {
             'client_id'             => $client->id,
             'biometric_provider_id' => $provider->id,
             'status'                => 'active',
+            'onboarding_status'     => 'assigned',
         ]);
+
+        app(\App\Services\DeviceOnboardingService::class)->requestInventory($source->fresh());
 
         $this->showAssignModal   = false;
         $this->assigningSourceId = null;
@@ -325,60 +337,19 @@ new class extends Component {
             return;
         }
 
-        $maxSeq  = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
-        $now     = now();
-        $inserts = [];
+        $decisions = $employees->map(fn($employee) => [
+            'action' => 'add_factorial',
+            'pin' => (string) $employee->factorial_id,
+            'name' => $employee->full_name,
+            'factorial_employee_id' => $employee->id,
+        ])->values()->all();
 
-        foreach ($employees->values() as $i => $employee) {
-            $pin     = $employee->factorial_id;
-            $name    = mb_substr($employee->full_name, 0, 24);
-            $payload = $isAttendance
-                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
-                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
-
-            $inserts[] = [
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $maxSeq + $i + 1,
-                'command_type'        => 'set_user',
-                'payload'             => $payload,
-                'status'              => 'pending',
-                'created_at'          => $now,
-                'updated_at'          => $now,
-            ];
-        }
-
-        DeviceCommand::insert($inserts);
-
-        // Añadir al device_users existente (no reemplazar)
-        $existing = collect($source->device_users ?? []);
-        $newUsers = $employees->values()->map(fn($e) => [
-            'pin'  => (string)$e->factorial_id,
-            'name' => mb_substr($e->full_name, 0, 24),
-        ]);
-        $source->update([
-            'device_users'            => $existing->concat($newUsers)->unique('pin')->values()->toArray(),
-            'device_users_fetched_at' => $now,
-        ]);
-
-        // Crear mapeos solo para los enviados
-        $mappings = $employees->values()->map(fn($e) => [
-            'biometric_provider_id'  => $source->biometric_provider_id,
-            'factorial_employee_id'  => $e->id,
-            'client_id'              => $source->client_id,
-            'external_employee_code' => (string)$e->factorial_id,
-            'sync_status'            => 'synced',
-            'created_at'             => $now,
-            'updated_at'             => $now,
-        ])->toArray();
-
-        BiometricUserSync::upsert(
-            $mappings,
-            ['biometric_provider_id', 'factorial_employee_id'],
-            ['external_employee_code', 'sync_status', 'updated_at']
+        $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+            $source, $decisions, auth()->user(), 'bulk', 'factorial'
         );
 
         $count = $employees->count();
-        $this->pushSuccessMsg = "{$count} empleado(s) nuevos encolados. El equipo los recibirá en su próximo ping.";
+        $this->pushSuccessMsg = "{$count} empleado(s) encolados en el lote {$batch->uuid}. Se confirmarán al releer el equipo.";
     }
 
     private function _pushFromSintelc(BiometricSource $source, bool $isAttendance): void
@@ -393,50 +364,24 @@ new class extends Component {
             return;
         }
 
-        $maxSeq  = DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') ?? 0;
-        $now     = now();
-        $inserts = [];
-        $users   = [];
+        $decisions = $syncs->filter(fn($sync) => $sync->factorialEmployee)->map(fn($sync) => [
+            'action' => 'add_factorial',
+            'pin' => (string) $sync->external_employee_code,
+            'name' => $sync->factorialEmployee->full_name,
+            'factorial_employee_id' => $sync->factorial_employee_id,
+        ])->values()->all();
 
-        foreach ($syncs as $i => $sync) {
-            $employee = $sync->factorialEmployee;
-            if (!$employee) continue;
-
-            $pin  = $sync->external_employee_code; // PIN real del dispositivo
-            $name = mb_substr($employee->full_name, 0, 24);
-
-            $payload = $isAttendance
-                ? "DATA UPDATE USERINFO PIN={$pin}\tName={$name}\tPassword=\tPrivilege=0\tGroup=1"
-                : "DATA UPDATE user CardNo=\tPin={$pin}\tPassword=\tGroup=1\tStartTime=0\tEndTime=0\tName={$name}\tPrivilege=0";
-
-            $inserts[] = [
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $maxSeq + $i + 1,
-                'command_type'        => 'set_user',
-                'payload'             => $payload,
-                'status'              => 'pending',
-                'created_at'          => $now,
-                'updated_at'          => $now,
-            ];
-
-            $users[] = ['pin' => $pin, 'name' => $name];
-        }
-
-        if (empty($inserts)) {
+        if (empty($decisions)) {
             $this->pushSuccessMsg = 'No se pudo generar comandos.';
             return;
         }
 
-        DeviceCommand::insert($inserts);
+        $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+            $source, $decisions, auth()->user(), 'bulk', 'sintelc'
+        );
 
-        $existing = collect($source->device_users ?? []);
-        $source->update([
-            'device_users'            => $existing->concat($users)->unique('pin')->values()->toArray(),
-            'device_users_fetched_at' => $now,
-        ]);
-
-        $count = count($inserts);
-        $this->pushSuccessMsg = "{$count} empleado(s) mapeados encolados con su PIN de Sintelc. El equipo los recibirá en su próximo ping.";
+        $count = count($decisions);
+        $this->pushSuccessMsg = "{$count} empleado(s) encolados en el lote {$batch->uuid}. Se confirmarán al releer el equipo.";
     }
 
     public function closeImportModal(): void
@@ -488,6 +433,27 @@ new class extends Component {
         $this->cloneSuccessMsg = null;
     }
 
+    public function refreshEmployees(int $id): void
+    {
+        $source = $this->authorizedDevice($id);
+        abort_unless($source->status === 'active', 422);
+
+        $result = app(\App\Services\DeviceEmployeeRefreshService::class)
+            ->refresh($source, auth()->user());
+
+        $this->refreshMessage = match (true) {
+            $result['assigned'] === 0 =>
+                "No hay empleados asignados a {$source->name}.",
+            $result['queued'] > 0 =>
+                "{$result['queued']} empleado(s) pendiente(s) fueron enviados a {$source->name}. "
+                . "{$result['unchanged']} ya estaban actualizados.",
+            $result['active'] > 0 =>
+                "{$source->name} ya tiene {$result['active']} operación(es) en curso; no se duplicaron.",
+            default =>
+                "{$source->name} ya está actualizado. No fue necesario enviar empleados.",
+        };
+    }
+
     private function resetForm(): void
     {
         $this->editingId             = null;
@@ -522,6 +488,12 @@ new class extends Component {
 }; ?>
 
 <div>
+    @if($refreshMessage)
+    <div class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        {{ $refreshMessage }}
+    </div>
+    @endif
+
     {{-- ── Tarjeta filtros ─────────────────────────────────────────── --}}
     <div class="bg-white shadow rounded-lg px-5 py-3 mb-4">
         <div class="flex items-center justify-between gap-3">
@@ -682,9 +654,18 @@ new class extends Component {
                     </td>
                     <td class="px-5 py-3 whitespace-nowrap text-center">
                         <div class="flex items-center justify-center gap-3">
+                            <button wire:click="refreshEmployees({{ $device->id }})"
+                                wire:loading.attr="disabled"
+                                wire:target="refreshEmployees({{ $device->id }})"
+                                title="Refrescar empleados asignados"
+                                class="text-emerald-600 hover:text-emerald-800 disabled:opacity-50">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
                             {{-- Enviar empleados al dispositivo --}}
-                            <button wire:click="openImportModal({{ $device->id }})" title="Enviar empleados al dispositivo"
-                                class="text-sky-500 hover:text-sky-700">
+                            <button wire:click="openImportModal({{ $device->id }})" title="Envío anterior (temporal)"
+                                class="hidden text-sky-500 hover:text-sky-700">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>

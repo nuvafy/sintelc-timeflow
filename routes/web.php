@@ -4,6 +4,10 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FactorialAuthController;
 use App\Http\Controllers\IclockController;
 use App\Models\Client;
+use App\Models\BiometricSource;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
 Route::redirect('/', '/login');
 
@@ -45,11 +49,21 @@ Route::middleware(['auth'])->group(function () {
         abort_if(!$user->client_id, 403);
         return view('employees');
     })->name('client.employees');
+
+    Route::get('dispositivos/{device}/configuracion-inicial', function (BiometricSource $device) {
+        $user = auth()->user();
+        abort_unless($device->client_id, 404);
+        abort_if($user->isClient() && (int) $user->client_id !== (int) $device->client_id, 403);
+
+        return $user->isAdmin()
+            ? redirect()->route('employees', ['client_id' => $device->client_id])
+            : redirect()->route('client.employees');
+    })->name('devices.onboarding');
 });
 
 Route::get('templates/empleados.csv', function () {
     $bom  = "\xEF\xBB\xBF";
-    $rows = "pin,nombre\r\n1001,Tony Stark\r\n1002,Steve Rogers\r\n";
+    $rows = "pin,nombre,sincronizar_factorial,factorial_id\r\n1001,Tony Stark,si,123456\r\n1002,Steve Rogers,no,\r\n";
     return response($bom . $rows, 200, [
         'Content-Type'        => 'text/csv; charset=UTF-8',
         'Content-Disposition' => 'attachment; filename="plantilla-empleados.csv"',
@@ -63,7 +77,11 @@ Route::middleware(['auth', 'verified', 'admin'])->group(function () {
 });
 
 // ── Biometric devices (ZKTeco) — sin auth ────────────────────────────────────
-Route::prefix('iclock')->middleware('iclock')->group(function () {
+Route::withoutMiddleware([
+    StartSession::class,
+    ShareErrorsFromSession::class,
+    VerifyCsrfToken::class,
+])->prefix('iclock')->middleware('iclock')->group(function () {
     Route::match(['GET', 'POST'], '/ping',       [IclockController::class, 'ping']);
     Route::match(['GET', 'POST'], '/getrequest', [IclockController::class, 'getRequest']);
     Route::match(['GET', 'POST'], '/cdata',      [IclockController::class, 'cdata']);

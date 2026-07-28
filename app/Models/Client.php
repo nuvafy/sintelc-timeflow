@@ -54,6 +54,11 @@ class Client extends Model
         return $this->hasMany(AttendanceLog::class);
     }
 
+    public function deviceSyncBatches(): HasMany
+    {
+        return $this->hasMany(DeviceSyncBatch::class);
+    }
+
     public function attendanceConfig(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(ClientAttendanceConfig::class);

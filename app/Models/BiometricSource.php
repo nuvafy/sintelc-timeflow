@@ -19,11 +19,25 @@ class BiometricSource extends Model
         'site_name',
         'settings',
         'status',
+        'onboarding_status',
+        'onboarding_started_at',
+        'onboarding_completed_at',
+        'onboarding_error',
         'last_ping_at',
         'device_users',
         'device_users_fetched_at',
+        'last_inventory_at',
         'push_version',
+        'push_protocol_profile',
+        'push_protocol_source',
+        'push_protocol_detected_at',
         'device_name',
+        'device_firmware',
+        'reported_user_count',
+        'reported_fingerprint_count',
+        'reported_face_count',
+        'device_info_reported_at',
+        'device_info_payload',
         'biodata_cache',
         'biodata_cached_at',
         'clone_target_id',
@@ -34,6 +48,12 @@ class BiometricSource extends Model
         'device_users'            => 'array',
         'last_ping_at'            => 'datetime',
         'device_users_fetched_at' => 'datetime',
+        'last_inventory_at'       => 'datetime',
+        'push_protocol_detected_at' => 'datetime',
+        'device_info_reported_at' => 'datetime',
+        'device_info_payload' => 'array',
+        'onboarding_started_at'   => 'datetime',
+        'onboarding_completed_at' => 'datetime',
         'biodata_cache'           => 'array',
         'biodata_cached_at'       => 'datetime',
     ];
@@ -61,6 +81,26 @@ class BiometricSource extends Model
     public function commands(): HasMany
     {
         return $this->hasMany(DeviceCommand::class);
+    }
+
+    public function inventorySnapshots(): HasMany
+    {
+        return $this->hasMany(DeviceInventorySnapshot::class);
+    }
+
+    public function userAssignments(): HasMany
+    {
+        return $this->hasMany(DeviceUserAssignment::class);
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->userAssignments();
+    }
+
+    public function syncItems(): HasMany
+    {
+        return $this->hasMany(DeviceSyncItem::class);
     }
 
     public function isAssigned(): bool

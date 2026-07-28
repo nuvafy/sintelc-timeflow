@@ -6,6 +6,7 @@ use App\Models\BiometricProvider;
 use App\Models\BiometricSource;
 use App\Models\BiometricUserSync;
 use App\Models\Client;
+use App\Models\DeviceUserAssignment;
 use App\Models\FactorialEmployee;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -20,6 +21,7 @@ new class extends Component {
     public string  $tab         = 'biometric'; // 'biometric' | 'factorial' | 'mapping' | 'unresolved'
     public string  $scoreFilter  = 'all';       // 'all' | 'perfect' | 'good' | 'low'
     public string  $statusFilter = 'all';       // 'all' | 'mapped' | 'unmapped' (biometric/factorial tabs)
+    public ?int    $sourceFilter = null;
     public array   $selected    = [];          // PINs seleccionados para mapear
     public array   $assignments = [];          // PIN => factorial_employee_id (pendiente de guardar)
     public ?string $mapMessage  = null;        // Resultado del último mapeo
@@ -28,17 +30,29 @@ new class extends Component {
     public bool    $showAddModal    = false;
     public string  $addName         = '';
     public bool    $addAllDevices   = true; // always true, no UI toggle
-    public int     $addStep         = 0;   // 0=form 1=querying 2=calculating 3=pushing 4=done -1=error
+    public int     $addStep         = 0;   // 0=form 3=pushing 4=done 5=pending -1=error
     public ?string $addError        = null;
     public ?string $addPin          = null;
+    public ?string $addStartedAt    = null;
     public array   $addQueryCmdIds  = [];
     public array   $addPushCmdIds   = [];
+    public array   $addBatchIds     = [];
+    public array   $addSourceIds    = [];
+
+    // Administrar destinos de un empleado existente
+    public bool    $showDeviceAssignmentModal = false;
+    public ?string $managePin = null;
+    public string  $manageName = '';
+    public array   $manageSourceIds = [];
+    public array   $manageOriginalSourceIds = [];
+    public ?string $manageError = null;
 
     // Modal CSV (a nivel de proveedor)
     public bool    $showCsvModal = false;
     public $csvFile              = null;
     public string  $importError  = '';
     public ?array  $csvResult    = null;
+    public array   $csvSourceIds = [];
 
     public function syncFromDevices(): void
     {
@@ -74,14 +88,83 @@ new class extends Component {
             $this->client_id    = $user->client_id;
             $this->clientLocked = true;
             $this->tab          = 'biometric';
+        } elseif ($requestedClientId = request()->integer('client_id')) {
+            $this->client_id = Client::whereKey($requestedClientId)->value('id');
         }
     }
 
     public function updatedSearch(): void      { $this->resetPage(); }
-    public function updatedClientId(): void    { $this->authorizeSelectedClient(); $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; }
+    public function updatedClientId(): void    { $this->authorizeSelectedClient(); $this->resetPage(); $this->selected = []; $this->assignments = []; $this->statusFilter = 'all'; $this->sourceFilter = null; }
     public function updatedTab(): void         { $this->resetPage(); $this->selected = []; $this->statusFilter = 'all'; }
     public function updatedScoreFilter(): void { $this->resetPage(); }
     public function updatedStatusFilter(): void { $this->resetPage(); }
+
+    public function showPendingEmployee(int $clientId, string $pin): void
+    {
+        abort_unless(auth()->user()->isAdmin() || (int) auth()->user()->client_id === $clientId, 403);
+        abort_unless(
+            BiometricUserSync::where('client_id', $clientId)
+                ->where('external_employee_code', $pin)
+                ->exists(),
+            404
+        );
+
+        $this->client_id = $clientId;
+        $this->sourceFilter = null;
+        $this->tab = 'biometric';
+        $this->statusFilter = 'all';
+        $this->search = $pin;
+        $this->resetPage();
+    }
+
+    public function pendingEmployeeGroups()
+    {
+        $pendingStatuses = ['planned', 'queued', 'sent', 'awaiting_verification'];
+
+        $pendingAssignments = DeviceUserAssignment::query()
+            ->when(auth()->user()->isClient(), fn($query) => $query->where('client_id', auth()->user()->client_id))
+            ->whereIn('sync_status', $pendingStatuses)
+            ->with([
+                'client:id,name',
+                'source:id,name,serial_number',
+                'identity:id,external_employee_code,local_name,factorial_employee_id',
+                'identity.factorialEmployee:id,full_name',
+            ])
+            ->get();
+
+        $identityIds = $pendingAssignments->pluck('biometric_user_sync_id')->filter()->unique();
+        $allAssignments = DeviceUserAssignment::query()
+            ->whereIn('biometric_user_sync_id', $identityIds)
+            ->where('desired_state', 'present')
+            ->get(['biometric_user_sync_id', 'sync_status'])
+            ->groupBy('biometric_user_sync_id');
+
+        return $pendingAssignments
+            ->groupBy('biometric_user_sync_id')
+            ->map(function ($assignments, $identityId) use ($allAssignments) {
+                $first = $assignments->first();
+                $identityAssignments = $allAssignments->get($identityId, collect());
+
+                return [
+                    'client_id' => $first->client_id,
+                    'pin' => (string) $first->pin,
+                    'name' => $first->identity?->factorialEmployee?->full_name
+                        ?? $first->identity?->local_name
+                        ?? $first->name,
+                    'client_name' => $first->client?->name,
+                    'confirmed_devices' => $identityAssignments->where('sync_status', 'confirmed')->count(),
+                    'total_devices' => $identityAssignments->count(),
+                    'pending_sources' => $assignments
+                        ->map(fn($assignment) => [
+                            'name' => $assignment->source?->name,
+                            'serial_number' => $assignment->source?->serial_number,
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->values();
+    }
 
     public function setSelectAll(array $pins, bool $checked): void
     {
@@ -95,6 +178,109 @@ new class extends Component {
     public function updateAssignment(string $pin, mixed $employeeId): void
     {
         $this->assignments[$pin] = ($employeeId !== '' && $employeeId !== null) ? (int) $employeeId : null;
+    }
+
+    public function openDeviceAssignments(string $pin): void
+    {
+        $this->authorizeSelectedClient();
+        abort_unless($this->client_id, 422);
+
+        $identity = BiometricUserSync::query()
+            ->where('client_id', $this->client_id)
+            ->where('external_employee_code', $pin)
+            ->with('factorialEmployee:id,full_name')
+            ->firstOrFail();
+
+        $sourceIds = DeviceUserAssignment::query()
+            ->where('client_id', $this->client_id)
+            ->where('biometric_user_sync_id', $identity->id)
+            ->where('desired_state', 'present')
+            ->pluck('biometric_source_id')
+            ->map(fn($id) => (int) $id)
+            ->values()
+            ->all();
+
+        $this->managePin = (string) $identity->external_employee_code;
+        $this->manageName = $identity->factorialEmployee?->full_name
+            ?? $identity->local_name
+            ?? $this->managePin;
+        $this->manageSourceIds = $sourceIds;
+        $this->manageOriginalSourceIds = $sourceIds;
+        $this->manageError = null;
+        $this->showDeviceAssignmentModal = true;
+    }
+
+    public function selectAllManageSources(): void
+    {
+        $this->authorizeSelectedClient();
+        $this->manageSourceIds = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+    }
+
+    public function saveDeviceAssignments(): void
+    {
+        $this->authorizeSelectedClient();
+        abort_unless($this->client_id && $this->managePin, 422);
+
+        $identity = BiometricUserSync::query()
+            ->where('client_id', $this->client_id)
+            ->where('external_employee_code', $this->managePin)
+            ->with('factorialEmployee:id,full_name')
+            ->firstOrFail();
+
+        $selected = collect($this->manageSourceIds)->map(fn($id) => (int) $id)->unique();
+        $original = collect($this->manageOriginalSourceIds)->map(fn($id) => (int) $id)->unique();
+        $removed = $original->diff($selected);
+
+        if ($removed->isNotEmpty()) {
+            $this->manageError = 'La baja física todavía no está habilitada para estos modelos. Puedes agregar destinos sin riesgo, pero no retirar usuarios desde aquí.';
+            return;
+        }
+
+        $toAdd = $selected->diff($original);
+        if ($toAdd->isEmpty()) {
+            $this->showDeviceAssignmentModal = false;
+            return;
+        }
+
+        $sources = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('biometric_provider_id', $identity->biometric_provider_id)
+            ->where('status', 'active')
+            ->whereIn('id', $toAdd)
+            ->get();
+
+        abort_unless($sources->count() === $toAdd->count(), 422);
+
+        foreach ($sources as $source) {
+            app(\App\Services\DeviceSyncBatchService::class)->create(
+                $source,
+                [[
+                    'action' => $identity->factorial_employee_id ? 'add_factorial' : 'add_local',
+                    'pin' => $identity->external_employee_code,
+                    'name' => $identity->factorialEmployee?->full_name ?? $identity->local_name,
+                    'factorial_employee_id' => $identity->factorial_employee_id,
+                ]],
+                auth()->user(),
+                'bulk',
+                'manual'
+            );
+        }
+
+        $this->manageOriginalSourceIds = $selected->values()->all();
+        $this->showDeviceAssignmentModal = false;
+        $this->sourceFilter = null;
+        $this->statusFilter = 'all';
+    }
+
+    public function closeDeviceAssignments(): void
+    {
+        $this->showDeviceAssignmentModal = false;
+        $this->manageError = null;
     }
 
     public function mapSelected(): void
@@ -322,9 +508,11 @@ new class extends Component {
         if ($this->tab === 'biometric') {
             $biometricUsers  = collect();
             $biometricSources = collect();
+            $pendingStatuses = ['planned', 'queued', 'sent', 'awaiting_verification'];
 
             if ($this->client_id) {
                 $biometricSources = BiometricSource::where('client_id', $this->client_id)
+                    ->when($this->sourceFilter, fn($query) => $query->whereKey($this->sourceFilter))
                     ->orderBy('name')
                     ->get();
 
@@ -336,35 +524,113 @@ new class extends Component {
                 $employees = FactorialEmployee::where('client_id', $this->client_id)
                     ->get(['id', 'factorial_id', 'full_name'])
                     ->keyBy('id');
+                $identityNames = BiometricUserSync::query()
+                    ->where('client_id', $this->client_id)
+                    ->with('factorialEmployee:id,full_name')
+                    ->get()
+                    ->mapWithKeys(fn($identity) => [
+                        (string) $identity->external_employee_code => $identity->factorialEmployee?->full_name
+                            ?? $identity->local_name,
+                    ]);
 
-                $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees) {
+                $biometricSources->each(function ($source) use (&$biometricUsers, $mappings, $employees, $identityNames) {
                     foreach ($source->device_users ?? [] as $u) {
                         $pin = (string) $u['pin'];
-                        if ($this->search && stripos($pin, $this->search) === false && stripos($u['name'] ?? '', $this->search) === false) {
-                            continue;
-                        }
                         $empId  = $mappings[$pin] ?? null;
                         $emp    = $empId ? ($employees[$empId] ?? null) : null;
-                        $biometricUsers[$pin] = [
+                        $biometricUsers["{$source->id}:{$pin}"] = [
                             'pin'          => $pin,
-                            'name'         => $u['name'] ?? null,
+                            'name'         => $identityNames[$pin] ?? ($u['name'] ?? null),
                             'source'       => $source->name,
+                            'source_id'    => $source->id,
                             'mapped'       => $empId !== null,
                             'factorial_id' => $emp?->factorial_id,
+                            'device_status'=> 'reported',
                         ];
                     }
                 });
+
+                DeviceUserAssignment::query()
+                    ->where('client_id', $this->client_id)
+                    ->whereIn('biometric_source_id', $biometricSources->pluck('id'))
+                    ->with('factorialEmployee:id,factorial_id')
+                    ->get()
+                    ->each(function ($assignment) use (&$biometricUsers, $biometricSources, $mappings, $employees, $identityNames) {
+                        $pin = (string) $assignment->pin;
+                        $key = "{$assignment->biometric_source_id}:{$pin}";
+                        $existing = $biometricUsers->get($key, []);
+                        $empId = $assignment->factorial_employee_id ?? ($mappings[$pin] ?? null);
+                        $employee = $assignment->factorialEmployee
+                            ?? ($empId ? ($employees[$empId] ?? null) : null);
+
+                        $biometricUsers[$key] = array_merge($existing, [
+                            'pin' => $pin,
+                            'name' => $identityNames[$pin] ?? $assignment->name,
+                            'source' => $biometricSources->firstWhere('id', $assignment->biometric_source_id)?->name
+                                ?? '—',
+                            'source_id' => $assignment->biometric_source_id,
+                            'mapped' => $empId !== null,
+                            'factorial_id' => $employee?->factorial_id,
+                            'device_status' => $assignment->sync_status,
+                        ]);
+                    });
+
+                if ($this->search) {
+                    $biometricUsers = $biometricUsers->filter(fn($user) =>
+                        stripos($user['pin'], $this->search) !== false
+                        || stripos($user['name'] ?? '', $this->search) !== false
+                    );
+                }
+
+                $totalDeviceCount = $biometricSources->count();
+                $biometricUsers = $biometricUsers
+                    ->groupBy('pin')
+                    ->map(function ($rows, $pin) use ($pendingStatuses, $totalDeviceCount) {
+                        $devices = $rows
+                            ->sortBy('source')
+                            ->map(fn($row) => [
+                                'id' => $row['source_id'],
+                                'name' => $row['source'],
+                                'status' => $row['device_status'],
+                            ])
+                            ->values();
+
+                        $statuses = $devices->pluck('status');
+                        $overallStatus = $statuses->contains(fn($status) => in_array($status, $pendingStatuses, true))
+                            ? 'pending'
+                            : ($statuses->contains('failed') ? 'failed' : 'confirmed');
+                        $first = $rows->first();
+
+                        return [
+                            'pin' => (string) $pin,
+                            'name' => $rows->pluck('name')->filter()->first(),
+                            'mapped' => $rows->contains(fn($row) => $row['mapped']),
+                            'factorial_id' => $rows->pluck('factorial_id')->filter()->first(),
+                            'device_status' => $overallStatus,
+                            'devices' => $devices,
+                            'device_count' => $devices->count(),
+                            'total_device_count' => $totalDeviceCount,
+                        ];
+                    });
             }
 
             // Totales fijos antes de aplicar filtro de estado
             $biometricTotalCount  = $biometricUsers->count();
             $biometricMappedCount = $biometricUsers->filter(fn($u) => $u['mapped'])->count();
+            $biometricPendingCount = $biometricUsers
+                ->filter(fn($user) => $user['device_status'] === 'pending'
+                    || in_array($user['device_status'], $pendingStatuses, true))
+                ->count();
 
             // Filtro por estado
             if ($this->statusFilter === 'mapped') {
                 $biometricUsers = $biometricUsers->filter(fn($u) => $u['mapped']);
             } elseif ($this->statusFilter === 'unmapped') {
                 $biometricUsers = $biometricUsers->filter(fn($u) => !$u['mapped']);
+            } elseif ($this->statusFilter === 'pending') {
+                $biometricUsers = $biometricUsers
+                    ->filter(fn($user) => $user['device_status'] === 'pending'
+                        || in_array($user['device_status'], $pendingStatuses, true));
             }
 
             // Paginación manual sobre la colección in-memory
@@ -386,6 +652,7 @@ new class extends Component {
                 'biometricUsers'      => $biometricUsers,
                 'biometricTotalCount' => $biometricTotalCount ?? 0,
                 'biometricMappedCount'=> $biometricMappedCount ?? 0,
+                'biometricPendingCount'=> $biometricPendingCount ?? 0,
                 'biometricSources'    => $biometricSources,
                 'employees'           => collect(),
                 'unresolved'          => collect(),
@@ -457,8 +724,16 @@ new class extends Component {
         $this->addStep        = 0;
         $this->addError       = null;
         $this->addPin         = null;
+        $this->addStartedAt   = null;
         $this->addQueryCmdIds = [];
         $this->addPushCmdIds  = [];
+        $this->addBatchIds    = [];
+        $this->addSourceIds   = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
         $this->showAddModal   = true;
     }
 
@@ -467,15 +742,48 @@ new class extends Component {
         $this->showAddModal = false;
     }
 
+    public function viewAddedEmployee(): void
+    {
+        if (!$this->addPin) {
+            return;
+        }
+
+        $this->showAddModal = false;
+        $this->tab = 'biometric';
+        $this->statusFilter = 'all';
+        $this->sourceFilter = null;
+        $this->search = $this->addPin;
+        $this->resetPage();
+    }
+
+    public function selectAllAddSources(): void
+    {
+        $this->authorizeSelectedClient();
+        $this->addSourceIds = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+    }
+
     public function startAddEmployee(): void
     {
         $this->authorizeSelectedClient();
 
         $name = trim($this->addName);
         if (!$name || !$this->client_id) return;
+        if ($this->showAddModal && $this->addSourceIds === []) {
+            $this->addError = 'Selecciona al menos un biométrico de destino.';
+            return;
+        }
 
         $sources = \App\Models\BiometricSource::where('client_id', $this->client_id)
             ->where('status', 'active')
+            ->when(
+                $this->addSourceIds !== [],
+                fn($query) => $query->whereIn('id', collect($this->addSourceIds)->map(fn($id) => (int) $id))
+            )
             ->get();
 
         if ($sources->isEmpty()) {
@@ -484,131 +792,92 @@ new class extends Component {
             return;
         }
 
-        if (!$this->addAllDevices) {
-            $sources = $sources->take(1);
-        }
-
-        $this->addStep        = 1;
         $this->addError       = null;
+        $this->addStartedAt   = now()->toIso8601String();
         $this->addQueryCmdIds = [];
+        $this->addPushCmdIds  = [];
+        $this->addBatchIds    = [];
 
-        foreach ($sources as $source) {
-            $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
-            $cmd = \App\Models\DeviceCommand::create([
-                'biometric_source_id' => $source->id,
-                'command_seq'         => $seq,
-                'command_type'        => 'query_users',
-                'payload'             => 'DATA QUERY USERINFO',
-                'status'              => 'pending',
-            ]);
-            $this->addQueryCmdIds[] = $cmd->id;
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($sources, $name) {
+                // Serialize PIN allocation per client so two simultaneous registrations
+                // cannot choose the same number.
+                \App\Models\Client::whereKey($this->client_id)->lockForUpdate()->firstOrFail();
+
+                $maxInventoryPin = \App\Models\BiometricSource::where('client_id', $this->client_id)
+                    ->where('status', 'active')
+                    ->get()
+                    ->flatMap(fn($source) => collect($source->device_users ?? [])->pluck('pin'))
+                    ->map(fn($pin) => (int) $pin)
+                    ->max() ?? 0;
+
+                $maxIdentityPin = \App\Models\BiometricUserSync::where('client_id', $this->client_id)
+                    ->pluck('external_employee_code')
+                    ->map(fn($pin) => (int) $pin)
+                    ->max() ?? 0;
+
+                $maxAssignmentPin = \App\Models\DeviceUserAssignment::where('client_id', $this->client_id)
+                    ->pluck('pin')
+                    ->map(fn($pin) => (int) $pin)
+                    ->max() ?? 0;
+
+                $this->addPin = (string) (max($maxInventoryPin, $maxIdentityPin, $maxAssignmentPin) + 1);
+                $this->addStep = 3;
+
+                foreach ($sources as $source) {
+                    $batch = app(\App\Services\DeviceSyncBatchService::class)->create(
+                        $source,
+                        [[
+                            'action' => 'add_local',
+                            'pin' => $this->addPin,
+                            'name' => $name,
+                        ]],
+                        auth()->user(),
+                        'bulk',
+                        'manual'
+                    );
+                    $this->addBatchIds[] = $batch->id;
+                }
+
+                $hasDisconnectedDestination = $sources->contains(
+                    fn($source) => !$source->last_ping_at || $source->last_ping_at->lt(now()->subMinutes(2))
+                );
+
+                if ($hasDisconnectedDestination) {
+                    $this->addStep = 5;
+                }
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError = 'No fue posible preparar el registro. Intenta nuevamente.';
+            $this->addStep = -1;
         }
     }
 
     public function pollAddEmployee(): void
     {
         $this->authorizeSelectedClient();
-        if ($this->addStep === 1) {
-            // Waiting for all QUERY USERINFO commands to be acknowledged
-            $pending = \App\Models\DeviceCommand::whereIn('id', $this->addQueryCmdIds)
-                ->whereNotIn('status', ['acknowledged', 'failed'])
-                ->count();
+        if (in_array($this->addStep, [3, 5], true)) {
+            $batches = \App\Models\DeviceSyncBatch::whereIn('id', $this->addBatchIds)->get();
+            $pending = $batches->sum('pending_items');
 
-            if ($pending > 0) return;
+            if ($pending > 0) {
+                $startedAt = $this->addStartedAt
+                    ? \Illuminate\Support\Carbon::parse($this->addStartedAt)
+                    : now();
 
-            // Step 2: calculate next PIN
-            $this->addStep = 2;
+                if ($this->addStep === 3 && $startedAt->diffInSeconds(now()) >= 30) {
+                    $this->addStep = 5;
+                }
 
-            $maxPin = \App\Models\BiometricSource::where('client_id', $this->client_id)
-                ->where('status', 'active')
-                ->get()
-                ->flatMap(fn($s) => collect($s->device_users ?? [])->pluck('pin'))
-                ->map(fn($p) => (int) $p)
-                ->max() ?? 0;
-
-            // Also consider existing BiometricUserSync codes to avoid conflicts
-            $maxSync = \App\Models\BiometricUserSync::where('client_id', $this->client_id)
-                ->selectRaw('MAX(CAST(external_employee_code AS UNSIGNED)) as max_pin')
-                ->value('max_pin') ?? 0;
-
-            $this->addPin  = (string) (max($maxPin, $maxSync) + 1);
-            $this->addStep = 3;
-
-            // Push to all active devices
-            $sources = \App\Models\BiometricSource::where('client_id', $this->client_id)
-                ->where('status', 'active')
-                ->get();
-
-            if (!$this->addAllDevices) {
-                $sources = $sources->take(1);
-            }
-
-            $pin  = $this->addPin;
-            $name = trim($this->addName);
-            $this->addPushCmdIds = [];
-
-            foreach ($sources as $source) {
-                $seq = \App\Models\DeviceCommand::where('biometric_source_id', $source->id)->max('command_seq') + 1;
-                $cmd = \App\Models\DeviceCommand::create([
-                    'biometric_source_id' => $source->id,
-                    'command_seq'         => $seq,
-                    'command_type'        => 'push_user',
-                    'payload'             => "DATA UPDATE USERINFO Pin={$pin}\tName={$name}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000000000000\tVerify=0\tVein=0\tDuress=0",
-                    'status'              => 'pending',
-                ]);
-                $this->addPushCmdIds[] = $cmd->id;
-            }
-
-            return;
-        }
-
-        if ($this->addStep === 3) {
-            // Waiting for all PUSH commands to be acknowledged
-            $failed = \App\Models\DeviceCommand::whereIn('id', $this->addPushCmdIds)
-                ->where('status', 'failed')
-                ->count();
-
-            $pending = \App\Models\DeviceCommand::whereIn('id', $this->addPushCmdIds)
-                ->whereNotIn('status', ['acknowledged', 'failed'])
-                ->count();
-
-            if ($pending > 0) return;
-
-            if ($failed > 0 && $failed === count($this->addPushCmdIds)) {
-                $this->addError = 'El dispositivo rechazó el comando. Verifica la conexión e intenta de nuevo.';
-                $this->addStep  = -1;
                 return;
             }
 
-            // Step 4: save to DB
-            $provider = \App\Models\BiometricProvider::where('client_id', $this->client_id)->first();
-
-            if ($provider) {
-                \App\Models\BiometricUserSync::create([
-                    'client_id'              => $this->client_id,
-                    'biometric_provider_id'  => $provider->id,
-                    'factorial_employee_id'  => null,
-                    'external_employee_code' => $this->addPin,
-                    'local_name'             => trim($this->addName),
-                    'sync_status'            => 'synced',
-                    'last_attempt_at'        => now(),
-                    'synced_at'              => now(),
-                ]);
-
-                // Update device_users cache on all sources
-                \App\Models\BiometricSource::where('client_id', $this->client_id)
-                    ->where('status', 'active')
-                    ->get()
-                    ->each(function ($source) {
-                        $existing = collect($source->device_users ?? []);
-                        $pin      = $this->addPin;
-                        $name     = trim($this->addName);
-                        if ($existing->where('pin', $pin)->isEmpty()) {
-                            $source->update([
-                                'device_users' => $existing->push(['pin' => $pin, 'name' => $name, 'card' => '', 'role' => '0'])->values()->toArray(),
-                            ]);
-                        }
-                    });
+            $failed = $batches->sum('failed_items');
+            if ($failed > 0 && $failed === $batches->sum('total_items')) {
+                $this->addError = 'El dispositivo rechazó el comando. Verifica la conexión e intenta de nuevo.';
+                $this->addStep  = -1;
+                return;
             }
 
             $this->addStep = 4;
@@ -620,6 +889,7 @@ new class extends Component {
         $this->csvFile     = null;
         $this->importError = '';
         $this->csvResult   = null;
+        $this->csvSourceIds = [];
         $this->showCsvModal = true;
     }
 
@@ -629,6 +899,7 @@ new class extends Component {
         $this->csvFile      = null;
         $this->importError  = '';
         $this->csvResult    = null;
+        $this->csvSourceIds = [];
     }
 
     public function uploadCsv(): void
@@ -638,6 +909,12 @@ new class extends Component {
         $this->csvResult   = null;
 
         if (!$this->client_id) { $this->importError = 'Selecciona una empresa primero.'; return; }
+
+        $sourceIds = collect($this->csvSourceIds)->map(fn($id) => (int) $id)->filter()->unique()->values();
+        if ($sourceIds->isEmpty()) {
+            $this->importError = 'Selecciona al menos un dispositivo biométrico de destino.';
+            return;
+        }
 
         $provider = BiometricProvider::where('client_id', $this->client_id)->first();
         if (!$provider) { $this->importError = 'No hay proveedor biométrico para esta empresa.'; return; }
@@ -675,11 +952,12 @@ new class extends Component {
             $pin  = trim($row['pin'] ?? '');
             $name = trim($row['nombre'] ?? $row['name'] ?? '');
             if ($pin === '') continue;
+            $syncFactorial = in_array(strtolower(trim((string) ($row['sincronizar_factorial'] ?? 'no'))), ['si', 'sí', '1', 'true'], true);
             $rows[] = [
                 'pin'  => mb_convert_encoding($pin,  'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
                 'name' => mb_convert_encoding($name, 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1252'),
-                'card' => '',
-                'role' => '0',
+                'sync_factorial' => $syncFactorial,
+                'factorial_id' => trim((string) ($row['factorial_id'] ?? '')),
             ];
         }
         fclose($handle);
@@ -689,12 +967,61 @@ new class extends Component {
             return;
         }
 
-        // Actualizar device_users en TODOS los dispositivos del proveedor (merge)
-        $sources = BiometricSource::where('biometric_provider_id', $provider->id)->get();
+        $duplicatePin = collect($rows)->countBy('pin')->first(fn($count) => $count > 1);
+        if ($duplicatePin) {
+            $this->importError = 'El archivo contiene PINs repetidos.';
+            return;
+        }
+
+        $employeesByFactorialId = FactorialEmployee::query()
+            ->where('client_id', $this->client_id)
+            ->whereIn('factorial_id', collect($rows)->where('sync_factorial', true)->pluck('factorial_id'))
+            ->get()
+            ->keyBy(fn($employee) => (string) $employee->factorial_id);
+
+        foreach ($rows as &$row) {
+            $employee = $row['sync_factorial'] ? $employeesByFactorialId->get($row['factorial_id']) : null;
+            if ($row['sync_factorial'] && !$employee) {
+                $this->importError = "No se encontró en Factorial el ID {$row['factorial_id']} (PIN {$row['pin']}).";
+                return;
+            }
+            $row['factorial_employee_id'] = $employee?->id;
+        }
+        unset($row);
+
+        $sources = BiometricSource::query()
+            ->where('client_id', $this->client_id)
+            ->where('biometric_provider_id', $provider->id)
+            ->where('status', 'active')
+            ->whereIn('id', $sourceIds)
+            ->get();
+
+        if ($sources->count() !== $sourceIds->count()) {
+            abort(403);
+        }
         foreach ($sources as $source) {
-            $existing = collect($source->device_users ?? []);
-            $merged   = $existing->concat($rows)->unique('pin')->values()->toArray();
-            $source->update(['device_users' => $merged, 'device_users_fetched_at' => now()]);
+            $reportedPins = $source->inventorySnapshots()
+                ->latest('captured_at')
+                ->first()?->users()
+                ->pluck('pin')
+                ->map(fn($pin) => (string) $pin)
+                ->flip() ?? collect();
+
+            $decisions = collect($rows)->map(fn($row) => [
+                'action' => match (true) {
+                    $reportedPins->has((string) $row['pin']) && $row['sync_factorial'] => 'map_factorial',
+                    $reportedPins->has((string) $row['pin']) => 'keep_local',
+                    $row['sync_factorial'] => 'add_factorial',
+                    default => 'add_local',
+                },
+                'pin' => $row['pin'],
+                'name' => $row['name'],
+                'factorial_employee_id' => $row['factorial_employee_id'],
+            ])->all();
+
+            app(\App\Services\DeviceSyncBatchService::class)->create(
+                $source, $decisions, auth()->user(), 'bulk', 'csv'
+            );
         }
 
         $this->csvResult = [
@@ -822,7 +1149,7 @@ new class extends Component {
                     @php
                         $pillOptions = $tab === 'factorial'
                             ? ['all' => 'Todos', 'mapped' => 'Con PIN', 'unmapped' => 'Sin PIN']
-                            : ['all' => 'Todos', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'];
+                            : ['all' => 'Todos', 'pending' => 'Pendientes', 'mapped' => 'Mapeados', 'unmapped' => 'Sin asignar'];
                     @endphp
                     @foreach($pillOptions as $val => $label)
                     <button wire:click="$set('statusFilter', '{{ $val }}')"
@@ -857,7 +1184,18 @@ new class extends Component {
                     </span>
                     @endif
                 @elseif($tab === 'biometric')
-                    <span class="text-xs text-gray-400">{{ $biometricMappedCount }} de {{ $biometricTotalCount }} empleado(s) mapeados</span>
+                    @if($sourceFilter)
+                    <button wire:click="$set('sourceFilter', null)"
+                        class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200">
+                        {{ $biometricSources->first()?->name }} · quitar filtro ×
+                    </button>
+                    @endif
+                    <span class="text-xs text-gray-400">
+                        {{ $biometricMappedCount }} de {{ $biometricTotalCount }} empleado(s) mapeados
+                        @if($biometricPendingCount > 0)
+                            · <span class="font-medium text-amber-600">{{ $biometricPendingCount }} pendientes</span>
+                        @endif
+                    </span>
                     <button wire:click="syncFromDevices" wire:loading.attr="disabled" title="Solicitar lista actualizada de usuarios a los dispositivos"
                         class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition">
                         <svg wire:loading.remove wire:target="syncFromDevices" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -866,7 +1204,7 @@ new class extends Component {
                         <svg wire:loading wire:target="syncFromDevices" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
-                        Sync
+                        Consultar biométricos
                     </button>
                     <button wire:click="openAddModal"
                         class="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition">
@@ -887,13 +1225,46 @@ new class extends Component {
 
     {{-- Sin empresa: prompt --}}
     @if(!$client_id)
+    @php
+        $pendingGroups = $this->pendingEmployeeGroups();
+    @endphp
     <div class="bg-white shadow rounded-lg">
-        <div class="px-6 py-16 text-center">
+        <div class="px-6 py-12 text-center">
             <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
             </svg>
             <p class="text-base font-medium text-gray-700">Selecciona una empresa para continuar</p>
             <p class="mt-1 text-sm text-gray-400">Elige una empresa en el selector de arriba para ver los empleados, mapping y registros pendientes.</p>
+
+            @if($pendingGroups->isNotEmpty())
+            <div class="mx-auto mt-6 max-w-2xl text-left">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">Pendientes de confirmar</p>
+                <div class="space-y-2">
+                    @foreach($pendingGroups as $group)
+                    <button wire:click="showPendingEmployee({{ $group['client_id'] }}, '{{ $group['pin'] }}')"
+                        class="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left transition hover:bg-amber-100">
+                        <span>
+                            <span class="block text-sm font-semibold text-gray-800">
+                                {{ $group['name'] }} · PIN {{ $group['pin'] }}
+                            </span>
+                            <span class="block text-xs text-gray-500">
+                                {{ $group['client_name'] }} · confirmado en
+                                {{ $group['confirmed_devices'] }} de {{ $group['total_devices'] }} biométricos
+                            </span>
+                            <span class="mt-1 block text-xs text-amber-700">
+                                Pendientes:
+                                {{ collect($group['pending_sources'])->map(fn($source) => $source['name'] ?: $source['serial_number'])->join(', ') }}
+                            </span>
+                        </span>
+                        <span class="inline-flex items-center gap-2">
+                            <span class="rounded-full bg-amber-500 px-2.5 py-1 text-xs font-bold text-white">{{ count($group['pending_sources']) }}</span>
+                            <span class="text-sm font-medium text-amber-700">Ver empleado →</span>
+                        </span>
+                    </button>
+                    @endforeach
+                </div>
+            </div>
+            @endif
         </div>
     </div>
     @else
@@ -909,9 +1280,11 @@ new class extends Component {
                 <tr>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en dispositivo</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Biométricos</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado en equipo</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mapping</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Id Factorial</th>
+                    <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -923,11 +1296,41 @@ new class extends Component {
                     <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-700">
                         {{ $user['name'] ?? '—' }}
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
-                        {{ $user['source'] }}
+                    <td class="px-5 py-3 text-center text-sm text-gray-500">
+                        <details class="group inline-block text-left">
+                            <summary class="cursor-pointer list-none font-medium text-indigo-600 hover:text-indigo-800">
+                                {{ $user['device_count'] }} de {{ $user['total_device_count'] }}
+                                <span class="ml-1 text-xs text-gray-400 group-open:hidden">ver</span>
+                            </summary>
+                            <div class="mt-2 flex max-w-md flex-wrap gap-1">
+                                @foreach($user['devices'] as $device)
+                                <span class="inline-flex rounded-full px-2 py-0.5 text-xs
+                                    {{ in_array($device['status'], ['planned', 'queued', 'sent', 'awaiting_verification'], true)
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : ($device['status'] === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600') }}">
+                                    {{ $device['name'] }}
+                                </span>
+                                @endforeach
+                            </div>
+                        </details>
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap">
-                        <div class="flex items-center h-full">
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
+                        @php
+                            $deviceStatus = $user['device_status'] ?? 'reported';
+                            $isPendingDevice = in_array($deviceStatus, ['pending', 'planned', 'queued', 'sent', 'awaiting_verification'], true);
+                        @endphp
+                        @if($isPendingDevice)
+                            <span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+                                {{ $deviceStatus === 'awaiting_verification' ? 'Recibido · por confirmar' : 'Pendiente de entrega' }}
+                            </span>
+                        @elseif($deviceStatus === 'failed')
+                            <span class="inline-flex rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700">Error</span>
+                        @else
+                            <span class="inline-flex rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">Confirmado</span>
+                        @endif
+                    </td>
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
+                        <div class="flex h-full items-center justify-center">
                         <button type="button" disabled
                             class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-default
                                 {{ $user['mapped'] ? 'bg-green-500' : 'bg-gray-200' }}">
@@ -936,13 +1339,19 @@ new class extends Component {
                         </button>
                         </div>
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap font-mono text-sm text-gray-500">
+                    <td class="px-5 py-3 whitespace-nowrap text-center font-mono text-sm text-gray-500">
                         {{ $user['factorial_id'] ?? '—' }}
+                    </td>
+                    <td class="px-5 py-3 whitespace-nowrap text-center">
+                        <button wire:click="openDeviceAssignments('{{ $user['pin'] }}')"
+                            class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                            Administrar
+                        </button>
                     </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500">
                         No hay empleados registrados en el biométrico.
                     </td>
                 </tr>
@@ -1160,7 +1569,7 @@ new class extends Component {
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900">Importar usuarios desde CSV</h3>
-                    <p class="text-xs text-gray-400 mt-0.5">Los usuarios se agregarán a todos los dispositivos del proveedor.</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Elige el biométrico de destino; Factorial es opcional por usuario.</p>
                 </div>
                 <button wire:click="closeCsvModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
@@ -1168,17 +1577,40 @@ new class extends Component {
                 @if($csvResult)
                     <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-5 py-3 space-y-1">
                         <p class="text-sm font-semibold text-emerald-800">Archivo importado correctamente</p>
-                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios actualizados en {{ $csvResult['devices'] }} dispositivo(s).</p>
-                        <p class="text-xs text-emerald-600 mt-1">Ve al tab <strong>Mapping</strong> para asignarlos a empleados de Factorial.</p>
+                        <p class="text-sm text-emerald-700">{{ $csvResult['total'] }} usuarios encolados en {{ $csvResult['devices'] }} dispositivo(s).</p>
+                        <p class="text-xs text-emerald-600 mt-1">Se marcarán como confirmados sólo después de releer cada equipo.</p>
                     </div>
                 @else
+                    @php
+                        $csvSources = \App\Models\BiometricSource::query()
+                            ->where('client_id', $client_id)
+                            ->where('status', 'active')
+                            ->orderBy('name')
+                            ->get(['id', 'name', 'serial_number']);
+                    @endphp
+                    <div>
+                        <p class="mb-2 text-sm font-medium text-gray-700">Dispositivos de destino <span class="text-red-500">*</span></p>
+                        <div class="max-h-36 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                            @forelse($csvSources as $source)
+                                <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                                    <input wire:model="csvSourceIds" type="checkbox" value="{{ $source->id }}"
+                                        class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span>{{ $source->name }}</span>
+                                    <span class="font-mono text-xs text-gray-400">{{ $source->serial_number }}</span>
+                                </label>
+                            @empty
+                                <p class="text-xs text-amber-700">No hay dispositivos activos para esta empresa.</p>
+                            @endforelse
+                        </div>
+                    </div>
                     <input wire:model="csvFile" type="file" accept=".csv,.txt"
                         class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"/>
                     @if($importError)
                         <p class="text-xs text-red-600">{{ $importError }}</p>
                     @endif
                     <p class="text-xs text-gray-400">
-                        Columnas requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>
+                        Requeridas: <code class="bg-gray-100 px-1 rounded">pin</code>, <code class="bg-gray-100 px-1 rounded">nombre</code>. Opcionales:
+                        <code class="bg-gray-100 px-1 rounded">sincronizar_factorial</code> y <code class="bg-gray-100 px-1 rounded">factorial_id</code>.
                         &nbsp;·&nbsp;
                         <a href="{{ route('templates.empleados') }}" class="text-emerald-600 hover:text-emerald-800 underline">Descargar plantilla</a>
                     </p>
@@ -1202,7 +1634,7 @@ new class extends Component {
     @endif
 
     {{-- ── Poll para modal Agregar Empleado ──────────────────────────── --}}
-    @if($showAddModal && in_array($addStep, [1, 3]))
+    @if($showAddModal && in_array($addStep, [3, 5], true))
     <div wire:poll.3000ms="pollAddEmployee"></div>
     @endif
 
@@ -1212,7 +1644,7 @@ new class extends Component {
         <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-base font-semibold text-gray-900">Agregar Empleado al Biométrico</h3>
-                @if($addStep === 0 || $addStep === 4 || $addStep === -1)
+                @if(in_array($addStep, [0, 4, 5, -1], true))
                 <button wire:click="closeAddModal" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -1230,7 +1662,35 @@ new class extends Component {
                         <input wire:model="addName" type="text" placeholder="Ej. Juan Pérez López"
                             class="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"/>
                     </div>
-                    <p class="text-xs text-gray-400">El PIN se asignará automáticamente como el siguiente disponible. Se enviará a todos los dispositivos de la empresa.</p>
+                    @php
+                        $addSources = BiometricSource::query()
+                            ->where('client_id', $client_id)
+                            ->where('status', 'active')
+                            ->orderBy('name')
+                            ->get(['id', 'name', 'serial_number']);
+                    @endphp
+                    <div>
+                        <div class="mb-2 flex items-center justify-between">
+                            <label class="text-sm font-medium text-gray-700">Biométricos de destino</label>
+                            <button wire:click="selectAllAddSources" type="button"
+                                class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                                Seleccionar todos
+                            </button>
+                        </div>
+                        <div class="max-h-40 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                            @foreach($addSources as $source)
+                            <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                                <input wire:model="addSourceIds" type="checkbox" value="{{ $source->id }}"
+                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <span>{{ $source->name }}</span>
+                            </label>
+                            @endforeach
+                        </div>
+                    </div>
+                    @if($addError)
+                        <p class="text-xs text-red-600">{{ $addError }}</p>
+                    @endif
+                    <p class="text-xs text-gray-400">El PIN se asignará una sola vez y sólo se enviará a los biométricos seleccionados.</p>
                 </div>
                 @endif
 
@@ -1238,8 +1698,8 @@ new class extends Component {
                 @if($addStep > 0 && $addStep !== -1)
                 @php
                     $steps = [
-                        1 => ['label' => 'Consultando IDs en dispositivo',    'desc' => 'Esperando respuesta del checador…'],
-                        2 => ['label' => 'Calculando PIN disponible',          'desc' => 'Asignando siguiente número libre…'],
+                        1 => ['label' => 'Validando dispositivos',             'desc' => 'Destinos disponibles verificados'],
+                        2 => ['label' => 'Asignando PIN disponible',           'desc' => 'Se reservó el siguiente número libre'],
                         3 => ['label' => 'Registrando en dispositivo',         'desc' => $addPin ? "Enviando PIN {$addPin} — {$addName}…" : 'Enviando al checador…'],
                         4 => ['label' => 'Guardado en sistema',                'desc' => $addPin ? "Empleado registrado con PIN {$addPin}" : 'Listo'],
                     ];
@@ -1247,9 +1707,9 @@ new class extends Component {
                 <div class="space-y-3">
                     @foreach($steps as $n => $s)
                     @php
-                        $done    = $addStep > $n;
-                        $active  = $addStep === $n;
-                        $pending = $addStep < $n;
+                        $done    = $addStep === 5 ? $n < 3 : $addStep > $n;
+                        $active  = $addStep === 5 ? false : $addStep === $n;
+                        $pending = $addStep === 5 ? $n >= 3 : $addStep < $n;
                     @endphp
                     <div class="flex items-start gap-3">
                         <div class="mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center
@@ -1286,6 +1746,16 @@ new class extends Component {
                         <p class="text-xs text-gray-500 mt-1">Sus registros de asistencia se guardarán en el sistema. No se sincronizan a Factorial.</p>
                     </div>
                     @endif
+
+                    @if($addStep === 5)
+                    <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p class="text-sm font-semibold text-amber-800">Alta pendiente de entrega</p>
+                        <p class="mt-0.5 text-xs text-amber-700">
+                            Guardamos a <strong>{{ $addName }}</strong> con el PIN <strong>{{ $addPin }}</strong>.
+                            Uno o más biométricos todavía no han recogido la instrucción. Seguiremos intentando automáticamente.
+                        </p>
+                    </div>
+                    @endif
                 </div>
                 @endif
 
@@ -1308,11 +1778,17 @@ new class extends Component {
                     class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
                     Iniciar
                 </button>
-                @elseif($addStep === 4 || $addStep === -1)
+                @elseif(in_array($addStep, [4, 5, -1], true))
                 <button wire:click="closeAddModal"
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
                     Cerrar
                 </button>
+                @if(in_array($addStep, [4, 5], true))
+                <button wire:click="viewAddedEmployee"
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                    Ver empleado
+                </button>
+                @endif
                 @if($addStep === -1)
                 <button wire:click="openAddModal"
                     class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
@@ -1320,6 +1796,79 @@ new class extends Component {
                 </button>
                 @endif
                 @endif
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ── Modal: administrar biométricos del empleado ─────────────── --}}
+    @if($showDeviceAssignmentModal)
+    @php
+        $manageSources = BiometricSource::query()
+            ->where('client_id', $client_id)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get(['id', 'name', 'serial_number']);
+    @endphp
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div class="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Administrar biométricos</h3>
+                    <p class="mt-0.5 text-xs text-gray-500">{{ $manageName }} · PIN {{ $managePin }}</p>
+                </div>
+                <button wire:click="closeDeviceAssignments" class="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+
+            <div class="space-y-4 px-6 py-5">
+                <div class="flex items-center justify-between">
+                    <p class="text-sm font-medium text-gray-700">Destinos asignados</p>
+                    <button wire:click="selectAllManageSources" type="button"
+                        class="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                        Seleccionar todos
+                    </button>
+                </div>
+
+                <div class="max-h-72 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                    @foreach($manageSources as $source)
+                    @php
+                        $alreadyAssigned = in_array($source->id, $manageOriginalSourceIds, true);
+                    @endphp
+                    <label class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm
+                        {{ $alreadyAssigned ? 'bg-emerald-50' : 'hover:bg-gray-50' }}">
+                        <span class="flex items-center gap-2">
+                            <input wire:model="manageSourceIds" type="checkbox" value="{{ $source->id }}"
+                                @disabled($alreadyAssigned)
+                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-gray-700">{{ $source->name }}</span>
+                        </span>
+                        @if($alreadyAssigned)
+                            <span class="text-xs font-medium text-emerald-700">Asignado</span>
+                        @endif
+                    </label>
+                    @endforeach
+                </div>
+
+                <p class="text-xs text-gray-500">
+                    Sólo se crearán comandos para destinos nuevos. Las asignaciones existentes no se reenviarán.
+                </p>
+
+                @if($manageError)
+                <div class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    {{ $manageError }}
+                </div>
+                @endif
+            </div>
+
+            <div class="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button wire:click="closeDeviceAssignments"
+                    class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button wire:click="saveDeviceAssignments" wire:loading.attr="disabled"
+                    class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                    Guardar destinos
+                </button>
             </div>
         </div>
     </div>

@@ -46,8 +46,9 @@ class DeviceEmployeeRefreshTest extends TestCase
         $this->assignment($client, $provider, $source, '100', 'Persona Correcta');
         $this->assignment($client, $provider, $source, '200', 'Persona Actualizada');
         $this->assignment($client, $provider, $source, '300', 'Persona Faltante');
+        $source->update(['device_users_fetched_at' => now()->addSecond()]);
 
-        $result = app(DeviceEmployeeRefreshService::class)->refresh($source);
+        $result = app(DeviceEmployeeRefreshService::class)->refresh($source->fresh());
 
         $this->assertSame(3, $result['assigned']);
         $this->assertSame(2, $result['queued']);
@@ -92,6 +93,38 @@ class DeviceEmployeeRefreshTest extends TestCase
 
         $this->assertSame(0, $result['queued']);
         $this->assertSame(1, $result['active']);
+        $this->assertSame(0, DeviceCommand::count());
+    }
+
+    public function test_refresh_trusts_confirmed_assignments_when_individual_inventory_is_stale(): void
+    {
+        $client = Client::create(['name' => 'Stale Client', 'slug' => 'stale-client']);
+        $connection = FactorialConnection::create([
+            'client_id' => $client->id,
+            'name' => 'Stale Connection',
+            'resource_owner_type' => 'company',
+        ]);
+        $provider = BiometricProvider::create([
+            'client_id' => $client->id,
+            'factorial_connection_id' => $connection->id,
+            'vendor' => 'zkteco',
+            'status' => 'active',
+        ]);
+        $source = BiometricSource::create([
+            'client_id' => $client->id,
+            'biometric_provider_id' => $provider->id,
+            'name' => 'Stale Device',
+            'serial_number' => 'STALE-SN',
+            'status' => 'active',
+            'device_users' => [],
+            'device_users_fetched_at' => now()->subDay(),
+        ]);
+        $this->assignment($client, $provider, $source, '500', 'Persona Confirmada');
+
+        $result = app(DeviceEmployeeRefreshService::class)->refresh($source->fresh());
+
+        $this->assertSame(0, $result['queued']);
+        $this->assertSame(1, $result['unchanged']);
         $this->assertSame(0, DeviceCommand::count());
     }
 

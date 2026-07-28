@@ -8,7 +8,10 @@ use App\Models\User;
 
 class DeviceEmployeeRefreshService
 {
-    public function __construct(private readonly DeviceSyncBatchService $batches) {}
+    public function __construct(
+        private readonly DeviceSyncBatchService $batches,
+        private readonly DeviceProtocolResolver $protocols,
+    ) {}
 
     public function refresh(BiometricSource $source, ?User $creator = null): array
     {
@@ -33,11 +36,6 @@ class DeviceEmployeeRefreshService
             $deviceName = $this->deviceName($systemName);
             $reportedName = data_get($inventory->get((string) $assignment->pin), 'name');
 
-            if ($reportedName !== null && $this->comparableName($reportedName) === $this->comparableName($deviceName)) {
-                $unchanged++;
-                continue;
-            }
-
             $hasActiveOperation = in_array(
                 $assignment->sync_status,
                 ['planned', 'queued', 'sent', 'awaiting_verification'],
@@ -48,6 +46,26 @@ class DeviceEmployeeRefreshService
 
             if ($hasActiveOperation) {
                 $active++;
+                continue;
+            }
+
+            $systemNameChanged = $this->comparableName($assignment->name)
+                !== $this->comparableName($deviceName);
+            $hasFreshDetailedInventory = $this->protocols->inventoryMode($source) === 'detailed'
+                && $source->device_users_fetched_at
+                && (!$assignment->confirmed_at || $source->device_users_fetched_at->gte($assignment->confirmed_at));
+
+            // An aggregate-only device cannot prove which individual PINs it has.
+            // A confirmed assignment remains the source of truth unless its
+            // canonical name changed. This prevents every refresh click from
+            // re-sending the same users against an old inventory cache.
+            if ($assignment->sync_status === 'confirmed' && !$systemNameChanged && !$hasFreshDetailedInventory) {
+                $unchanged++;
+                continue;
+            }
+
+            if ($reportedName !== null && $this->comparableName($reportedName) === $this->comparableName($deviceName)) {
+                $unchanged++;
                 continue;
             }
 

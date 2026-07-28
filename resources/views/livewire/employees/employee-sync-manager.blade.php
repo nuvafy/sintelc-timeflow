@@ -137,6 +137,7 @@ new class extends Component {
         $pendingAssignments = DeviceUserAssignment::query()
             ->when(auth()->user()->isClient(), fn($query) => $query->where('client_id', auth()->user()->client_id))
             ->whereIn('sync_status', $pendingStatuses)
+            ->whereNotNull('biometric_user_sync_id')
             ->with([
                 'client:id,name',
                 'source:id,name,serial_number',
@@ -146,14 +147,21 @@ new class extends Component {
             ->get();
 
         $identityIds = $pendingAssignments->pluck('biometric_user_sync_id')->filter()->unique();
+
         $allAssignments = DeviceUserAssignment::query()
             ->whereIn('biometric_user_sync_id', $identityIds)
             ->where('desired_state', 'present')
             ->get(['biometric_user_sync_id', 'sync_status'])
             ->groupBy('biometric_user_sync_id');
 
+        // Solo mostrar empleados sin ningún dispositivo confirmado aún
+        $confirmedIds = $allAssignments
+            ->filter(fn($rows) => $rows->contains('sync_status', 'confirmed'))
+            ->keys();
+
         return $pendingAssignments
             ->groupBy('biometric_user_sync_id')
+            ->reject(fn($assignments, $identityId) => $confirmedIds->contains($identityId))
             ->map(function ($assignments, $identityId) use ($allAssignments) {
                 $first = $assignments->first();
                 $identityAssignments = $allAssignments->get($identityId, collect());

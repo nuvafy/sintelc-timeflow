@@ -18,12 +18,19 @@ new class extends Component
                 BiometricSource::whereNull('client_id')->count()
             );
             $this->unresolvedEmployees = Cache::remember('nav.pending_device_employees', 60, function () {
+                // IDs con al menos un assignment confirmado
                 $confirmedSyncIds = DeviceUserAssignment::where('sync_status', 'confirmed')
                     ->whereNotNull('biometric_user_sync_id')
                     ->distinct()
                     ->pluck('biometric_user_sync_id');
 
-                return \App\Models\BiometricUserSync::whereNotIn('id', $confirmedSyncIds)->count();
+                // IDs con al menos un assignment activo (existen en algún dispositivo)
+                $activeSyncIds = DeviceUserAssignment::whereNotNull('biometric_user_sync_id')
+                    ->distinct()
+                    ->pluck('biometric_user_sync_id');
+
+                // Solo los que tienen asignaciones pero ninguna confirmada
+                return $activeSyncIds->diff($confirmedSyncIds)->count();
             });
         }
     }

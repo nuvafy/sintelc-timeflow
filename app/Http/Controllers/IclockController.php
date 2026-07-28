@@ -75,6 +75,8 @@ class IclockController extends Controller
 
     public function cdata(Request $request)
     {
+        abort_if(strlen($request->getContent()) > 4_000_000, 413);
+
         $sn      = $request->query('SN');
         $table   = $request->query('table');
         $options = $request->query('options');
@@ -278,7 +280,6 @@ class IclockController extends Controller
 
         // ── Pre-cargar claves únicas ya existentes (evita N+1 de exists()) ──
         $existingKeys = AttendanceLog::where('biometric_source_id', $source->id)
-            ->where('occurred_at', '>=', now()->subDays(7))
             ->pluck(\Illuminate\Support\Facades\DB::raw("CONCAT(employee_code, '|', occurred_at)"))
             ->flip();
 
@@ -331,7 +332,7 @@ class IclockController extends Controller
         }
 
         if (!empty($records)) {
-            AttendanceLog::insert($records);
+            AttendanceLog::insertOrIgnore($records);
 
             // ── Despachar jobs para records resueltos ────────────────────
             $resolvedCodes = array_column(
@@ -450,15 +451,6 @@ class IclockController extends Controller
 
         $attendanceConfig = \App\Models\ClientAttendanceConfig::where('client_id', $source->client_id)->first();
 
-        $key = $pin . '|' . $occurredAt->format('Y-m-d H:i:s');
-        $exists = AttendanceLog::where('biometric_source_id', $source->id)
-            ->whereRaw("CONCAT(employee_code, '|', occurred_at) = ?", [$key])
-            ->exists();
-
-        if ($exists) {
-            return $this->plainResponse('OK');
-        }
-
         $employeeId = \App\Models\BiometricUserSync::where('biometric_provider_id', $source->biometric_provider_id)
             ->where('external_employee_code', $pin)
             ->value('factorial_employee_id');
@@ -466,16 +458,23 @@ class IclockController extends Controller
         $checkType = $attendanceConfig?->resolveCheckType((string) $status)
             ?? \App\Models\ClientAttendanceConfig::defaultCheckType($status);
 
-        $log = AttendanceLog::create([
-            'client_id'             => $source->client_id,
-            'biometric_source_id'   => $source->id,
-            'factorial_employee_id' => $employeeId,
-            'employee_code'         => $pin,
-            'check_type'            => $checkType,
-            'occurred_at'           => $occurredAt,
-            'raw_payload'           => json_encode($fields),
-            'sync_status'           => $employeeId && $checkType !== 'unknown' ? 'resolved' : 'pending',
-        ]);
+        try {
+            $log = AttendanceLog::create([
+                'client_id'             => $source->client_id,
+                'biometric_source_id'   => $source->id,
+                'factorial_employee_id' => $employeeId,
+                'employee_code'         => $pin,
+                'check_type'            => $checkType,
+                'occurred_at'           => $occurredAt,
+                'raw_payload'           => json_encode($fields),
+                'sync_status'           => $employeeId && $checkType !== 'unknown' ? 'resolved' : 'pending',
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->getCode() === '23000') {
+                return $this->plainResponse('OK');
+            }
+            throw $e;
+        }
 
         if ($employeeId && $checkType !== 'unknown') {
             SyncAttendanceToFactorial::dispatch($log->id);

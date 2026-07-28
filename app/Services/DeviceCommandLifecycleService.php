@@ -77,8 +77,10 @@ class DeviceCommandLifecycleService
         if (!$hasCommandsInFlight) {
             $source = $command->source()->first();
             if ($source) {
-                $this->onboarding->requestInventory($source);
-                $source->update(['onboarding_status' => 'verifying']);
+                \Illuminate\Support\Facades\DB::transaction(function () use ($source) {
+                    $source->update(['onboarding_status' => 'verifying']);
+                    $this->onboarding->requestInventory($source);
+                });
             }
         }
     }

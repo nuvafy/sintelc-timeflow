@@ -358,6 +358,7 @@ new class extends Component {
             ->whereIn('employee_code', array_keys($toMap))
             ->where('sync_status', 'resolved')
             ->whereNotNull('factorial_employee_id')
+            ->orderBy('occurred_at')
             ->pluck('id');
 
         $delay = 0;

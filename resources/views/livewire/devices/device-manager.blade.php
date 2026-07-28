@@ -364,15 +364,20 @@ new class extends Component {
             return;
         }
 
-        $decisions = $syncs->filter(fn($sync) => $sync->factorialEmployee)->map(fn($sync) => [
-            'action' => 'add_factorial',
-            'pin' => (string) $sync->external_employee_code,
-            'name' => $sync->factorialEmployee->full_name,
-            'factorial_employee_id' => $sync->factorial_employee_id,
-        ])->values()->all();
+        $devicePins = collect($source->device_users ?? [])->pluck('pin')->map(fn($p) => (string) $p)->toArray();
+
+        $decisions = $syncs
+            ->filter(fn($sync) => $sync->factorialEmployee)
+            ->filter(fn($sync) => !in_array((string) $sync->external_employee_code, $devicePins, true))
+            ->map(fn($sync) => [
+                'action' => 'add_factorial',
+                'pin' => (string) $sync->external_employee_code,
+                'name' => $sync->factorialEmployee->full_name,
+                'factorial_employee_id' => $sync->factorial_employee_id,
+            ])->values()->all();
 
         if (empty($decisions)) {
-            $this->pushSuccessMsg = 'No se pudo generar comandos.';
+            $this->pushSuccessMsg = 'Todos los empleados mapeados ya están en el dispositivo.';
             return;
         }
 

@@ -17,14 +17,14 @@ new class extends Component
             $this->unassignedDevices   = Cache::remember('nav.unassigned_devices', 60, fn() =>
                 BiometricSource::whereNull('client_id')->count()
             );
-            $this->unresolvedEmployees = Cache::remember('nav.pending_device_employees', 60, fn() =>
-                DeviceUserAssignment::whereIn('sync_status', [
-                    'planned',
-                    'queued',
-                    'sent',
-                    'awaiting_verification',
-                ])->distinct()->count('biometric_user_sync_id')
-            );
+            $this->unresolvedEmployees = Cache::remember('nav.pending_device_employees', 60, function () {
+                $confirmedSyncIds = DeviceUserAssignment::where('sync_status', 'confirmed')
+                    ->whereNotNull('biometric_user_sync_id')
+                    ->distinct()
+                    ->pluck('biometric_user_sync_id');
+
+                return \App\Models\BiometricUserSync::whereNotIn('id', $confirmedSyncIds)->count();
+            });
         }
     }
 

@@ -610,9 +610,12 @@ new class extends Component {
                             ->values();
 
                         $statuses = $devices->pluck('status');
-                        $overallStatus = $statuses->contains(fn($status) => in_array($status, $pendingStatuses, true))
-                            ? 'pending'
-                            : ($statuses->contains('failed') ? 'failed' : 'confirmed');
+                        // Confirmado en al menos un dispositivo → ya no es pendiente globalmente
+                        $overallStatus = $statuses->contains('confirmed')
+                            ? 'confirmed'
+                            : ($statuses->contains(fn($s) => in_array($s, $pendingStatuses, true))
+                                ? 'pending'
+                                : ($statuses->contains('failed') ? 'failed' : 'confirmed'));
                         $first = $rows->first();
 
                         return [

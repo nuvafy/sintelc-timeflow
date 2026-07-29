@@ -66,21 +66,24 @@ class DeviceCommandLifecycleService
             return $this->batches->refreshBatch($item->batch);
         });
 
-        if (!$successful || !$batch || $batch->pending_items === 0) {
+        if (!$successful || !$batch) {
             return;
         }
 
-        $hasCommandsInFlight = $batch->items()
-            ->whereIn('status', ['planned', 'queued', 'sent'])
-            ->exists();
+        // Cuando el batch termina completamente, pedir inventario actualizado al dispositivo
+        if ($batch->pending_items === 0) {
+            $hasCommandsInFlight = $batch->items()
+                ->whereIn('status', ['planned', 'queued', 'sent'])
+                ->exists();
 
-        if (!$hasCommandsInFlight) {
-            $source = $command->source()->first();
-            if ($source) {
-                \Illuminate\Support\Facades\DB::transaction(function () use ($source) {
-                    $source->update(['onboarding_status' => 'verifying']);
-                    $this->onboarding->requestInventory($source);
-                });
+            if (!$hasCommandsInFlight) {
+                $source = $command->source()->first();
+                if ($source) {
+                    \Illuminate\Support\Facades\DB::transaction(function () use ($source) {
+                        $source->update(['onboarding_status' => 'verifying']);
+                        $this->onboarding->requestInventory($source);
+                    });
+                }
             }
         }
     }

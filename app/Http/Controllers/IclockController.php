@@ -117,6 +117,10 @@ class IclockController extends Controller
             return $this->handleUserInfo($request, $sn, $table);
         }
 
+        if ($table === 'OPERLOG') {
+            return $this->handleOperlog($request, $sn);
+        }
+
         if ($table === 'BIODATA') {
             return $this->handleBiodata($request, $sn);
         }
@@ -245,6 +249,70 @@ class IclockController extends Controller
         ]);
 
         Log::info('ZKTeco USERINFO recibido', ['sn' => $sn, 'table' => $table, 'count' => count($users)]);
+
+        return $this->plainResponse('OK');
+    }
+
+    private function handleOperlog(Request $request, ?string $sn): Response
+    {
+        $source = BiometricSource::where('serial_number', $sn)->first();
+
+        if (!$source) {
+            return $this->plainResponse('OK');
+        }
+
+        $body = $request->getContent();
+
+        // Solo procesar si el body contiene registros de usuarios
+        if (!str_contains($body, 'USER PIN=') && !str_contains($body, 'User PIN=')) {
+            return $this->plainResponse('OK');
+        }
+
+        $users = [];
+        foreach (explode("\n", $body) as $line) {
+            $line = trim($line);
+            if (!preg_match('/^User\s+PIN=/i', $line)) continue;
+
+            $fields = [];
+            foreach (explode("\t", $line) as $part) {
+                [$key, $val] = array_pad(explode('=', $part, 2), 2, '');
+                $fields[trim($key)] = trim($val);
+            }
+
+            $pin = $fields['PIN'] ?? null;
+            if (empty($pin)) continue;
+
+            $users[] = [
+                'pin'       => $pin,
+                'name'      => $fields['Name'] ?? '',
+                'card'      => $fields['Card'] ?? $fields['CardNo'] ?? '',
+                'privilege' => $fields['Pri'] ?? $fields['Privilege'] ?? '0',
+                'protocol'  => 'operlog',
+            ];
+        }
+
+        if (empty($users)) {
+            return $this->plainResponse('OK');
+        }
+
+        // Merge con device_users existente para no perder usuarios de posts anteriores
+        $existing = collect($source->device_users ?? [])->keyBy('pin');
+        foreach ($users as $user) {
+            $existing[$user['pin']] = $user;
+        }
+
+        $merged = $existing->values()->all();
+
+        $source->update([
+            'device_users'            => $merged,
+            'device_users_fetched_at' => now(),
+        ]);
+
+        app(DeviceInventoryService::class)->capture($source->fresh(), $merged, 'device', [
+            'table' => 'OPERLOG',
+        ]);
+
+        Log::info('ZKTeco OPERLOG usuarios recibidos', ['sn' => $sn, 'count' => count($users), 'total_merged' => count($merged)]);
 
         return $this->plainResponse('OK');
     }

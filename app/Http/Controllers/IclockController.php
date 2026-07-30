@@ -279,7 +279,7 @@ class IclockController extends Controller
                 $fields[trim($key)] = trim($val);
             }
 
-            $pin = $fields['PIN'] ?? null;
+            $pin = $fields['USER PIN'] ?? $fields['PIN'] ?? null;
             if (empty($pin)) continue;
 
             $users[] = [

@@ -175,7 +175,8 @@ class IclockController extends Controller
                 if ($commandSeq !== null) {
                     preg_match('/Return=(-?\d+)/i', $body, $retMatches);
                     $returnCode = isset($retMatches[1]) ? (int) $retMatches[1] : null;
-                    $status     = ($returnCode === 0) ? 'acknowledged' : 'failed';
+                    // -1004 = PIN ya existe en el dispositivo → tratar como éxito
+                    $status     = ($returnCode === 0 || $returnCode === -1004) ? 'acknowledged' : 'failed';
 
                     $command = DeviceCommand::where('biometric_source_id', $source->id)
                         ->where('command_seq', $commandSeq)

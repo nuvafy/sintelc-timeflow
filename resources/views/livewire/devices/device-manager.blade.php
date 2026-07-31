@@ -615,7 +615,12 @@ new class extends Component {
                             $deviceUsers = $device->device_users ?? [];
                             $ps = $pushStatus[$device->id] ?? null;
                         @endphp
-                        @if(count($deviceUsers) > 0)
+                        @if($device->reported_user_count !== null)
+                            <span class="text-sm font-medium text-gray-700">{{ $device->reported_user_count }}</span>
+                            @if($device->device_info_reported_at)
+                                <p class="text-xs text-gray-400">{{ $device->device_info_reported_at->diffForHumans() }}</p>
+                            @endif
+                        @elseif(count($deviceUsers) > 0)
                             <span class="text-sm font-medium text-gray-700">{{ count($deviceUsers) }}</span>
                             @if($device->device_users_fetched_at)
                                 <p class="text-xs text-gray-400">{{ $device->device_users_fetched_at->diffForHumans() }}</p>

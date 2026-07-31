@@ -15,9 +15,10 @@ class DeviceEmployeeRefreshService
 
     public function refresh(BiometricSource $source, ?User $creator = null): array
     {
-        $inventory = collect($source->device_users ?? [])
-            ->filter(fn($user) => isset($user['pin']))
-            ->keyBy(fn($user) => (string) $user['pin']);
+        $cachedUsers = collect($source->device_users ?? [])->filter(fn($user) => isset($user['pin']));
+        $reportedCount = $source->reported_user_count;
+        $cacheIsReliable = $reportedCount === null || $cachedUsers->count() >= $reportedCount;
+        $inventory = $cacheIsReliable ? $cachedUsers->keyBy(fn($user) => (string) $user['pin']) : collect();
 
         $assignments = $source->assignments()
             ->where('desired_state', 'present')

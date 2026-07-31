@@ -364,7 +364,12 @@ new class extends Component {
             return;
         }
 
-        $devicePins = collect($source->device_users ?? [])->pluck('pin')->map(fn($p) => (string) $p)->toArray();
+        $cachedUsers = collect($source->device_users ?? []);
+        $reportedCount = $source->reported_user_count;
+        $cacheIsReliable = $reportedCount === null || $cachedUsers->count() >= $reportedCount;
+        $devicePins = $cacheIsReliable
+            ? $cachedUsers->pluck('pin')->map(fn($p) => (string) $p)->toArray()
+            : [];
 
         $decisions = $syncs
             ->filter(fn($sync) => $sync->factorialEmployee)

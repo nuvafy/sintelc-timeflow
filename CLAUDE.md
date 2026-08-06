@@ -45,7 +45,7 @@ ZKTeco device → POST /iclock/cdata?table=ATTLOG
     → IclockController::handleAttlog()
         → AttendanceLog::insert() (bulk)
         → SyncAttendanceToFactorial::dispatch() per resolved log
-            → FactorialService::clockIn() / clockOut()
+            → FactorialService::toggleClock()
             → fallback: FactorialService::updateShift() (overwrite)
 ```
 
@@ -66,7 +66,7 @@ ZKTeco device → POST /iclock/cdata?table=ATTLOG
 
 ### Factorial sync fallback
 
-`SyncAttendanceToFactorial` tries `clockIn`/`clockOut` first. On failure it calls `findOpenShift()` and does `updateShift()` (overwrite) — but only if `in_source` is not null (never overwrites API/biometric shifts).
+`SyncAttendanceToFactorial` calls `toggleClock()` first (not `clockIn`/`clockOut` — toggle lets Factorial decide open/close from the shift's real state, so we don't depend on `check_type` being correct that day, nor on Factorial's "Unresolved Shifts" setting, which stops applying on 0-planned-hours days). On failure it calls `findOpenShift()` and does `updateShift()` (overwrite), setting `clock_in`/`clock_out` explicitly per `check_type` — this always overwrites the open shift regardless of `in_source` (biometric outranks API/desktop/mobile), unless it was already edited by this same fallback for the same `check_type` (see the `Editado por biométrico SFT` marker in `observations`).
 
 ### Multi-tenancy
 

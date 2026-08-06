@@ -23,7 +23,7 @@ class SyncAttendanceToFactorialTest extends TestCase
 
     public function test_toggle_clock_success_marks_log_as_synced_directly(): void
     {
-        [$log] = $this->makeLog(checkType: 'check_in');
+        [$log] = $this->makeLog(checkType: 'check_in', occurredAt: '2026-07-24 09:00:00');
 
         Http::fake([
             self::TOGGLE_URL => Http::response(['id' => 555, 'employee_id' => 111], 200),
@@ -36,6 +36,13 @@ class SyncAttendanceToFactorialTest extends TestCase
         $this->assertSame(555, $log->factorial_shift_id);
         $this->assertSame('directo', $log->sync_note);
         Http::assertSentCount(1);
+
+        // El body real de toggle_clock usa "clock_time" (no "now", que es el campo
+        // de clock_in/clock_out) y no acepta "workplace_id" — ver doc de Factorial.
+        Http::assertSent(fn (Request $request) => $request->url() === self::TOGGLE_URL
+            && $request['clock_time'] === '2026-07-24T09:00:00'
+            && !array_key_exists('now', $request->data())
+            && !array_key_exists('workplace_id', $request->data()));
     }
 
     public function test_toggle_clock_failure_falls_back_to_overwriting_open_shift(): void

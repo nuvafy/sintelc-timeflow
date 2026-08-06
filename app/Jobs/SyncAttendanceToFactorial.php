@@ -64,13 +64,16 @@ class SyncAttendanceToFactorial implements ShouldQueue
     {
         $workplaceId = $log->biometricSource?->factorial_location_id;
 
+        // OJO: toggle_clock usa nombres de campo distintos a clock_in/clock_out.
+        // Espera "clock_time" (no "now") y no acepta "workplace_id" en el body
+        // (a diferencia de clock_in/clock_out, que sí lo aceptan) — verificado
+        // contra la doc de Factorial para /resources/attendance/shifts/toggle_clock.
         $payload = [
             'employee_id' => $employee->factorial_id,
-            'now'         => $log->occurred_at->format('Y-m-d\TH:i:s'),
+            'clock_time'  => $log->occurred_at->format('Y-m-d\TH:i:s'),
         ];
 
         if ($workplaceId) {
-            $payload['workplace_id']  = $workplaceId;
             $payload['location_type'] = 'office';
         }
 

@@ -106,8 +106,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
             $this->markSynced($log, $shiftId, 'directo');
 
         } catch (RequestException $e) {
-            $body    = $e->response->json() ?? [];
-            $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
+            $message = $this->extractErrorMessage($e);
 
             // Antes de intentar overwrite, verificar idempotencia:
             // el job pudo haber creado el turno en Factorial en una ejecución anterior
@@ -206,8 +205,7 @@ class SyncAttendanceToFactorial implements ShouldQueue
             ]);
 
         } catch (RequestException $e) {
-            $body    = $e->response->json() ?? [];
-            $message = $body['errors']['exception'][0] ?? ($body['message'] ?? $e->getMessage());
+            $message = $this->extractErrorMessage($e);
 
             $this->fail($log, "Directo: {$primaryError} | Overwrite: {$message}");
             throw $e;
@@ -219,6 +217,26 @@ class SyncAttendanceToFactorial implements ShouldQueue
     }
 
     // ── Helpers ────────────────────────────────────────────────────
+
+    /**
+     * Extrae un mensaje legible del error que devuelve Factorial.
+     *
+     * Factorial usa distintas formas según el tipo de rechazo:
+     *   - {"errors":{"exception":["..."]}}  → error de validación/negocio
+     *   - {"errors":{"errors":["..."]}}     → error de política/permisos
+     *     (ej. "Forbidden by Attendance::EmployeePolicy::ClockInOut",
+     *     visto en pruebas reales de agosto 2026)
+     * Si ninguna coincide, cae a $body['message'] y luego al mensaje HTTP genérico.
+     */
+    private function extractErrorMessage(RequestException $e): string
+    {
+        $body = $e->response->json() ?? [];
+
+        return $body['errors']['exception'][0]
+            ?? $body['errors']['errors'][0]
+            ?? $body['message']
+            ?? $e->getMessage();
+    }
 
     /**
      * Busca un turno sin clock_out en la fecha exacta del log.

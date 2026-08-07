@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Herramienta interna para simular ponchadas biométricas contra el entorno sandbox de Factorial, sin tocar datos de clientes reales.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
+<title>Simulador de ponchada — Sintelc FlowTime</title>
+<style>
+  :root {
+    color-scheme: light dark;
+
+    --bg: #faf9f7;
+    --surface: #ffffff;
+    --surface-2: #f4f3f1;
+    --border: #e6e3de;
+    --border-strong: #d8d4cc;
+    --text: #1c1b19;
+    --text-muted: #6b675f;
+    --text-faint: #9a958a;
+
+    --accent: #3554d1;
+    --accent-hover: #2b45b3;
+    --accent-soft: #eaeefb;
+    --accent-ring: rgba(53, 84, 209, 0.28);
+
+    --warn-bg: #fdf3dc;
+    --warn-border: #edd48f;
+    --warn-text: #7a5c0a;
+
+    --ok-bg: #eaf6ee;
+    --ok-border: #a9d9b8;
+    --ok-text: #1e6b3a;
+    --ok-accent: #2e9c56;
+
+    --err-bg: #fbeceb;
+    --err-border: #eab3ae;
+    --err-text: #9a2e26;
+    --err-accent: #c8453a;
+
+    --shadow-color: 220 20% 10%;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131211;
+      --surface: #1b1a18;
+      --surface-2: #211f1c;
+      --border: #322f2a;
+      --border-strong: #433f38;
+      --text: #f1efe9;
+      --text-muted: #aba69d;
+      --text-faint: #756f64;
+
+      --accent: #7f97ec;
+      --accent-hover: #93a8f0;
+      --accent-soft: #232a4a;
+      --accent-ring: rgba(127, 151, 236, 0.35);
+
+      --warn-bg: #3a3113;
+      --warn-border: #6b571f;
+      --warn-text: #f0d287;
+
+      --ok-bg: #16301f;
+      --ok-border: #2e6b45;
+      --ok-text: #8fe0ab;
+      --ok-accent: #4cbd76;
+
+      --err-bg: #3a1816;
+      --err-border: #7a352e;
+      --err-text: #f4a49d;
+      --err-accent: #e0685d;
+
+      --shadow-color: 220 40% 2%;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    font-feature-settings: "tnum" 1, "cv11" 1;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+
+  .sub {
+    color: var(--text-muted);
+    font-size: 14.5px;
+    margin: 0 0 28px;
+  }
+  .sub strong { color: var(--text); font-weight: 600; }
+
+  .banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    color: var(--warn-text);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 28px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .banner .icon { font-size: 16px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
+  .banner code {
+    background: rgba(0,0,0,0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 8px 24px hsl(var(--shadow-color) / 0.05);
+  }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .field-row .field-label { margin-bottom: 0; }
+
+  .device-fixed {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 12px 5px 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .device-fixed .lock { font-size: 11px; opacity: 0.7; }
+
+  .field-label {
+    display: block;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    margin: 0 0 7px;
+  }
+
+  input[type="text"], input[type="datetime-local"], select {
+    width: 100%;
+    padding: 11px 13px;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1.5px solid var(--border-strong);
+    border-radius: 9px;
+    box-sizing: border-box;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  input:hover, select:hover { border-color: var(--text-faint); }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-ring);
+  }
+  input[type="text"] { font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+
+  .field { margin-bottom: 18px; }
+  .field:last-of-type { margin-bottom: 0; }
+
+  .hint {
+    font-size: 12.5px;
+    color: var(--text-faint);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+
+  button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: 22px;
+    width: 100%;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-family: inherit;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background-color 150ms ease, transform 80ms ease, box-shadow 150ms ease;
+    box-shadow: 0 1px 2px hsl(var(--shadow-color) / 0.1), 0 4px 10px -2px var(--accent-ring);
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 4px var(--accent-ring);
+  }
+  button:disabled {
+    background: var(--surface-2);
+    color: var(--text-faint);
+    cursor: default;
+    box-shadow: none;
+    border: 1px solid var(--border);
+  }
+
+  .result-panel {
+    margin-top: 20px;
+    border-radius: 11px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    overflow: hidden;
+    transition: border-color 200ms ease, background-color 200ms ease;
+  }
+  .result-panel.state-idle { display: none; }
+
+  .result-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    border-bottom: 1px solid transparent;
+  }
+  .result-panel.state-pending .result-status { color: var(--text-muted); }
+  .result-panel.state-ok {
+    background: var(--ok-bg);
+    border-color: var(--ok-border);
+  }
+  .result-panel.state-ok .result-status { color: var(--ok-text); border-bottom-color: var(--ok-border); }
+  .result-panel.state-error {
+    background: var(--err-bg);
+    border-color: var(--err-border);
+  }
+  .result-panel.state-error .result-status { color: var(--err-text); border-bottom-color: var(--err-border); }
+
+  .spinner {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--text-muted);
+    animation: spin 700ms linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result-body {
+    margin: 0;
+    padding: 14px 16px 16px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+  .result-panel.state-ok .result-body { color: var(--ok-text); }
+  .result-panel.state-error .result-body { color: var(--err-text); }
+
+  .links {
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--text-faint);
+  }
+  .links a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .links a:hover { text-decoration: underline; }
+  .links a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<span class="eyebrow">🧪 Entorno sandbox &middot; solo pruebas</span>
+<h1>Simulador de ponchada biométrica</h1>
+<p class="sub">Empresa <strong>SANBOX FACTORIAL</strong> &middot; empleado de prueba <strong>Prueba Sintelc Test Almazán López</strong></p>
+
+<div class="banner">
+  <span class="icon">🛡️</span>
+  <span>Manda una ponchada real al mismo endpoint que usan los dispositivos ZKTeco (<code>/iclock/cdata</code>), pero fijada al dispositivo sandbox. No puede tocar datos de clientes reales — el dispositivo de abajo no es editable.</span>
+</div>
+
+<div class="card">
+  <div class="field-row">
+    <span class="field-label">Dispositivo</span>
+    <span class="device-fixed"><span class="lock">🔒</span><span id="deviceDisplay"></span></span>
+  </div>
+
+  <form id="punchForm">
+    <div class="field">
+      <label class="field-label" for="pin">PIN del empleado</label>
+      <input type="text" id="pin" value="9999" inputmode="numeric" autocomplete="off">
+      <div class="hint">9999 = empleado de prueba ya mapeado a Factorial. Otro PIN se queda como registro pendiente, sin llegar a Factorial.</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="status">Tipo de ponchada</label>
+      <select id="status">
+        <option value="0">Entrada (check_in)</option>
+        <option value="1">Salida (check_out)</option>
+        <option value="2">Inicio de descanso (break_in)</option>
+        <option value="3">Fin de descanso (break_out)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="datetime">Fecha y hora</label>
+      <input type="datetime-local" id="datetime">
+      <div class="hint">Se llena con la hora actual del navegador. Puedes cambiarla para simular ponchadas de otros días.</div>
+    </div>
+
+    <button type="submit" id="submitBtn">Enviar ponchada de prueba</button>
+  </form>
+
+  <div class="result-panel state-idle" id="resultPanel">
+    <div class="result-status" id="resultStatus"></div>
+    <pre class="result-body" id="resultBody"></pre>
+  </div>
+</div>
+
+<div class="links">
+  Verificar resultado → <a href="/clients/13/records" target="_blank" rel="noopener">panel Sintelc del cliente sandbox</a>
+</div>
+
+<script>
+  // Dispositivo sandbox fijo — no editable a propósito, por seguridad.
+  const DEVICE_SERIAL = 'DEMO-SANDBOX-6a7503ee806cf';
+  document.getElementById('deviceDisplay').textContent = DEVICE_SERIAL;
+
+  function nowForInput() {
+    const d = new Date();
+    d.setSeconds(0, 0);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  document.getElementById('datetime').value = nowForInput();
+
+  const panel = document.getElementById('resultPanel');
+  const statusEl = document.getElementById('resultStatus');
+  const bodyEl = document.getElementById('resultBody');
+
+  function setResult(state, statusText, bodyText) {
+    panel.className = 'result-panel state-' + state;
+    statusEl.innerHTML = state === 'pending' ? '<span class="spinner"></span>' + statusText : statusText;
+    bodyEl.textContent = bodyText || '';
+  }
+
+  // Segundos a esperar entre ponchadas: si se mandan muy seguidas, la cola
+  // puede procesarlas fuera de orden (la más nueva antes que la anterior),
+  // lo que invierte clock_in/clock_out y genera turnos de ~24h "fantasma"
+  // — el mismo bug que este sistema existe para evitar. El bloqueo de abajo
+  // fuerza a que cada ponchada termine de procesarse antes de permitir otra.
+  const COOLDOWN_SECONDS = 5;
+
+  document.getElementById('punchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+
+    const pin = document.getElementById('pin').value.trim();
+    const status = document.getElementById('status').value;
+    const dtInput = document.getElementById('datetime').value;
+
+    if (!pin || !dtInput) {
+      setResult('error', 'Falta información', 'Falta el PIN o la fecha/hora.');
+      return;
+    }
+
+    const dt = dtInput.replace('T', ' ') + ':00';
+    // Formato ZKTeco ATTLOG: PIN \t fecha \t status \t verify \t workcode
+    const body = `${pin}\t${dt}\t${status}\t1\t0`;
+    const url = `/iclock/cdata?SN=${encodeURIComponent(DEVICE_SERIAL)}&table=ATTLOG`;
+
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    setResult('pending', 'Enviando...', '');
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body,
+      });
+      const text = await res.text();
+
+      if (res.ok) {
+        setResult(
+          'ok',
+          `Enviado — HTTP ${res.status}`,
+          `Respuesta del servidor: ${text}\n\nCuerpo enviado: ${body}\n\nRevisa el panel de Sintelc o Factorial en unos segundos (el job se procesa en cola).`
+        );
+      } else {
+        setResult(
+          'error',
+          `El servidor respondió con error — HTTP ${res.status}`,
+          `Respuesta del servidor: ${text}\n\nCuerpo enviado: ${body}`
+        );
+      }
+    } catch (err) {
+      setResult('error', 'Error de red', err.message);
+      btn.disabled = false;
+      btn.textContent = 'Enviar ponchada de prueba';
+      return;
+    }
+
+    // Bloqueo con cuenta regresiva: evita que otra ponchada se mande antes
+    // de que la cola termine de procesar esta, para no invertir clock_in/out.
+    let remaining = COOLDOWN_SECONDS;
+    btn.textContent = `Espera ${remaining}s (evita ponchadas fuera de orden)...`;
+    const timer = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.textContent = 'Enviar ponchada de prueba';
+      } else {
+        btn.textContent = `Espera ${remaining}s (evita ponchadas fuera de orden)...`;
+      }
+    }, 1000);
+  });
+</script>
+
+</body>
+</html>

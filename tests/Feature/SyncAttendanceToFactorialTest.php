@@ -164,6 +164,39 @@ class SyncAttendanceToFactorialTest extends TestCase
         Http::assertNotSent(fn (Request $request) => $request->method() === 'PUT');
     }
 
+    public function test_extracts_real_policy_error_format_seen_in_production(): void
+    {
+        // Formato real devuelto por Factorial para rechazos de política/permisos
+        // (ej. Attendance::EmployeePolicy::ClockInOut), distinto del formato
+        // {"errors":{"exception":[...]}} usado para errores de validación/negocio.
+        // Confirmado en pruebas reales contra producción en agosto 2026.
+        [$log] = $this->makeLog(checkType: 'check_in', occurredAt: '2026-07-24 09:00:00');
+
+        Http::fake(function (Request $request) {
+            if ($request->url() === self::TOGGLE_URL) {
+                return Http::response([
+                    'errors' => ['errors' => ['Forbidden by Attendance::EmployeePolicy::ClockInOut']],
+                ], 403);
+            }
+
+            // Sin turno abierto que sobreescribir: el fallback tampoco encuentra nada.
+            if ($request->method() === 'GET' && str_starts_with($request->url(), self::SHIFTS_URL)) {
+                return Http::response(['data' => []], 200);
+            }
+
+            return Http::response([], 404);
+        });
+
+        (new SyncAttendanceToFactorial($log->id))->handle();
+
+        $log->refresh();
+        $this->assertSame('failed', $log->sync_status);
+        $this->assertStringContainsString(
+            'Forbidden by Attendance::EmployeePolicy::ClockInOut',
+            $log->sync_error
+        );
+    }
+
     public function test_fails_without_calling_factorial_when_employee_is_not_mapped(): void
     {
         $client = Client::create(['name' => 'Attendance Client', 'slug' => 'attendance-' . str()->random(8)]);

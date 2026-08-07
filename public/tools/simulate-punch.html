@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Herramienta interna para simular ponchadas biométricas contra el entorno sandbox de Factorial, sin tocar datos de clientes reales.">
+<meta name="description" content="Herramienta interna para simular Checks biométricos contra el entorno sandbox de Factorial, sin tocar datos de clientes reales.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
-<title>Simulador de ponchada — Sintelc FlowTime</title>
+<title>Simulador de Check — Sintelc FlowTime</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -317,12 +317,12 @@
 <body>
 
 <span class="eyebrow">🧪 Entorno sandbox &middot; solo pruebas</span>
-<h1>Simulador de ponchada biométrica</h1>
+<h1>Simulador de Check biométrico</h1>
 <p class="sub">Empresa <strong>SANBOX FACTORIAL</strong> &middot; empleado de prueba <strong>Prueba Sintelc Test Almazán López</strong></p>
 
 <div class="banner">
   <span class="icon">🛡️</span>
-  <span>Manda una ponchada real al mismo endpoint que usan los dispositivos ZKTeco (<code>/iclock/cdata</code>), pero fijada al dispositivo sandbox. No puede tocar datos de clientes reales — el dispositivo de abajo no es editable.</span>
+  <span>Manda un Check real al mismo endpoint que usan los dispositivos ZKTeco (<code>/iclock/cdata</code>), pero fijado al dispositivo sandbox. No puede tocar datos de clientes reales — el dispositivo de abajo no es editable.</span>
 </div>
 
 <div class="card">
@@ -339,7 +339,7 @@
     </div>
 
     <div class="field">
-      <label class="field-label" for="status">Tipo de ponchada</label>
+      <label class="field-label" for="status">Tipo de Check</label>
       <select id="status">
         <option value="0">Entrada (check_in)</option>
         <option value="1">Salida (check_out)</option>
@@ -351,10 +351,10 @@
     <div class="field">
       <label class="field-label" for="datetime">Fecha y hora</label>
       <input type="datetime-local" id="datetime">
-      <div class="hint">Se llena con la hora actual del navegador. Puedes cambiarla para simular ponchadas de otros días.</div>
+      <div class="hint">Se llena con la hora actual del navegador. Puedes cambiarla para simular Checks de otros días.</div>
     </div>
 
-    <button type="submit" id="submitBtn">Enviar ponchada de prueba</button>
+    <button type="submit" id="submitBtn">Enviar Check de prueba</button>
   </form>
 
   <div class="result-panel state-idle" id="resultPanel">
@@ -390,11 +390,11 @@
     bodyEl.textContent = bodyText || '';
   }
 
-  // Segundos a esperar entre ponchadas: si se mandan muy seguidas, la cola
+  // Segundos a esperar entre Checks: si se mandan muy seguidos, la cola
   // puede procesarlas fuera de orden (la más nueva antes que la anterior),
   // lo que invierte clock_in/clock_out y genera turnos de ~24h "fantasma"
   // — el mismo bug que este sistema existe para evitar. El bloqueo de abajo
-  // fuerza a que cada ponchada termine de procesarse antes de permitir otra.
+  // fuerza a que cada Check termine de procesarse antes de permitir otro.
   const COOLDOWN_SECONDS = 5;
 
   document.getElementById('punchForm').addEventListener('submit', async (e) => {
@@ -443,22 +443,22 @@
     } catch (err) {
       setResult('error', 'Error de red', err.message);
       btn.disabled = false;
-      btn.textContent = 'Enviar ponchada de prueba';
+      btn.textContent = 'Enviar Check de prueba';
       return;
     }
 
-    // Bloqueo con cuenta regresiva: evita que otra ponchada se mande antes
+    // Bloqueo con cuenta regresiva: evita que otro Check se mande antes
     // de que la cola termine de procesar esta, para no invertir clock_in/out.
     let remaining = COOLDOWN_SECONDS;
-    btn.textContent = `Espera ${remaining}s (evita ponchadas fuera de orden)...`;
+    btn.textContent = `Espera ${remaining}s (evita Checks fuera de orden)...`;
     const timer = setInterval(() => {
       remaining--;
       if (remaining <= 0) {
         clearInterval(timer);
         btn.disabled = false;
-        btn.textContent = 'Enviar ponchada de prueba';
+        btn.textContent = 'Enviar Check de prueba';
       } else {
-        btn.textContent = `Espera ${remaining}s (evita ponchadas fuera de orden)...`;
+        btn.textContent = `Espera ${remaining}s (evita Checks fuera de orden)...`;
       }
     }, 1000);
   });
